@@ -15,7 +15,7 @@ Uses an **Asymmetric Multiprocessing (AMP)** model across the RP2040's dual ARM 
 
 ---
 
-## Engineering Evolutions (Week 6 Design Review to Week 8 Tribunal 1): REQUIRES FURTHER VERIFICATION FROM EVERYONE. PLEASE TEST IF THE FOLLOWING CHANGES ARE GOOD. DO NOT BLINDLY ACCEPT IT! TBD DURING AND POST TRIBUNAL!
+## Engineering Evolutions (Week 6 Design Review to Week 8 Tribunal 1): REQUIRES FURTHER VERIFICATION FROM EVERYONE. PLEASE TEST IF THE FOLLOWING CHANGES ARE GOOD. DO NOT BLINDLY ACCEPT IT! TBD DURING AND POST TRIBUNAL! NO MARKS WILL BE GIVEN IF ANYTHING BELOW IS ADOPTED WITHOUT FURTHER REVIEW AND TESTING. 
 
 Between the Week 6 Design Review and the actual codebase leading into the Week 8 Tribunal 1, several key architectural evolutions, defect fixes, and trade-offs were implemented across team subsystems:
 

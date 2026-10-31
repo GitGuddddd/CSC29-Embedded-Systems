@@ -96,6 +96,7 @@ int main(void)
     uint32_t last_telemetry_ms = 0U;
 
     bool head_fall_latched = false;
+    bool ble_tx_paused = false;
     uint8_t glasses_fall_count = 0U;
     uint8_t glasses_tx_seq = 0U;
     Threat_Result_t current_threat = {0};
@@ -233,6 +234,16 @@ int main(void)
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
                 AlertManager_AcknowledgeReset();
             }
+            else if ((ch == (int)'p') || (ch == (int)'P'))
+            {
+                printf("[TEST TRIGGER] BLE Advertising PAUSED (Simulating Torso Attenuation / Link Loss)\n");
+                ble_tx_paused = true;
+            }
+            else if ((ch == (int)'r') || (ch == (int)'R'))
+            {
+                printf("[TEST TRIGGER] BLE Advertising RESUMED\n");
+                ble_tx_paused = false;
+            }
 #endif
         }
 
@@ -264,7 +275,10 @@ int main(void)
                 .ttc_ms = ttc
             };
             glasses_tx_seq++;
-            BleComm_SendPacket(&heartbeat_pkt);
+            if (!ble_tx_paused)
+            {
+                BleComm_SendPacket(&heartbeat_pkt);
+            }
         }
 
         /* Diagnostic Heartbeat (every 1000 ms) */

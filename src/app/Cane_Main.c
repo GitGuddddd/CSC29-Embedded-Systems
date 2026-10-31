@@ -15,6 +15,7 @@
 #include "drivers/Buzzer/Buzzer.h"
 #include "services/BleComm/BleComm.h"
 #include "services/Watchdog/Watchdog.h"
+#include "services/Watchdog/Watchdog_Cfg.h"
 #include "app/FallDetection/FallDetection.h"
 #include "app/GroundProjection/GroundProjection.h"
 #include "app/AlertManager/AlertManager.h"
@@ -116,11 +117,19 @@ int main(void)
     Grip_State_t prev_grip = GRIP_STATE_RELEASED;
     uint16_t last_dist_mm = 0U;
     Gp_State_t last_gstate = GP_STATE_LEVEL;
-    bool fall_alarm_latched = false;
-    bool tof_obstructed = false;
     uint8_t last_glasses_fall_seq = 0xFFU;
-    uint8_t cane_tx_seq = 0U;
-    uint8_t cane_fall_count = 0U;
+    bool prev_link_lost = false;
+
+    Cane_CompactStatus_t cane_status = {
+        .grip_state     = (uint16_t)GRIP_STATE_RELEASED,
+        .fall_latched   = 0U,
+        .tof_obstructed = 0U,
+        .imu_healthy    = imu_ok ? 1U : 0U,
+        .link_lost      = 0U,
+        .tx_seq         = 0U,
+        .fall_seq       = 0U,
+        .reserved       = 0U
+    };
 
     while (true)
     {
@@ -153,10 +162,10 @@ int main(void)
                 if (current_grip == GRIP_STATE_HELD)
                 {
                     /* Regrip detected: immediately silence alarm and reset detection pipeline */
-                    if (fall_alarm_latched)
+                    if (cane_status.fall_latched != 0U)
                     {
                         printf("[RECOVERY] Regrip confirmed! Silencing Siren & Resetting Fall Alarm\n");
-                        fall_alarm_latched = false;
+                        cane_status.fall_latched = 0U;
                         AlertManager_AcknowledgeReset();
                         Buzzer_Silence();
                     }
@@ -167,6 +176,7 @@ int main(void)
                     printf("[TOUCH] Cane released - Fall Watch Armed\n");
                 }
                 prev_grip = current_grip;
+                cane_status.grip_state = (uint16_t)current_grip;
             }
         }
 
@@ -177,11 +187,13 @@ int main(void)
             Imu_Sample_t imu_sample;
             if (imu_ok && Mpu9250_ReadSample(&Mpu9250_Config_Cane, &imu_sample))
             {
+                cane_status.imu_healthy = 1U;
                 bool fall_detected = FallDetection_Step(&imu_sample, now_ms);
                 if (fall_detected)
                 {
                     printf("[ALERT] *** FALL DETECTED! *** Triggering Buzzer Siren\n");
-                    fall_alarm_latched = true;
+                    cane_status.fall_latched = 1U;
+                    cane_status.fall_seq = (uint16_t)((cane_status.fall_seq + 1U) & 0x0FU);
                     Alert_Output_t alert_out;
                     AlertManager_Arbitrate(ALERT_FALL_ALARM, 0U, now_ms, &alert_out);
                     if (alert_out.buzzer_active)
@@ -193,6 +205,7 @@ int main(void)
             else
             {
                 imu_ok = false;
+                cane_status.imu_healthy = 0U;
             }
         }
 
@@ -215,10 +228,10 @@ int main(void)
             if (read_ok && dist_mm > 20U && dist_mm != 0xFFFFU)
             {
                 /* Valid Ground Range */
-                if (tof_obstructed)
+                if (cane_status.tof_obstructed != 0U)
                 {
                     printf("[TOF RECOVERY] Optical Sensor cleared (Distance: %u mm)\n", dist_mm);
-                    tof_obstructed = false;
+                    cane_status.tof_obstructed = 0U;
                 }
                 last_dist_mm = dist_mm;
                 GroundProjection_Feed(&s_ground_detector, GP_RANGE_VALID, dist_mm, now_ms);
@@ -246,9 +259,9 @@ int main(void)
             else if (read_ok && dist_mm <= 20U)
             {
                 /* 0 mm or <= 20 mm: SENSOR OPTICALLY OBSTRUCTED / BLINDED */
-                if (!tof_obstructed)
+                if (cane_status.tof_obstructed == 0U)
                 {
-                    tof_obstructed = true;
+                    cane_status.tof_obstructed = 1U;
                     printf("[TOF FAULT] Optical Sensor Obstructed (<= 20 mm)! Triggering Caution Warning\n");
                     Haptic_PlayPattern(ALERT_SENSOR_FAULT);
                 }
@@ -258,13 +271,13 @@ int main(void)
             else if (read_ok && dist_mm == 0xFFFFU)
             {
                 /* True Open Air / No Return Target */
-                tof_obstructed = false;
+                cane_status.tof_obstructed = 0U;
                 last_dist_mm = 0xFFFFU;
                 GroundProjection_Feed(&s_ground_detector, GP_RANGE_NO_RETURN, 0U, now_ms);
             }
             else
             {
-                tof_obstructed = false;
+                cane_status.tof_obstructed = 0U;
                 GroundProjection_Feed(&s_ground_detector, GP_RANGE_NO_RETURN, 0U, now_ms);
             }
         }
@@ -298,10 +311,10 @@ int main(void)
                             last_glasses_fall_seq = rx_pkt.rolling_fall_seq;
                         }
 
-                        if ((is_new_fall || ((rx_pkt.state_flags & BLE_FLAG_FALL_ALERT) != 0U)) && (!fall_alarm_latched))
+                        if ((is_new_fall || ((rx_pkt.state_flags & BLE_FLAG_FALL_ALERT) != 0U)) && (cane_status.fall_latched == 0U))
                         {
                             printf("[BLE ALERT] Latched Fall Alert Active! Triggering Buzzer Siren\n");
-                            fall_alarm_latched = true;
+                            cane_status.fall_latched = 1U;
                             Alert_Output_t alert_out;
                             AlertManager_Arbitrate(ALERT_FALL_ALARM, 0U, now_ms, &alert_out);
                             if (alert_out.buzzer_active)
@@ -313,9 +326,25 @@ int main(void)
                 }
             }
 
-            if (Watchdog_CheckBleLinkLoss(now_ms))
+            bool is_link_lost = Watchdog_CheckBleLinkLoss(now_ms);
+            if (is_link_lost != prev_link_lost)
             {
-                last_glasses_fall_seq = 0xFFU; /* Reset baseline on link loss */
+                prev_link_lost = is_link_lost;
+                cane_status.link_lost = is_link_lost ? 1U : 0U;
+                if (is_link_lost)
+                {
+                    printf("[WATCHDOG] *** BLE LINK LOSS DETECTED (>%u ms)! Entering Degraded Haptic Mode ***\n",
+                           (unsigned int)WATCHDOG_CFG_DEADMAN_TIMEOUT_MS);
+                    last_glasses_fall_seq = 0xFFU;
+                }
+                else
+                {
+                    printf("[WATCHDOG] BLE Link Restored! Resuming Normal Operation\n");
+                }
+            }
+
+            if (is_link_lost)
+            {
                 Haptic_PlayPattern(ALERT_LINK_LOSS);
             }
         }
@@ -326,25 +355,25 @@ int main(void)
             last_telemetry_ms = now_ms;
 
             uint8_t flags = 0;
-            if (fall_alarm_latched)                                flags |= BLE_FLAG_FALL_ALERT;
-            if (tof_obstructed || (!s_is_l0x && !s_is_l1x))       flags |= BLE_FLAG_SENSOR_FAULT;
+            if (cane_status.fall_latched != 0U)                    flags |= BLE_FLAG_FALL_ALERT;
+            if ((cane_status.tof_obstructed != 0U) || (!s_is_l0x && !s_is_l1x)) flags |= BLE_FLAG_SENSOR_FAULT;
             if (s_ground_detector.state == GP_STATE_STEP_DOWN)     flags |= BLE_FLAG_OBSTACLE_ACTIVE;
-            if (prev_grip == GRIP_STATE_HELD)                      flags |= BLE_FLAG_CANE_HELD;
+            if (cane_status.grip_state == (uint16_t)GRIP_STATE_HELD) flags |= BLE_FLAG_CANE_HELD;
 
             Ble_AdvancedThreatPacket_t cane_pkt = {
                 .preamble = 0xAAU,
                 .device_id = 0x01U,
                 .pair_id = BLE_DEFAULT_PAIR_ID,
                 .node_type = BLE_NODE_TYPE_CANE,
-                .heartbeat_seq = (uint8_t)(cane_tx_seq & 0x07U),
-                .rolling_fall_seq = (uint8_t)(cane_fall_count & 0x0FU),
-                .seq_num = cane_tx_seq,
+                .heartbeat_seq = (uint8_t)cane_status.tx_seq,
+                .rolling_fall_seq = (uint8_t)cane_status.fall_seq,
+                .seq_num = (uint16_t)cane_status.tx_seq,
                 .state_flags = flags,
                 .nearest_dist_mm = (last_dist_mm == 0xFFFFU) ? 0xFFFFU : last_dist_mm,
                 .closing_speed_cms = 0,
                 .ttc_ms = 0xFFFFU
             };
-            cane_tx_seq++;
+            cane_status.tx_seq = (uint16_t)((cane_status.tx_seq + 1U) & 0x07U);
             BleComm_SendPacket(&cane_pkt);
         }
 
@@ -353,13 +382,14 @@ int main(void)
         if ((now_ms - s_last_diag_print_ms) >= 1000U)
         {
             s_last_diag_print_ms = now_ms;
-            printf("[HEARTBEAT] Grip: %s (GP14=%d) | FallState: %s (latched=%d) | ToF: %u mm (obs=%d)\n",
-                   (prev_grip == GRIP_STATE_HELD) ? "HELD" : "RELEASED",
+            printf("[HEARTBEAT] Grip: %s (GP14=%d) | FallState: %s (latched=%d) | ToF: %u mm (obs=%d) | LinkLost: %d\n",
+                   (cane_status.grip_state == (uint16_t)GRIP_STATE_HELD) ? "HELD" : "RELEASED",
                    Hal_Gpio_Read(CANE_PIN_TOUCH_IN),
                    FallDetection_GetStateName(),
-                   (int)fall_alarm_latched,
+                   (int)cane_status.fall_latched,
                    last_dist_mm,
-                   (int)tof_obstructed);
+                   (int)cane_status.tof_obstructed,
+                   (int)cane_status.link_lost);
         }
 
 #ifdef PICO_ON_DEVICE

@@ -36,6 +36,22 @@ typedef enum
     GRIP_STATE_UNKNOWN
 } Grip_State_t;
 
+/*
+ * Sam's Cane Subsystem Telemetry Bit-Field (Curveball Minimum-Bit Constraint, Barr-C:2018)
+ * Compactly maps application state into 16 bits (2 bytes).
+ */
+typedef struct
+{
+    uint16_t grip_state       : 2; /* 0=RELEASED, 1=HELD, 2=UNKNOWN */
+    uint16_t fall_latched     : 1; /* 1 = siren active */
+    uint16_t tof_obstructed   : 1; /* 1 = sensor blinded/blocked */
+    uint16_t imu_healthy      : 1; /* 1 = IMU responding */
+    uint16_t link_lost        : 1; /* 1 = >500ms watchdog tripped */
+    uint16_t tx_seq           : 3; /* 3-bit rolling packet sequence (0-7) */
+    uint16_t fall_seq         : 4; /* 4-bit monotonic fall counter (0-15) */
+    uint16_t reserved         : 3; /* Reserved for future cliff flags */
+} Cane_CompactStatus_t;
+
 typedef enum
 {
     ALERT_NONE = 0U,

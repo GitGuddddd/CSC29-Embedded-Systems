@@ -118,6 +118,9 @@ int main(void)
     Gp_State_t last_gstate = GP_STATE_LEVEL;
     bool fall_alarm_latched = false;
     bool tof_obstructed = false;
+    uint8_t last_glasses_fall_seq = 0xFFU;
+    uint8_t cane_tx_seq = 0U;
+    uint8_t cane_fall_count = 0U;
 
     while (true)
     {
@@ -279,12 +282,20 @@ int main(void)
                 {
                     Watchdog_KickBleDeadman(now_ms);
 
-                    /* Check if Glasses detected a head fall (FLAG_FALL_ALERT = 0x01) */
-                    if ((rx_pkt.state_flags & 0x01U) != 0U)
+                    /* Wrap-safe rolling fall sequence check (Gap 2) */
+                    if (last_glasses_fall_seq == 0xFFU)
                     {
+                        last_glasses_fall_seq = rx_pkt.rolling_fall_seq;
+                        printf("[BLE SYNC] Linked to Glasses (FallSeq Baseline: %u)\n", rx_pkt.rolling_fall_seq);
+                    }
+                    else if (BleComm_CheckNewFall(rx_pkt.rolling_fall_seq, last_glasses_fall_seq) ||
+                             ((rx_pkt.state_flags & BLE_FLAG_FALL_ALERT) != 0U))
+                    {
+                        printf("[BLE ALERT] *** REMOTE HEAD FALL CONFIRMED (Seq: %u -> %u)! *** Triggering Siren\n",
+                               last_glasses_fall_seq, rx_pkt.rolling_fall_seq);
+                        last_glasses_fall_seq = rx_pkt.rolling_fall_seq;
                         if (!fall_alarm_latched)
                         {
-                            printf("[BLE ALERT] *** REMOTE HEAD FALL RECEIVED FROM GLASSES! *** Triggering Siren\n");
                             fall_alarm_latched = true;
                             Alert_Output_t alert_out;
                             AlertManager_Arbitrate(ALERT_FALL_ALARM, 0U, now_ms, &alert_out);
@@ -299,6 +310,7 @@ int main(void)
 
             if (Watchdog_CheckBleLinkLoss(now_ms))
             {
+                last_glasses_fall_seq = 0xFFU; /* Reset baseline on link loss */
                 Haptic_PlayPattern(ALERT_LINK_LOSS);
             }
         }
@@ -309,20 +321,25 @@ int main(void)
             last_telemetry_ms = now_ms;
 
             uint8_t flags = 0;
-            if (fall_alarm_latched)                                flags |= 0x01; /* FLAG_FALL_ALERT */
-            if (tof_obstructed || (!s_is_l0x && !s_is_l1x))       flags |= 0x02; /* FLAG_RADAR_FAULT / SENSOR FAULT */
-            if (s_ground_detector.state == GP_STATE_STEP_DOWN)     flags |= 0x04; /* FLAG_OBSTACLE_ACTIVE */
-            if (prev_grip == GRIP_STATE_HELD)                      flags |= 0x10; /* FLAG_CANE_HELD */
+            if (fall_alarm_latched)                                flags |= BLE_FLAG_FALL_ALERT;
+            if (tof_obstructed || (!s_is_l0x && !s_is_l1x))       flags |= BLE_FLAG_SENSOR_FAULT;
+            if (s_ground_detector.state == GP_STATE_STEP_DOWN)     flags |= BLE_FLAG_OBSTACLE_ACTIVE;
+            if (prev_grip == GRIP_STATE_HELD)                      flags |= BLE_FLAG_CANE_HELD;
 
             Ble_AdvancedThreatPacket_t cane_pkt = {
-                .preamble = 0xAA,
-                .device_id = 0x01, /* Device ID 0x01 = EchoGuard Smart Cane */
-                .seq_num = (uint16_t)(now_ms & 0xFFFF),
+                .preamble = 0xAAU,
+                .device_id = 0x01U,
+                .pair_id = BLE_DEFAULT_PAIR_ID,
+                .node_type = BLE_NODE_TYPE_CANE,
+                .heartbeat_seq = (uint8_t)(cane_tx_seq & 0x07U),
+                .rolling_fall_seq = (uint8_t)(cane_fall_count & 0x0FU),
+                .seq_num = cane_tx_seq,
                 .state_flags = flags,
-                .nearest_dist_mm = (last_dist_mm == 0xFFFFU) ? 0U : last_dist_mm,
+                .nearest_dist_mm = (last_dist_mm == 0xFFFFU) ? 0xFFFFU : last_dist_mm,
                 .closing_speed_cms = 0,
-                .ttc_ms = 0
+                .ttc_ms = 0xFFFFU
             };
+            cane_tx_seq++;
             BleComm_SendPacket(&cane_pkt);
         }
 

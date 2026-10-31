@@ -96,6 +96,8 @@ int main(void)
     uint32_t last_telemetry_ms = 0U;
 
     bool head_fall_latched = false;
+    uint8_t glasses_fall_count = 0U;
+    uint8_t glasses_tx_seq = 0U;
     Threat_Result_t current_threat = {0};
     uint32_t last_valid_radar_frame_ms = 0U;
 
@@ -145,7 +147,11 @@ int main(void)
                 if (fall_detected)
                 {
                     printf("[GLASSES ALERT] *** HEAD FALL DETECTED! ***\n");
-                    head_fall_latched = true;
+                    if (!head_fall_latched)
+                    {
+                        head_fall_latched = true;
+                        glasses_fall_count++;
+                    }
                     Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
                 }
             }
@@ -219,22 +225,40 @@ int main(void)
             bool radar_timeout = (now_ms - last_valid_radar_frame_ms) > 500U;
 
             uint8_t flags = 0;
-            if (head_fall_latched) flags |= 0x01; /* FLAG_FALL_ALERT */
-            if (radar_timeout)     flags |= 0x02; /* FLAG_RADAR_FAULT */
-            if (current_threat.is_threat_active && !radar_timeout) flags |= 0x04; /* FLAG_OBSTACLE_ACTIVE */
+            if (head_fall_latched)                                 flags |= BLE_FLAG_FALL_ALERT;
+            if (radar_timeout)                                     flags |= BLE_FLAG_SENSOR_FAULT;
+            if (current_threat.is_threat_active && !radar_timeout) flags |= BLE_FLAG_OBSTACLE_ACTIVE;
 
-            uint16_t ttc = (radar_timeout || (current_threat.time_to_collision_ms == UINT16_MAX)) ? 0U : current_threat.time_to_collision_ms;
+            uint16_t ttc = (radar_timeout || (current_threat.time_to_collision_ms == UINT16_MAX)) ?
+                            0xFFFFU : current_threat.time_to_collision_ms;
 
             Ble_AdvancedThreatPacket_t heartbeat_pkt = {
-                .preamble = 0xAA,
-                .device_id = 0x02,
-                .seq_num = (uint16_t)(now_ms & 0xFFFF),
+                .preamble = 0xAAU,
+                .device_id = 0x02U,
+                .pair_id = BLE_DEFAULT_PAIR_ID,
+                .node_type = BLE_NODE_TYPE_GLASSES,
+                .heartbeat_seq = (uint8_t)(glasses_tx_seq & 0x07U),
+                .rolling_fall_seq = (uint8_t)(glasses_fall_count & 0x0FU),
+                .seq_num = glasses_tx_seq,
                 .state_flags = flags,
-                .nearest_dist_mm = radar_timeout ? 0U : current_threat.nearest_distance_mm,
-                .closing_speed_cms = radar_timeout ? 0 : current_threat.closing_speed_cms,
+                .nearest_dist_mm = radar_timeout ? 0xFFFFU : current_threat.nearest_distance_mm,
+                .closing_speed_cms = 0,
                 .ttc_ms = ttc
             };
+            glasses_tx_seq++;
             BleComm_SendPacket(&heartbeat_pkt);
+        }
+
+        /* Diagnostic Heartbeat (every 1000 ms) */
+        static uint32_t s_last_diag_print_ms = 0U;
+        if ((now_ms - s_last_diag_print_ms) >= 1000U)
+        {
+            s_last_diag_print_ms = now_ms;
+            printf("[GLASSES HEARTBEAT] FallCount: %u | FallLatched: %d | CaneGripRx: %d | Threat: %d\n",
+                   glasses_fall_count,
+                   (int)head_fall_latched,
+                   (int)cane_grip_telemetry,
+                   (int)current_threat.is_threat_active);
         }
 
 #ifdef PICO_ON_DEVICE

@@ -67,19 +67,56 @@ typedef struct
     bool is_valid;
 } Radar_Target_t;
 
+#define BLE_PACKET_SYNC_NIBBLE       (0xAU)
+#define BLE_DEFAULT_PAIR_ID          (0x1U)
+
+#define BLE_FLAG_FALL_ALERT          (0x01U)
+#define BLE_FLAG_SENSOR_FAULT        (0x02U)
+#define BLE_FLAG_OBSTACLE_ACTIVE     (0x04U)
+#define BLE_FLAG_CANE_HELD           (0x10U)
+
+#define BLE_DIST_NO_TARGET           (0x0FFFU)
+#define BLE_TTC_NO_THREAT            (0x0FFFU)
+
+typedef enum
+{
+    BLE_NODE_TYPE_GLASSES = 0U,
+    BLE_NODE_TYPE_CANE    = 1U
+} Ble_NodeType_t;
+
 /*
- * 11-byte AdvancedThreatPacket schema per FR14 & Section 8.3:
- * [Preamble(1B), DeviceID(1B), SeqNum(2B), StateFlags(1B), TargetDist(2B), TargetSpeed(2B), TTC(2B)]
+ * 6-byte Compact Unified Packet schema (FR14, NFR13, Barr-C compliant):
+ * Byte 0: [Preamble Sync (4b: 0xA) | Pair ID (4b: 0x0-0xF)]
+ * Byte 1: [Node Type (1b) | Heartbeat Seq (3b: 0-7) | Rolling Fall Seq (4b: 0-15)]
+ * Byte 2: [State Flags (8b)]
+ * Byte 3: [Distance Low (8b: dist[7:0])] (Units: 2mm, Range: 0-8190mm)
+ * Byte 4: [Distance High (4b: dist[11:8]) | TTC Low (4b: ttc[3:0])]
+ * Byte 5: [TTC High (8b: ttc[11:4])] (Units: 20ms steps, Range: 0-81.9s)
  */
 typedef struct
 {
-    uint8_t preamble;
-    uint8_t device_id;
-    uint16_t seq_num;
+    uint8_t preamble_pair_id;
+    uint8_t type_seq_fall;
     uint8_t state_flags;
-    uint16_t nearest_dist_mm;
+    uint8_t dist_low;
+    uint8_t dist_high_ttc_low;
+    uint8_t ttc_high;
+} __attribute__((packed)) Ble_RawPacket_t;
+
+/* Decoded packet structure for internal SWC consumption */
+typedef struct
+{
+    uint8_t preamble;             /* 0xAA or raw preamble */
+    uint8_t device_id;            /* 0x01 = Cane, 0x02 = Glasses */
+    uint8_t pair_id;              /* 0 - 15 */
+    Ble_NodeType_t node_type;
+    uint8_t heartbeat_seq;        /* 3-bit monotonic sequence (0 - 7) */
+    uint8_t rolling_fall_seq;     /* 4-bit monotonic sequence (0 - 15) */
+    uint16_t seq_num;             /* Backward compatible sequence number */
+    uint8_t state_flags;          /* BLE_FLAG_* */
+    uint16_t nearest_dist_mm;     /* 0 - 8190 mm, or 0xFFFF if invalid / no target */
     int16_t closing_speed_cms;
-    uint16_t ttc_ms;
-} __attribute__((packed)) Ble_AdvancedThreatPacket_t;
+    uint16_t ttc_ms;              /* 0 - 81900 ms, or 0xFFFF if no threat */
+} Ble_AdvancedThreatPacket_t;
 
 #endif /* RTE_TYPE_H */

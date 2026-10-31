@@ -16,13 +16,131 @@
  */
 
 static BleComm_Config_t s_cfg;
-static uint16_t s_last_rx_seq = 0U;
+static uint16_t s_last_rx_seq = 0xFFFFU;
 static uint16_t s_tx_seq = 0U;
 
 #define BLECOMM_RX_QUEUE_SIZE 4U
 static Ble_AdvancedThreatPacket_t s_rx_queue[BLECOMM_RX_QUEUE_SIZE];
 static volatile uint8_t s_rx_q_head = 0U;
 static volatile uint8_t s_rx_q_tail = 0U;
+
+void BleComm_Encode(const Ble_AdvancedThreatPacket_t * const p_in, Ble_RawPacket_t * const p_out)
+{
+    if ((p_in == NULL) || (p_out == NULL))
+    {
+        return;
+    }
+
+    /* Byte 0: Sync (0xA) | Pair ID (4b) */
+    uint8_t pair = (p_in->pair_id != 0U) ? p_in->pair_id : s_cfg.pair_id;
+    p_out->preamble_pair_id = (uint8_t)((BLE_PACKET_SYNC_NIBBLE << 4) | (pair & 0x0FU));
+
+    /* Byte 1: Node Type (1b) | Heartbeat Seq (3b) | Rolling Fall Seq (4b) */
+    uint8_t type_bit = (p_in->node_type == BLE_NODE_TYPE_CANE) ? 0x80U : 0x00U;
+    uint8_t hb_bits = (uint8_t)((p_in->heartbeat_seq & 0x07U) << 4);
+    uint8_t fall_bits = (uint8_t)(p_in->rolling_fall_seq & 0x0FU);
+    p_out->type_seq_fall = type_bit | hb_bits | fall_bits;
+
+    /* Byte 2: State Flags */
+    p_out->state_flags = p_in->state_flags;
+
+    /* Distance (12b): 2mm step */
+    uint16_t dist_raw;
+    if ((p_in->nearest_dist_mm == 0xFFFFU) || (p_in->nearest_dist_mm > 8190U))
+    {
+        dist_raw = BLE_DIST_NO_TARGET;
+    }
+    else
+    {
+        dist_raw = (uint16_t)(p_in->nearest_dist_mm / 2U);
+        if (dist_raw > 0x0FFEU)
+        {
+            dist_raw = 0x0FFEU;
+        }
+    }
+
+    /* TTC (12b): 20ms step */
+    uint16_t ttc_raw;
+    if (p_in->ttc_ms == 0xFFFFU)
+    {
+        ttc_raw = BLE_TTC_NO_THREAT;
+    }
+    else
+    {
+        ttc_raw = (uint16_t)(p_in->ttc_ms / 20U);
+        if (ttc_raw > 0x0FFEU)
+        {
+            ttc_raw = 0x0FFEU;
+        }
+    }
+
+    /* Pack 12-bit Distance and 12-bit TTC across Bytes 3, 4, 5 */
+    p_out->dist_low = (uint8_t)(dist_raw & 0xFFU);
+    p_out->dist_high_ttc_low = (uint8_t)(((dist_raw >> 8) & 0x0FU) << 4) | (uint8_t)(ttc_raw & 0x0FU);
+    p_out->ttc_high = (uint8_t)((ttc_raw >> 4) & 0xFFU);
+}
+
+bool BleComm_Decode(const Ble_RawPacket_t * const p_in, uint8_t expected_pair_id, Ble_AdvancedThreatPacket_t * const p_out)
+{
+    if ((p_in == NULL) || (p_out == NULL))
+    {
+        return false;
+    }
+
+    /* Verify Sync Nibble */
+    uint8_t sync = (uint8_t)((p_in->preamble_pair_id >> 4) & 0x0FU);
+    if (sync != BLE_PACKET_SYNC_NIBBLE)
+    {
+        return false;
+    }
+
+    /* Verify Pair ID */
+    uint8_t rx_pair_id = (uint8_t)(p_in->preamble_pair_id & 0x0FU);
+    if ((expected_pair_id != 0U) && (rx_pair_id != expected_pair_id))
+    {
+        return false;
+    }
+
+    p_out->preamble = 0xAAU;
+    p_out->pair_id = rx_pair_id;
+    p_out->node_type = ((p_in->type_seq_fall & 0x80U) != 0U) ? BLE_NODE_TYPE_CANE : BLE_NODE_TYPE_GLASSES;
+    p_out->device_id = (p_out->node_type == BLE_NODE_TYPE_CANE) ? 0x01U : 0x02U;
+    p_out->heartbeat_seq = (uint8_t)((p_in->type_seq_fall >> 4) & 0x07U);
+    p_out->rolling_fall_seq = (uint8_t)(p_in->type_seq_fall & 0x0FU);
+    p_out->seq_num = p_out->heartbeat_seq;
+    p_out->state_flags = p_in->state_flags;
+
+    /* Decode Distance */
+    uint16_t dist_raw = (uint16_t)p_in->dist_low | (uint16_t)(((p_in->dist_high_ttc_low >> 4) & 0x0FU) << 8);
+    if (dist_raw >= BLE_DIST_NO_TARGET)
+    {
+        p_out->nearest_dist_mm = 0xFFFFU;
+    }
+    else
+    {
+        p_out->nearest_dist_mm = (uint16_t)(dist_raw * 2U);
+    }
+
+    /* Decode TTC */
+    uint16_t ttc_raw = (uint16_t)(p_in->dist_high_ttc_low & 0x0FU) | (uint16_t)((uint16_t)p_in->ttc_high << 4);
+    if (ttc_raw >= BLE_TTC_NO_THREAT)
+    {
+        p_out->ttc_ms = 0xFFFFU;
+    }
+    else
+    {
+        p_out->ttc_ms = (uint16_t)(ttc_raw * 20U);
+    }
+
+    p_out->closing_speed_cms = 0;
+    return true;
+}
+
+bool BleComm_CheckNewFall(uint8_t rx_fall_seq, uint8_t last_fall_seq)
+{
+    uint8_t delta = (uint8_t)((rx_fall_seq - last_fall_seq) & 0x0FU);
+    return (delta >= 1U) && (delta <= 7U);
+}
 
 #ifdef PICO_ON_DEVICE
 static btstack_packet_callback_registration_t hci_event_callback_registration;
@@ -61,32 +179,33 @@ static void SetupAdvData(const Ble_AdvancedThreatPacket_t *p_pkt)
 
     uint8_t idx = 5 + name_len;
 
-    uint8_t preamble = (p_pkt != NULL) ? p_pkt->preamble : 0xAA;
-    uint8_t dev_id   = (p_pkt != NULL) ? p_pkt->device_id : s_cfg.device_id;
-    uint16_t seq     = s_tx_seq;
-    uint8_t flags    = (p_pkt != NULL) ? p_pkt->state_flags : 0x00;
-    uint16_t dist    = (p_pkt != NULL) ? p_pkt->nearest_dist_mm : 1200U;
-    int16_t speed    = (p_pkt != NULL) ? p_pkt->closing_speed_cms : 15;
-    uint16_t ttc     = (p_pkt != NULL) ? p_pkt->ttc_ms : 8000U;
+    Ble_AdvancedThreatPacket_t local_pkt;
+    if (p_pkt != NULL)
+    {
+        local_pkt = *p_pkt;
+    }
+    else
+    {
+        memset(&local_pkt, 0, sizeof(local_pkt));
+        local_pkt.node_type = (s_cfg.role == BLE_ROLE_BROADCASTER_GLASSES) ?
+                              BLE_NODE_TYPE_GLASSES : BLE_NODE_TYPE_CANE;
+        local_pkt.pair_id = s_cfg.pair_id;
+        local_pkt.nearest_dist_mm = 0xFFFFU;
+        local_pkt.ttc_ms = 0xFFFFU;
+    }
+    local_pkt.heartbeat_seq = (uint8_t)(s_tx_seq & 0x07U);
 
-    /* 3. Manufacturer Data AD (13 bytes total: 2B Company ID + 11B AdvancedThreatPacket) */
-    adv_data[idx]      = 13;   /* AD length = 13 bytes */
+    Ble_RawPacket_t raw_pkt;
+    BleComm_Encode(&local_pkt, &raw_pkt);
+
+    /* 3. Manufacturer Data AD (8 bytes total: 2B Company ID + 6B raw packet) */
+    adv_data[idx]      = 8U;   /* AD length = 8 bytes */
     adv_data[idx + 1]  = 0xFF; /* Manufacturer Specific */
     adv_data[idx + 2]  = 0x29; /* Company ID Low */
     adv_data[idx + 3]  = 0x00; /* Company ID High */
-    adv_data[idx + 4]  = preamble;
-    adv_data[idx + 5]  = dev_id;
-    adv_data[idx + 6]  = (uint8_t)(seq & 0xFF);
-    adv_data[idx + 7]  = (uint8_t)((seq >> 8) & 0xFF);
-    adv_data[idx + 8]  = flags;
-    adv_data[idx + 9]  = (uint8_t)(dist & 0xFF);
-    adv_data[idx + 10] = (uint8_t)((dist >> 8) & 0xFF);
-    adv_data[idx + 11] = (uint8_t)(speed & 0xFF);
-    adv_data[idx + 12] = (uint8_t)((speed >> 8) & 0xFF);
-    adv_data[idx + 13] = (uint8_t)(ttc & 0xFF);
-    adv_data[idx + 14] = (uint8_t)((ttc >> 8) & 0xFF);
+    memcpy(&adv_data[idx + 4], &raw_pkt, sizeof(Ble_RawPacket_t));
 
-    adv_data_len = idx + 15;
+    adv_data_len = idx + 10U;
 }
 
 static void ParseAdvReport(const uint8_t * adv_report_data, uint8_t adv_report_len)
@@ -107,15 +226,16 @@ static void ParseAdvReport(const uint8_t * adv_report_data, uint8_t adv_report_l
         uint8_t ad_type = adv_report_data[i + 1U];
 
         /* Check for Manufacturer Specific Data (0xFF) */
-        if ((ad_type == 0xFFU) && (ad_len >= 15U)) /* 1B type + 2B Company ID + 11B packet = 14B payload + 1B type = 15B total */
+        if ((ad_type == 0xFFU) && (ad_len >= 9U)) /* 1B type + 2B Company ID + 6B raw packet */
         {
             uint16_t company_id = (uint16_t)adv_report_data[i + 2U] | ((uint16_t)adv_report_data[i + 3U] << 8);
             if (company_id == 0x0029U)
             {
-                Ble_AdvancedThreatPacket_t pkt;
-                memcpy(&pkt, &adv_report_data[i + 4U], sizeof(Ble_AdvancedThreatPacket_t));
+                Ble_RawPacket_t raw;
+                memcpy(&raw, &adv_report_data[i + 4U], sizeof(Ble_RawPacket_t));
 
-                if (pkt.preamble == 0xAAU)
+                Ble_AdvancedThreatPacket_t pkt;
+                if (BleComm_Decode(&raw, s_cfg.pair_id, &pkt))
                 {
                     (void)BleComm_ReceivePacket(&pkt);
                 }
@@ -185,7 +305,7 @@ void BleComm_Init(const BleComm_Config_t * const p_cfg)
     {
         s_cfg = *p_cfg;
     }
-    s_last_rx_seq = 0U;
+    s_last_rx_seq = 0xFFFFU;
     s_tx_seq = 0U;
     s_rx_q_head = 0U;
     s_rx_q_tail = 0U;
@@ -230,10 +350,24 @@ bool BleComm_ReceivePacket(const Ble_AdvancedThreatPacket_t * const p_pkt)
     {
         return false;
     }
-    /* Filter stale or delayed sequence numbers (FR15) */
-    if (p_pkt->seq_num <= s_last_rx_seq)
+    /* Filter stale or delayed sequence numbers (wrap-safe modulo 8 for heartbeat sequence) */
+    if (s_last_rx_seq != 0xFFFFU)
     {
-        return false;
+        if ((p_pkt->seq_num <= 7U) && (s_last_rx_seq <= 7U))
+        {
+            uint8_t delta = (uint8_t)((p_pkt->seq_num - s_last_rx_seq) & 0x07U);
+            if ((delta == 0U) || (delta > 4U))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            if (p_pkt->seq_num <= s_last_rx_seq)
+            {
+                return false;
+            }
+        }
     }
     s_last_rx_seq = p_pkt->seq_num;
 

@@ -6,12 +6,15 @@
 #ifdef PICO_ON_DEVICE
 #include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
+#include "hardware/sync.h"
 #include "btstack.h"
+#else
+#define __dmb() do { __asm__ __volatile__("" : : : "memory"); } while (0)
 #endif
 
 /*
  * \file BleComm.c
- * \brief CYW43439 Bluetooth LE Connectionless Broadcaster Implementation (11-byte AdvancedThreatPacket)
+ * \brief CYW43439 Bluetooth LE Connectionless Broadcaster Implementation (Compact 6-byte Unified Packet)
  * Compliance: Barr-C:2018
  */
 
@@ -23,6 +26,11 @@ static uint16_t s_tx_seq = 0U;
 static Ble_AdvancedThreatPacket_t s_rx_queue[BLECOMM_RX_QUEUE_SIZE];
 static volatile uint8_t s_rx_q_head = 0U;
 static volatile uint8_t s_rx_q_tail = 0U;
+
+#define BLECOMM_TX_QUEUE_SIZE 4U
+static Ble_AdvancedThreatPacket_t s_tx_queue[BLECOMM_TX_QUEUE_SIZE];
+static volatile uint8_t s_tx_q_head = 0U;
+static volatile uint8_t s_tx_q_tail = 0U;
 
 void BleComm_Encode(const Ble_AdvancedThreatPacket_t * const p_in, Ble_RawPacket_t * const p_out)
 {
@@ -198,8 +206,8 @@ static void SetupAdvData(const Ble_AdvancedThreatPacket_t *p_pkt)
     Ble_RawPacket_t raw_pkt;
     BleComm_Encode(&local_pkt, &raw_pkt);
 
-    /* 3. Manufacturer Data AD (8 bytes total: 2B Company ID + 6B raw packet) */
-    adv_data[idx]      = 8U;   /* AD length = 8 bytes */
+    /* 3. Manufacturer Data AD: 1B Type + 2B Company ID + 6B Raw Packet = 9 bytes */
+    adv_data[idx]      = 9U;   /* AD length = 9 bytes */
     adv_data[idx + 1]  = 0xFF; /* Manufacturer Specific */
     adv_data[idx + 2]  = 0x29; /* Company ID Low */
     adv_data[idx + 3]  = 0x00; /* Company ID High */
@@ -309,6 +317,8 @@ void BleComm_Init(const BleComm_Config_t * const p_cfg)
     s_tx_seq = 0U;
     s_rx_q_head = 0U;
     s_rx_q_tail = 0U;
+    s_tx_q_head = 0U;
+    s_tx_q_tail = 0U;
 
 #ifdef PICO_ON_DEVICE
     if (cyw43_arch_init())
@@ -334,13 +344,18 @@ bool BleComm_SendPacket(const Ble_AdvancedThreatPacket_t * const p_pkt)
     {
         return false;
     }
+
+    /* Core 0 Producer: push into lock-free SPSC TX queue */
+    uint8_t next_head = (uint8_t)((s_tx_q_head + 1U) % BLECOMM_TX_QUEUE_SIZE);
+    if (next_head == s_tx_q_tail)
+    {
+        return false; /* Queue full: drop packet without blocking */
+    }
+
+    s_tx_queue[s_tx_q_head] = *p_pkt;
+    __dmb();
+    s_tx_q_head = next_head;
     s_tx_seq++;
-
-#ifdef PICO_ON_DEVICE
-    SetupAdvData(p_pkt);
-    gap_advertisements_set_data(adv_data_len, adv_data);
-#endif
-
     return true;
 }
 
@@ -371,11 +386,12 @@ bool BleComm_ReceivePacket(const Ble_AdvancedThreatPacket_t * const p_pkt)
     }
     s_last_rx_seq = p_pkt->seq_num;
 
-    /* Push into reception queue */
+    /* Push into reception queue with memory barrier */
     uint8_t next_head = (uint8_t)((s_rx_q_head + 1U) % BLECOMM_RX_QUEUE_SIZE);
     if (next_head != s_rx_q_tail)
     {
         s_rx_queue[s_rx_q_head] = *p_pkt;
+        __dmb();
         s_rx_q_head = next_head;
     }
 
@@ -395,6 +411,7 @@ bool BleComm_PopReceivedPacket(Ble_AdvancedThreatPacket_t * const p_pkt)
     }
 
     *p_pkt = s_rx_queue[s_rx_q_tail];
+    __dmb();
     s_rx_q_tail = (uint8_t)((s_rx_q_tail + 1U) % BLECOMM_RX_QUEUE_SIZE);
     return true;
 }
@@ -402,4 +419,22 @@ bool BleComm_PopReceivedPacket(Ble_AdvancedThreatPacket_t * const p_pkt)
 void BleComm_InjectRxPacket(const Ble_AdvancedThreatPacket_t * const p_pkt)
 {
     (void)BleComm_ReceivePacket(p_pkt);
+}
+
+void BleComm_Core1_Task(void)
+{
+#ifdef PICO_ON_DEVICE
+    cyw43_arch_poll();
+
+    /* Core 1 Consumer: process pending outbound packets from Core 0 */
+    if (s_tx_q_tail != s_tx_q_head)
+    {
+        Ble_AdvancedThreatPacket_t pkt_to_send = s_tx_queue[s_tx_q_tail];
+        __dmb();
+        s_tx_q_tail = (uint8_t)((s_tx_q_tail + 1U) % BLECOMM_TX_QUEUE_SIZE);
+
+        SetupAdvData(&pkt_to_send);
+        gap_advertisements_set_data(adv_data_len, adv_data);
+    }
+#endif
 }

@@ -47,7 +47,7 @@ static void Core1_Entry(void)
     while (true)
     {
 #ifdef PICO_ON_DEVICE
-        cyw43_arch_poll();
+        BleComm_Core1_Task();
         sleep_ms(10);
 #else
         break;

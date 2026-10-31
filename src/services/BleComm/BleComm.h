@@ -36,5 +36,6 @@ bool BleComm_SendPacket(const Ble_AdvancedThreatPacket_t * const p_pkt);
 bool BleComm_ReceivePacket(const Ble_AdvancedThreatPacket_t * const p_pkt);
 bool BleComm_PopReceivedPacket(Ble_AdvancedThreatPacket_t * const p_pkt);
 void BleComm_InjectRxPacket(const Ble_AdvancedThreatPacket_t * const p_pkt);
+void BleComm_Core1_Task(void);
 
 #endif /* BLECOMM_H */

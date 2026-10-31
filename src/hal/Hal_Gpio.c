@@ -21,6 +21,15 @@ void Hal_Gpio_Init(uint8_t pin, Hal_GpioDir_t dir, bool pull_up)
 #endif
 }
 
+void Hal_Gpio_PullDown(uint8_t pin)
+{
+#ifdef PICO_ON_DEVICE
+    gpio_pull_down(pin);
+#else
+    (void)pin;
+#endif
+}
+
 void Hal_Gpio_Write(uint8_t pin, bool level)
 {
 #ifdef PICO_ON_DEVICE

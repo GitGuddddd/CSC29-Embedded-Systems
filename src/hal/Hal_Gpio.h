@@ -17,6 +17,7 @@ typedef enum
 } Hal_GpioDir_t;
 
 void Hal_Gpio_Init(uint8_t pin, Hal_GpioDir_t dir, bool pull_up);
+void Hal_Gpio_PullDown(uint8_t pin);
 void Hal_Gpio_Write(uint8_t pin, bool level);
 bool Hal_Gpio_Read(uint8_t pin);
 void Hal_Gpio_Toggle(uint8_t pin);

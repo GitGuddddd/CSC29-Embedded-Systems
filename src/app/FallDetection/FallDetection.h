@@ -33,6 +33,7 @@ extern const Fall_Config_t FallConfig_Head;
 extern const Fall_Config_t FallConfig_Cane;
 
 void FallDetection_Init(const Fall_Config_t * const p_cfg);
+void FallDetection_Reset(void);
 Fall_MachineState_t FallDetection_GetState(void);
 const char * FallDetection_GetStateName(void);
 bool FallDetection_Step(const Imu_Sample_t * const p_sample, uint32_t now_ms);

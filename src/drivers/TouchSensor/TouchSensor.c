@@ -12,6 +12,7 @@ void TouchSensor_Init(const TouchSensor_Config_t * const p_cfg)
     if (p_cfg != NULL)
     {
         Hal_Gpio_Init(p_cfg->gpio_pin, HAL_GPIO_DIR_IN, false);
+        Hal_Gpio_PullDown(p_cfg->gpio_pin);
     }
     s_committed_state = GRIP_STATE_RELEASED;
     s_candidate_level = false;

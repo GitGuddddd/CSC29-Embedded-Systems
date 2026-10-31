@@ -68,6 +68,12 @@ void FallDetection_Init(const Fall_Config_t * const p_cfg)
     }
 }
 
+void FallDetection_Reset(void)
+{
+    s_state = FALL_STATE_IDLE;
+    s_t0_ms = 0U;
+}
+
 Fall_MachineState_t FallDetection_GetState(void)
 {
     return s_state;

@@ -112,7 +112,6 @@ int main(void)
     uint32_t last_tof_ms = 0U;
     uint32_t last_watchdog_ms = 0U;
     uint32_t last_telemetry_ms = 0U;
-    uint32_t grip_held_start_ms = 0U;
 
     Grip_State_t prev_grip = GRIP_STATE_RELEASED;
     uint16_t last_dist_mm = 0U;
@@ -147,25 +146,24 @@ int main(void)
             {
                 printf("[TOUCH] State changed -> %s (Raw GPIO: %d)\n",
                        (current_grip == GRIP_STATE_HELD) ? "HELD" : "RELEASED", raw_touch);
-                prev_grip = current_grip;
-            }
 
-            if (current_grip == GRIP_STATE_HELD)
-            {
-                if (grip_held_start_ms == 0U)
+                if (current_grip == GRIP_STATE_HELD)
                 {
-                    grip_held_start_ms = now_ms;
+                    /* Regrip detected: immediately silence alarm and reset detection pipeline */
+                    if (fall_alarm_latched)
+                    {
+                        printf("[RECOVERY] Regrip confirmed! Silencing Siren & Resetting Fall Alarm\n");
+                        fall_alarm_latched = false;
+                        AlertManager_AcknowledgeReset();
+                        Buzzer_Silence();
+                    }
+                    FallDetection_Reset();
                 }
-                else if ((now_ms - grip_held_start_ms) >= 3000U)
+                else
                 {
-                    fall_alarm_latched = false;
-                    AlertManager_AcknowledgeReset();
-                    Buzzer_Silence();
+                    printf("[TOUCH] Cane released - Fall Watch Armed\n");
                 }
-            }
-            else
-            {
-                grip_held_start_ms = 0U;
+                prev_grip = current_grip;
             }
         }
 
@@ -214,7 +212,11 @@ int main(void)
             if (read_ok && dist_mm > 20U && dist_mm != 0xFFFFU)
             {
                 /* Valid Ground Range */
-                tof_obstructed = false;
+                if (tof_obstructed)
+                {
+                    printf("[TOF RECOVERY] Optical Sensor cleared (Distance: %u mm)\n", dist_mm);
+                    tof_obstructed = false;
+                }
                 last_dist_mm = dist_mm;
                 GroundProjection_Feed(&s_ground_detector, GP_RANGE_VALID, dist_mm, now_ms);
                 Gp_State_t gstate = s_ground_detector.state;
@@ -241,11 +243,14 @@ int main(void)
             else if (read_ok && dist_mm <= 20U)
             {
                 /* 0 mm or <= 20 mm: SENSOR OPTICALLY OBSTRUCTED / BLINDED */
-                tof_obstructed = true;
+                if (!tof_obstructed)
+                {
+                    tof_obstructed = true;
+                    printf("[TOF FAULT] Optical Sensor Obstructed (<= 20 mm)! Triggering Caution Warning\n");
+                    Haptic_PlayPattern(ALERT_SENSOR_FAULT);
+                }
                 last_dist_mm = 0U;
-                printf("[TOF FAULT] Optical Sensor Obstructed (0 mm)! Triggering Caution Warning\n");
                 GroundProjection_Feed(&s_ground_detector, GP_RANGE_INVALID, 0U, now_ms);
-                Haptic_PlayPattern(ALERT_SENSOR_FAULT);
             }
             else if (read_ok && dist_mm == 0xFFFFU)
             {
@@ -319,6 +324,20 @@ int main(void)
                 .ttc_ms = 0
             };
             BleComm_SendPacket(&cane_pkt);
+        }
+
+        /* Diagnostic Heartbeat (every 1000 ms) */
+        static uint32_t s_last_diag_print_ms = 0U;
+        if ((now_ms - s_last_diag_print_ms) >= 1000U)
+        {
+            s_last_diag_print_ms = now_ms;
+            printf("[HEARTBEAT] Grip: %s (GP14=%d) | FallState: %s (latched=%d) | ToF: %u mm (obs=%d)\n",
+                   (prev_grip == GRIP_STATE_HELD) ? "HELD" : "RELEASED",
+                   Hal_Gpio_Read(CANE_PIN_TOUCH_IN),
+                   FallDetection_GetStateName(),
+                   (int)fall_alarm_latched,
+                   last_dist_mm,
+                   (int)tof_obstructed);
         }
 
 #ifdef PICO_ON_DEVICE

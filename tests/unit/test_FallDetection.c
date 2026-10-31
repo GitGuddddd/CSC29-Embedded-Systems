@@ -58,10 +58,26 @@ void test_FallDetection_HeadDrop_Sequence_TriggersFall(void)
     TEST_ASSERT_EQUAL_STRING("IDLE", FallDetection_GetStateName());
 }
 
+void test_FallDetection_Reset_ReturnsToIdle(void)
+{
+    Imu_Sample_t s = {0};
+    uint32_t now = 0U;
+
+    /* Transition into FREEFALL */
+    s.ax = 0.0f; s.ay = 0.0f; s.az = 0.0f;
+    FallDetection_Step(&s, now);
+    TEST_ASSERT_EQUAL_STRING("FREEFALL", FallDetection_GetStateName());
+
+    /* Reset */
+    FallDetection_Reset();
+    TEST_ASSERT_EQUAL_STRING("IDLE", FallDetection_GetStateName());
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_FallDetection_InitialState_IsIdle);
     RUN_TEST(test_FallDetection_HeadDrop_Sequence_TriggersFall);
+    RUN_TEST(test_FallDetection_Reset_ReturnsToIdle);
     return UNITY_END();
 }

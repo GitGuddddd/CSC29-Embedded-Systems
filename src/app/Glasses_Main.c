@@ -206,7 +206,7 @@ int main(void)
             }
         }
 
-        /* Task 3: Acknowledge Button Check (every 50 ms) */
+        /* Task 3: Acknowledge Button Check & Serial Test Trigger (every 50 ms) */
         if ((now_ms - last_btn_ms) >= 50U)
         {
             last_btn_ms = now_ms;
@@ -216,6 +216,24 @@ int main(void)
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
                 AlertManager_AcknowledgeReset();
             }
+
+#ifdef PICO_ON_DEVICE
+            int ch = getchar_timeout_us(0);
+            if ((ch == (int)'f') || (ch == (int)'F'))
+            {
+                printf("[TEST TRIGGER] Simulating Confirmed Head Fall on Glasses!\n");
+                head_fall_latched = true;
+                glasses_fall_count = (uint8_t)((glasses_fall_count + 1U) & 0x0FU);
+                Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
+            }
+            else if ((ch == (int)'c') || (ch == (int)'C'))
+            {
+                printf("[TEST TRIGGER] Clearing Head Fall on Glasses\n");
+                head_fall_latched = false;
+                Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
+                AlertManager_AcknowledgeReset();
+            }
+#endif
         }
 
         /* Task 4: Heartbeat Telemetry & BLE Advertisement (every 100 ms / 10 Hz) */

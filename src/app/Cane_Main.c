@@ -288,14 +288,19 @@ int main(void)
                         last_glasses_fall_seq = rx_pkt.rolling_fall_seq;
                         printf("[BLE SYNC] Linked to Glasses (FallSeq Baseline: %u)\n", rx_pkt.rolling_fall_seq);
                     }
-                    else if (BleComm_CheckNewFall(rx_pkt.rolling_fall_seq, last_glasses_fall_seq) ||
-                             ((rx_pkt.state_flags & BLE_FLAG_FALL_ALERT) != 0U))
+                    else
                     {
-                        printf("[BLE ALERT] *** REMOTE HEAD FALL CONFIRMED (Seq: %u -> %u)! *** Triggering Siren\n",
-                               last_glasses_fall_seq, rx_pkt.rolling_fall_seq);
-                        last_glasses_fall_seq = rx_pkt.rolling_fall_seq;
-                        if (!fall_alarm_latched)
+                        bool is_new_fall = BleComm_CheckNewFall(rx_pkt.rolling_fall_seq, last_glasses_fall_seq);
+                        if (is_new_fall)
                         {
+                            printf("[BLE ALERT] *** REMOTE HEAD FALL CONFIRMED (Seq: %u -> %u)! *** Triggering Siren\n",
+                                   last_glasses_fall_seq, rx_pkt.rolling_fall_seq);
+                            last_glasses_fall_seq = rx_pkt.rolling_fall_seq;
+                        }
+
+                        if ((is_new_fall || ((rx_pkt.state_flags & BLE_FLAG_FALL_ALERT) != 0U)) && (!fall_alarm_latched))
+                        {
+                            printf("[BLE ALERT] Latched Fall Alert Active! Triggering Buzzer Siren\n");
                             fall_alarm_latched = true;
                             Alert_Output_t alert_out;
                             AlertManager_Arbitrate(ALERT_FALL_ALARM, 0U, now_ms, &alert_out);

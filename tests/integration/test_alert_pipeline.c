@@ -21,6 +21,8 @@
 #include "ld2450.h"
 #include "mock_hal.h"
 #include "radar_monitor.h"
+#include "radar_monitor_cfg.h"
+#include "rte.h"
 #include "rte_type.h"
 #include "threat_assessment.h"
 
@@ -50,18 +52,26 @@ static void
 run_threat_task (void)
 {
     while (g_threat_cursor < (mock_radar_frame_count() +
-                              mock_radar_fault_count()))
+                              mock_radar_fault_count() +
+                              mock_radar_grip_count()))
     {
-        rte_radar_msg_t msg = mock_radar_get(g_threat_cursor);
+        rte_radar_data_t msg = mock_radar_get(g_threat_cursor);
 
-        if (RTE_RADAR_MSG_FRAME == msg.type)
+        switch (msg.type)
         {
-            threat_assessment_process_frame(&g_threat, msg.targets,
-                                            msg.time_ms);
-        }
-        else
-        {
-            threat_assessment_process_fault(&g_threat);
+            case RTE_RADAR_MSG_FRAME:
+                threat_assessment_process_frame(&g_threat, msg.targets,
+                                                msg.time_ms);
+                break;
+
+            case RTE_RADAR_MSG_GRIP:
+                threat_assessment_process_grip(&g_threat, msg.grip);
+                break;
+
+            case RTE_RADAR_MSG_FAULT:
+            default:
+                threat_assessment_process_fault(&g_threat);
+                break;
         }
 
         g_threat_cursor++;
@@ -180,6 +190,9 @@ static void
 test_radar_dies_while_alert_active_clears_and_reports_fault (void)
 {
     bring_radar_up();
+
+    // Run past the settle time after the configuration (FR11 settle window).
+    mock_time_advance_ms(RADAR_MONITOR_SETTLE_MS);
     send_frame(1200, -10);
     send_frame(1100, -10);
     TEST_ASSERT_EQUAL_size_t(2u, count_audio(RTE_AUDIO_OBSTACLE));
@@ -200,6 +213,54 @@ test_radar_dies_while_alert_active_clears_and_reports_fault (void)
 
     TEST_ASSERT_EQUAL_size_t(1u, count_audio(RTE_AUDIO_RADAR_OK));
     TEST_ASSERT_EQUAL_size_t(3u, count_audio(RTE_AUDIO_OBSTACLE));
+}
+
+static void
+test_radar_silent_inside_settle_window_clears_without_a_fault (void)
+{
+    bring_radar_up();
+    send_frame(1200, -10);
+    send_frame(1100, -10);
+    TEST_ASSERT_EQUAL_size_t(2u, count_audio(RTE_AUDIO_OBSTACLE));
+
+    // Silence right after the configuration: the tone stops, no fault tone.
+    run_radar_step();
+
+    TEST_ASSERT_EQUAL_size_t(0u, count_audio(RTE_AUDIO_RADAR_FAULT));
+    TEST_ASSERT_EQUAL_size_t(1u, count_audio(RTE_AUDIO_OBSTACLE_CLEAR));
+    TEST_ASSERT_FALSE(mock_ble_get(mock_ble_count() - 1u).b_active);
+
+    // Frames resume by themselves: the alert comes back, still no fault.
+    send_frame(1000, -10);
+    TEST_ASSERT_EQUAL_size_t(0u, count_audio(RTE_AUDIO_RADAR_FAULT));
+    TEST_ASSERT_EQUAL_size_t(0u, count_audio(RTE_AUDIO_RADAR_OK));
+    TEST_ASSERT_EQUAL_size_t(3u, count_audio(RTE_AUDIO_OBSTACLE));
+}
+
+static void
+test_cane_released_silences_alert_and_unknown_restores_it (void)
+{
+    bring_radar_up();
+    send_frame(1500, -20);
+    send_frame(1400, -20);
+    TEST_ASSERT_EQUAL_size_t(2u, count_audio(RTE_AUDIO_OBSTACLE));
+
+    // The BLE task reports RELEASED: one CLEAR, then silence although the
+    // person stays inside 2 m.
+    rte_write_grip_state(RTE_GRIP_RELEASED);
+    run_threat_task();
+    send_frame(1300, -20);
+    send_frame(1200, -20);
+    TEST_ASSERT_EQUAL_size_t(1u, count_audio(RTE_AUDIO_OBSTACLE_CLEAR));
+    TEST_ASSERT_EQUAL_size_t(2u, count_audio(RTE_AUDIO_OBSTACLE));
+
+    // The cane link drops: the BLE task reports UNKNOWN, alert is back.
+    rte_write_grip_state(RTE_GRIP_UNKNOWN);
+    run_threat_task();
+    send_frame(1100, -20);
+    TEST_ASSERT_EQUAL_size_t(3u, count_audio(RTE_AUDIO_OBSTACLE));
+    TEST_ASSERT_EQUAL_UINT16(1100u,
+                             mock_audio_get(mock_audio_count() - 1u).d_mm);
 }
 
 static void
@@ -224,6 +285,8 @@ main (void)
     UNITY_BEGIN();
     RUN_TEST(test_person_walks_up_alert_starts_then_clears);
     RUN_TEST(test_radar_dies_while_alert_active_clears_and_reports_fault);
+    RUN_TEST(test_radar_silent_inside_settle_window_clears_without_a_fault);
+    RUN_TEST(test_cane_released_silences_alert_and_unknown_restores_it);
     RUN_TEST(test_corrupted_frames_do_not_start_an_alert);
 
     return (UNITY_END());

@@ -62,7 +62,7 @@ int16_t ld2450_decode_signed (uint8_t low, uint8_t high);
 bool ld2450_decode_body (const uint8_t * p_body,
                          rte_radar_target_t * p_targets);
 
-/** Receive-path statistics for diagnosis (all counted since start-up). */
+/** Receive-path statistics (counted since the sensor was configured). */
 typedef struct
 {
     uint32_t overrun_count;   /**< Hardware FIFO overruns seen by the ISR. */
@@ -73,6 +73,7 @@ typedef struct
 
 uint32_t ld2450_get_overflow_count (void);
 void ld2450_get_rx_stats (ld2450_rx_stats_t * p_stats);
+void ld2450_reset_rx_stats (void);
 uint32_t ld2450_get_bad_footer_count (void);
 
 #endif /* LD2450_H */

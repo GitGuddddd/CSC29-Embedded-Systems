@@ -1,0 +1,93 @@
+---- Closed serial port COM5 due to disconnection from the machine ----
+---- Reopened serial port COM5 ----
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355771866 ms  samples=4  min=0 max=30 avg=15  free slots=1  free blocks=1
+[Radar] CONFIG OK t=2240ms bytes=587 dropped=68 | start t=0ms bytes=1 dropped=0
+[T] t=2390 45,403,0 - -
+>>> Audio Alert <- OBSTACLE(404mm) pitch 3377 Hz
+>>> BLE task <- obstacle ACTIVE d=404mm TTC=65535ms
+[T] t=2480 50,410,0 - -
+>>> Audio Alert <- OBSTACLE(412mm) pitch 3368 Hz
+>>> BLE task <- obstacle ACTIVE d=412mm TTC=65535ms
+[T] t=2570 53,414,0 - -
+>>> Audio Alert <- OBSTACLE(416mm) pitch 3363 Hz
+>>> BLE task <- obstacle ACTIVE d=416mm TTC=65535ms
+[T] t=2660 57,419,0 - -
+>>> Audio Alert <- OBSTACLE(422mm) pitch 3356 Hz
+>>> BLE task <- obstacle ACTIVE d=422mm TTC=65535ms
+[T] t=2750 60,426,0 - -
+>>> Audio Alert <- OBSTACLE(430mm) pitch 3347 Hz
+>>> BLE task <- obstacle ACTIVE d=430mm TTC=65535ms
+[T] t=2840 61,432,0 - -
+>>> Audio Alert <- OBSTACLE(436mm) pitch 3340 Hz
+>>> BLE task <- obstacle ACTIVE d=436mm TTC=65535ms
+[T] t=2930 63,434,-8 - -
+>>> Audio Alert <- OBSTACLE(438mm) pitch 3337 Hz
+>>> BLE task <- obstacle ACTIVE d=438mm TTC=5475ms
+[T] t=3010 63,437,0 - -
+>>> Audio Alert <- OBSTACLE(440mm) pitch 3335 Hz
+>>> BLE task <- obstacle ACTIVE d=440mm TTC=65535ms
+[T] t=3100 67,441,0 - -
+>>> Audio Alert <- OBSTACLE(446mm) pitch 3328 Hz
+>>> BLE task <- obstacle ACTIVE d=446mm TTC=65535ms
+[T] t=3190 73,444,0 - -
+>>> Audio Alert <- OBSTACLE(448mm) pitch 3325 Hz
+>>> BLE task <- obstacle ACTIVE d=448mm TTC=65535ms
+[Radar] TIMEOUT t=3700ms frames=10 bytes=301 isr=80 overrun=0 dropped=0 footer_bad=0
+>>> Audio Alert <- OBSTACLE(CLEAR)
+>>> BLE task <- obstacle CLEAR
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355773876 ms  samples=4  min=0 max=30 avg=15  free slots=0  free blocks=0
+[T] t=4080 - - -
+[T] t=4160 - - -
+[T] t=4250 - - -
+[T] t=4340 - - -
+[T] t=4430 - - -
+[T] t=4520 281,392,0 - -
+>>> Audio Alert <- OBSTACLE(482mm) pitch 3285 Hz
+>>> BLE task <- obstacle ACTIVE d=482mm TTC=65535ms
+[T] t=4610 274,397,0 - -
+>>> Audio Alert <- OBSTACLE(482mm) pitch 3285 Hz
+>>> BLE task <- obstacle ACTIVE d=482mm TTC=65535ms
+[T] t=4700 267,402,0 - -
+>>> Audio Alert <- OBSTACLE(482mm) pitch 3285 Hz
+>>> BLE task <- obstacle ACTIVE d=482mm TTC=65535ms
+[T] t=4790 260,416,0 - -
+>>> Audio Alert <- OBSTACLE(490mm) pitch 3276 Hz
+>>> BLE task <- obstacle ACTIVE d=490mm TTC=65535ms
+[T] t=4880 259,419,0 - -
+[Radar] frames t=4880ms frames=20 bytes=601 isr=158 overrun=0 dropped=0 footer_bad=0
+[Radar] BOOT start t=0ms bytes=1 dropped=0 | config OK t=2240ms bytes=587 dropped=68
+>>> Audio Alert <- OBSTACLE(492mm) pitch 3274 Hz
+>>> BLE task <- obstacle ACTIVE d=492mm TTC=65535ms
+[T] t=4970 262,417,0 - -
+>>> Audio Alert <- OBSTACLE(492mm) pitch 3274 Hz
+>>> BLE task <- obstacle ACTIVE d=492mm TTC=65535ms
+[T] t=5050 262,417,0 - -
+>>> Audio Alert <- OBSTACLE(492mm) pitch 3274 Hz
+>>> BLE task <- obstacle ACTIVE d=492mm TTC=65535ms
+[T] t=5140 257,415,0 - -
+>>> Audio Alert <- OBSTACLE(488mm) pitch 3278 Hz
+>>> BLE task <- obstacle ACTIVE d=488mm TTC=65535ms
+[T] t=5230 255,414,0 - -
+>>> Audio Alert <- OBSTACLE(486mm) pitch 3281 Hz
+>>> BLE task <- obstacle ACTIVE d=486mm TTC=65535ms
+[T] t=5320 253,414,0 - -
+>>> Audio Alert <- OBSTACLE(484mm) pitch 3283 Hz
+>>> BLE task <- obstacle ACTIVE d=484mm TTC=65535ms
+[T] t=5410 253,418,0 - -
+>>> Audio Alert <- OBSTACLE(488mm) pitch 3278 Hz
+>>> BLE task <- obstacle ACTIVE d=488mm TTC=65535ms
+[T] t=5500 255,422,0 - -
+>>> Audio Alert <- OBSTACLE(492mm) pitch 3274 Hz
+>>> BLE task <- obstacle ACTIVE d=492mm TTC=65535ms
+[T] t=5590 257,427,0 - -
+>>> Audio Alert <- OBSTACLE(498mm) pitch 3267 Hz
+>>> BLE task <- obstacle ACTIVE d=498mm TTC=65535ms
+[T] t=5680 256,433,0 - -
+>>> Audio Alert <- OBSTACLE(502mm) pitch 3262 Hz
+>>> BLE task <- obstacle ACTIVE d=502mm TTC=65535ms
+[T] t=5770 246,440,0 - -
+>>> Audio Alert <- OBSTACLE(504mm) pitch 3260 Hz
+>>> BLE task <- obstacle ACTIVE d=504mm TTC=65535ms
+---- Closed the serial port COM5 ----

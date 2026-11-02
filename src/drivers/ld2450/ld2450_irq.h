@@ -23,6 +23,7 @@ size_t ld2450_irq_receive (uint8_t * p_dst, size_t max_length,
 void ld2450_irq_flush (void);
 uint32_t ld2450_irq_get_overflow_count (void);
 void ld2450_irq_get_stats (ld2450_rx_stats_t * p_stats);
+void ld2450_irq_reset_stats (void);
 
 #endif /* LD2450_IRQ_H */
 

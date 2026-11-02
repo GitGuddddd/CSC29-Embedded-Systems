@@ -192,6 +192,11 @@ ld2450_irq_get_overflow_count (void)
 }
 
 void
+ld2450_irq_reset_stats (void)
+{
+}
+
+void
 ld2450_irq_get_stats (ld2450_rx_stats_t * p_stats)
 {
     p_stats->overrun_count = 0u;

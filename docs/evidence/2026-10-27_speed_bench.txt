@@ -1,0 +1,3930 @@
+---- Opened the serial port COM6 ----
+[T] t=33680 - - -
+[T] t=33770 - - -
+monitor: batch  n=110 last=90 from core 1
+monitor: t=3355803646 ms  samples=110  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=33860 - - -
+[T] t=33950 - - -
+[T] t=34040 - - -
+[T] t=34130 - - -
+[T] t=34220 - - -
+[T] t=34310 - - -
+[T] t=34400 - - -
+[T] t=34480 - - -
+[T] t=34570 - - -
+[T] t=34660 - - -
+[Radar] frames t=34660ms frames=380 bytes=11447 isr=3026 overrun=0 dropped=0 footer_bad=0
+[T] t=34750 - - -
+[T] t=34840 - - -
+[T] t=34930 - - -
+[T] t=35020 - - -
+[T] t=35110 - - -
+[T] t=35200 - - -
+[T] t=35290 - - -
+monitor: batch  n=115 last=60 from core 1
+monitor: t=3355805196 ms  samples=115  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=35370 - - -
+[T] t=35460 - - -
+[T] t=35550 - - -
+[T] t=35640 - - -
+[T] t=35730 - - -
+[T] t=35820 - - -
+[T] t=35910 - - -
+[T] t=36000 - - -
+[T] t=36090 - - -
+[T] t=36180 - - -
+[T] t=36260 - - -
+[T] t=36350 - - -
+[T] t=36440 - - -
+[Radar] frames t=36440ms frames=400 bytes=12047 isr=3185 overrun=0 dropped=0 footer_bad=0
+[T] t=36530 - - -
+[T] t=36620 - - -
+[T] t=36710 - - -
+[T] t=36800 - - -
+monitor: batch  n=120 last=10 from core 1
+monitor: t=3355806746 ms  samples=120  min=0 max=100 avg=50  free slots=4  free blocks=4
+monitor: LED task resumed, state=READY, pri=12
+[T] t=36890 - - -
+[T] t=36980 - - -
+[T] t=37070 - - -
+[T] t=37150 - - -
+[T] t=37240 - - -
+[T] t=37330 - - -
+[T] t=37420 - - -
+[T] t=37510 - - -
+[T] t=37600 - - -
+[T] t=37690 - - -
+[T] t=37780 - - -
+[T] t=37870 - - -
+[T] t=37950 - - -
+[T] t=38040 - - -
+[T] t=38130 - - -
+[T] t=38220 - - -
+[Radar] frames t=38220ms frames=420 bytes=12647 isr=3342 overrun=0 dropped=0 footer_bad=0
+[T] t=38310 - - -
+[T] t=38400 - - -
+monitor: batch  n=125 last=40 from core 1
+monitor: t=3355808296 ms  samples=125  min=0 max=100 avg=48  free slots=4  free blocks=4
+[T] t=38490 - - -
+[T] t=38580 - - -
+[T] t=38670 - - -
+[T] t=38760 - - -
+[T] t=38840 - - -
+[T] t=38930 - - -
+[T] t=39020 - - -
+[T] t=39110 - - -
+[T] t=39200 - - -
+[T] t=39290 - - -
+[T] t=39380 - - -
+[T] t=39470 - - -
+[T] t=39560 - - -
+[T] t=39650 - - -
+[T] t=39730 - - -
+[T] t=39820 - - -
+[T] t=39910 - - -
+monitor: batch  n=130 last=90 from core 1
+monitor: t=3355809846 ms  samples=130  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=40000 - - -
+[Radar] frames t=40000ms frames=440 bytes=13247 isr=3500 overrun=0 dropped=0 footer_bad=0
+[T] t=40090 - - -
+[T] t=40180 - - -
+[T] t=40270 - - -
+[T] t=40360 - - -
+[T] t=40450 - - -
+[T] t=40540 - - -
+[T] t=40620 - - -
+[T] t=40710 - - -
+[T] t=40800 - - -
+[T] t=40890 - - -
+[T] t=40980 - - -
+[T] t=41070 - - -
+[T] t=41160 - - -
+[T] t=41250 - - -
+[T] t=41340 - - -
+[T] t=41430 - - -
+[T] t=41510 - - -
+monitor: batch  n=135 last=60 from core 1
+monitor: t=3355811396 ms  samples=135  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=41600 - - -
+[T] t=41690 - - -
+[T] t=41780 - - -
+[Radar] frames t=41780ms frames=460 bytes=13847 isr=3659 overrun=0 dropped=0 footer_bad=0
+[T] t=41870 - - -
+[T] t=41960 - - -
+[T] t=42050 - - -
+[T] t=42140 - - -
+[T] t=42230 - - -
+[T] t=42320 - - -
+[T] t=42400 - - -
+[T] t=42490 - - -
+[T] t=42580 - - -
+[T] t=42670 - - -
+[T] t=42760 - - -
+[T] t=42850 - - -
+[T] t=42940 - - -
+[T] t=43030 - - -
+monitor: batch  n=140 last=10 from core 1
+monitor: t=3355812946 ms  samples=140  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=43120 - - -
+[T] t=43210 - - -
+[T] t=43290 - - -
+[T] t=43380 - - -
+[T] t=43470 - - -
+[T] t=43560 - - -
+[Radar] frames t=43560ms frames=480 bytes=14447 isr=3819 overrun=0 dropped=0 footer_bad=0
+[T] t=43650 - - -
+[T] t=43740 - - -
+[T] t=43830 - - -
+[T] t=43920 - - -
+[T] t=44010 - - -
+[T] t=44100 - - -
+[T] t=44180 - - -
+[T] t=44270 - - -
+[T] t=44360 - - -
+[T] t=44450 - - -
+[T] t=44540 - - -
+[T] t=44630 - - -
+monitor: batch  n=145 last=40 from core 1
+monitor: t=3355814496 ms  samples=145  min=0 max=100 avg=48  free slots=4  free blocks=4
+[T] t=44720 - - -
+[T] t=44810 - - -
+[T] t=44900 - - -
+[T] t=44990 - - -
+[T] t=45070 - - -
+[T] t=45160 - - -
+[T] t=45250 92,181,16 - -
+[T] t=45340 93,184,8>>> Audio Alert <- OBSTACLE(206mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=206mm TTC=65535ms
+[Radar] frames t=45340ms frames=500 bytes=15047 isr=3979 overrun=0 dropped=0 footer_bad=0
+[T] t=45430 95,186,8>>> Audio Alert <- OBSTACLE(208mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=208mm TTC=65535ms
+[T] t=45520 98,189,8>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=45610 100,191,8>>> Audio Alert <- OBSTACLE(215mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=215mm TTC=65535ms
+[T] t=45700 102,189,8>>> Audio Alert <- OBSTACLE(214mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=214mm TTC=65535ms
+[T] t=45790 104,188,0>>> Audio Alert <- OBSTACLE(214mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=214mm TTC=65535ms
+[T] t=45880 102,188,-8 - ->>> Audio Alert <- OBSTACLE(213mm) pitch 3500 Hz
+
+>>> BLE task <- obstacle ACTIVE d=213mm TTC=2662ms
+[T] t=45960 97,188,-8>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=2637ms
+[T] t=46050 91,189,-16>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=1306ms
+[T] t=46140 86,190,-8>>> Audio Alert <- OBSTACLE(208mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=208mm TTC=2600ms
+monitor: batch  n=150 last=90 from core 1
+monitor: t=3355816046 ms  samples=150  min=0 max=100 avg=49  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+[T] t=46230 79,191,-8>>> Audio Alert <- OBSTACLE(206mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=206mm TTC=2575ms
+[T] t=46320 72,190,-8>>> Audio Alert <- OBSTACLE(203mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=203mm TTC=2537ms
+[T] t=46410 65,189,-16>>> Audio Alert <- OBSTACLE(199mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=199mm TTC=1243ms
+[T] t=46500 60,188,-8>>> Audio Alert <- OBSTACLE(197mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=197mm TTC=2462ms
+[T] t=46590 55,187,-8>>> Audio Alert <- OBSTACLE(194mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=194mm TTC=2425ms
+[T] t=46680 51,187,-8>>> Audio Alert <- OBSTACLE(193mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=193mm TTC=2412ms
+[T] t=46770 46,186,-8>>> Audio Alert <- OBSTACLE(191mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=191mm TTC=2387ms
+[T] t=46850 42,186,-8>>> Audio Alert <- OBSTACLE(190mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=190mm TTC=2375ms
+[T] t=46940 38,185,-8>>> Audio Alert <- OBSTACLE(188mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=188mm TTC=2350ms
+[T] t=47030 34,184,-8>>> Audio Alert <- OBSTACLE(187mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=187mm TTC=2337ms
+[T] t=47120 30,184,-8>>> Audio Alert <- OBSTACLE(186mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=186mm TTC=2325ms
+[Radar] frames t=47120ms frames=520 bytes=15647 isr=4137 overrun=0 dropped=0 footer_bad=0
+[T] t=47210 27,183,-8>>> Audio Alert <- OBSTACLE(184mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=184mm TTC=2300ms
+[T] t=47300 23,183,-8>>> Audio Alert <- OBSTACLE(184mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=184mm TTC=2300ms
+[T] t=47390 20,182,-8>>> Audio Alert <- OBSTACLE(183mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=183mm TTC=2287ms
+[T] t=47480 17,182,-8>>> Audio Alert <- OBSTACLE(182mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=182mm TTC=2275ms
+[T] t=47570 14,185,0>>> Audio Alert <- OBSTACLE(185mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=185mm TTC=65535ms
+[T] t=47660 11,190,0>>> Audio Alert <- OBSTACLE(190mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=190mm TTC=65535ms
+monitor: batch  n=155 last=60 from core 1
+monitor: t=3355817596 ms  samples=155  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=47740 9,194,0>>> Audio Alert <- OBSTACLE(194mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=194mm TTC=65535ms
+[T] t=47830 12,208,0>>> Audio Alert <- OBSTACLE(208mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=208mm TTC=65535ms
+[T] t=47920 16,224,0>>> Audio Alert <- OBSTACLE(208mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=208mm TTC=65535ms
+[T] t=48010 21,233,0>>> Audio Alert <- OBSTACLE(CLEAR)
+ - -
+>>> BLE task <- obstacle CLEAR
+[T] t=48100 19,238,0 - -
+[T] t=48190 14,240,0>>> Audio Alert <- OBSTACLE(240mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=240mm TTC=65535ms
+[T] t=48280 10,242,0>>> Audio Alert <- OBSTACLE(242mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=242mm TTC=65535ms
+[T] t=48370 6,244,0>>> Audio Alert <- OBSTACLE(244mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=244mm TTC=65535ms
+[T] t=48460 2,246,0>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=65535ms
+[T] t=48550 -1,248,0>>> Audio Alert <- OBSTACLE(248mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=248mm TTC=65535ms
+[T] t=48630 -5,249,0>>> Audio Alert <- OBSTACLE(249mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=249mm TTC=65535ms
+[T] t=48720 -9,251,0>>> Audio Alert <- OBSTACLE(251mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=251mm TTC=65535ms
+[T] t=48810 -12,253,0>>> Audio Alert <- OBSTACLE(253mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=253mm TTC=65535ms
+[T] t=48900 -15,254,0>>> Audio Alert <- OBSTACLE(254mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=254mm TTC=65535ms
+[Radar] frames t=48900ms frames=540 bytes=16247 isr=4297 overrun=0 dropped=0 footer_bad=0
+[T] t=48990 -19,256,0>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=49080 -19,254,24>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=49170 -20,252,16>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=49260 -20,252,16>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+monitor: batch  n=160 last=10 from core 1
+monitor: t=3355819146 ms  samples=160  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=49350 -20,251,16>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=49430 -20,252,8>>> Audio Alert <- OBSTACLE(252mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=252mm TTC=65535ms
+[T] t=49520 -16,252,8>>> Audio Alert <- OBSTACLE(252mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=252mm TTC=65535ms
+[T] t=49610 -16,254,-8>>> Audio Alert <- OBSTACLE(254mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=254mm TTC=3175ms
+[T] t=49700 -17,257,-8>>> Audio Alert <- OBSTACLE(257mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=257mm TTC=3212ms
+[T] t=49790 -20,260,-8>>> Audio Alert <- OBSTACLE(260mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=260mm TTC=3250ms
+[T] t=49880 -25,262,-8>>> Audio Alert <- OBSTACLE(263mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=263mm TTC=3287ms
+[T] t=49970 -28,261,-8>>> Audio Alert <- OBSTACLE(262mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=262mm TTC=3275ms
+[T] t=50060 -30,260,-8>>> Audio Alert <- OBSTACLE(261mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=261mm TTC=3262ms
+[T] t=50150 -33,259,-16>>> Audio Alert <- OBSTACLE(261mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=261mm TTC=1631ms
+[T] t=50240 -34,258,-8>>> Audio Alert <- OBSTACLE(260mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=260mm TTC=3250ms
+[T] t=50330 -35,255,0>>> Audio Alert <- OBSTACLE(257mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=257mm TTC=65535ms
+[T] t=50410 -37,253,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=50500 -39,250,0>>> Audio Alert <- OBSTACLE(253mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=253mm TTC=65535ms
+[T] t=50590 -41,248,0>>> Audio Alert <- OBSTACLE(251mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=251mm TTC=65535ms
+[T] t=50680 -43,245,0>>> Audio Alert <- OBSTACLE(248mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=248mm TTC=65535ms
+[Radar] frames t=50680ms frames=560 bytes=16847 isr=4456 overrun=0 dropped=0 footer_bad=0
+[T] t=50770 -44,243,0>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=65535ms
+monitor: batch  n=165 last=40 from core 1
+monitor: t=3355820696 ms  samples=165  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=50860 -46,240,0>>> Audio Alert <- OBSTACLE(244mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=244mm TTC=65535ms
+[T] t=50950 -48,238,0>>> Audio Alert <- OBSTACLE(242mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=242mm TTC=65535ms
+[T] t=51040 -49,236,0>>> Audio Alert <- OBSTACLE(241mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=241mm TTC=65535ms
+[T] t=51130 -51,234,0>>> Audio Alert <- OBSTACLE(239mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=239mm TTC=65535ms
+[T] t=51210 -52,232,0>>> Audio Alert <- OBSTACLE(237mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=237mm TTC=65535ms
+[T] t=51300 -53,230,0>>> Audio Alert <- OBSTACLE(236mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=236mm TTC=65535ms
+[T] t=51390 -55,228,0>>> Audio Alert <- OBSTACLE(234mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=234mm TTC=65535ms
+[T] t=51480 -56,226,0>>> Audio Alert <- OBSTACLE(232mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=232mm TTC=65535ms
+[T] t=51570 -57,224,0>>> Audio Alert <- OBSTACLE(231mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=231mm TTC=65535ms
+[T] t=51660 -58,223,0>>> Audio Alert <- OBSTACLE(230mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=230mm TTC=65535ms
+[T] t=51750 -58,221,0>>> Audio Alert <- OBSTACLE(228mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=228mm TTC=65535ms
+[T] t=51840 -58,220,0>>> Audio Alert <- OBSTACLE(227mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=227mm TTC=65535ms
+[T] t=51930 -58,219,0>>> Audio Alert <- OBSTACLE(226mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=226mm TTC=65535ms
+[T] t=52020 -58,218,0>>> Audio Alert <- OBSTACLE(225mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=225mm TTC=65535ms
+[T] t=52100 -59,217,0>>> Audio Alert <- OBSTACLE(224mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=224mm TTC=65535ms
+[T] t=52190 -59,216,0>>> Audio Alert <- OBSTACLE(223mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=223mm TTC=65535ms
+[T] t=52280 -59,215,0>>> Audio Alert <- OBSTACLE(222mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=222mm TTC=65535ms
+[T] t=52370 -59,214,0>>> Audio Alert <- OBSTACLE(221mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=221mm TTC=65535ms
+monitor: batch  n=170 last=90 from core 1
+monitor: t=3355822246 ms  samples=170  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=52460 -59,213,0>>> Audio Alert <- OBSTACLE(221mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=221mm TTC=65535ms
+[Radar] frames t=52460ms frames=580 bytes=17447 isr=4614 overrun=0 dropped=0 footer_bad=0
+[T] t=52550 -59,212,0>>> Audio Alert <- OBSTACLE(220mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=220mm TTC=65535ms
+[T] t=52640 -59,211,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=52730 -60,211,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=52820 -57,210,8>>> Audio Alert <- OBSTACLE(217mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=217mm TTC=65535ms
+[T] t=52910 -50,208,8>>> Audio Alert <- OBSTACLE(213mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=213mm TTC=65535ms
+[T] t=52990 -42,208,8>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=53080 -35,210,16>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=53170 -31,214,16>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=53260 -32,217,8>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=53350 -35,221,8>>> Audio Alert <- OBSTACLE(223mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=223mm TTC=65535ms
+[T] t=53440 -38,229,-8>>> Audio Alert <- OBSTACLE(232mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=232mm TTC=2900ms
+[T] t=53530 -34,240,-8>>> Audio Alert <- OBSTACLE(242mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=242mm TTC=3025ms
+[T] t=53620 -22,248,-8>>> Audio Alert <- OBSTACLE(248mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=248mm TTC=3100ms
+[T] t=53710 27,260,-8>>> Audio Alert <- OBSTACLE(248mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=248mm TTC=65535ms
+[T] t=53800 87,270,-8>>> Audio Alert <- OBSTACLE(CLEAR)
+ - -
+>>> BLE task <- obstacle CLEAR
+[T] t=53880 128,282,0 - -
+monitor: batch  n=175 last=60 from core 1
+monitor: t=3355823796 ms  samples=175  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=53970 161,294,0 - -
+[T] t=54060 190,305,0 - -
+[T] t=54150 199,311,8 - -
+[T] t=54240 196,312,0 - -
+[Radar] frames t=54240ms frames=600 bytes=18047 isr=4773 overrun=0 dropped=0 footer_bad=0
+[T] t=54330 175,313,16 - -
+[T] t=54420 152,313,24 - -
+[T] t=54510 82,312,24 - -
+[T] t=54600 78,312,-16>>> Audio Alert <- OBSTACLE(321mm) pitch 3475 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=321mm TTC=2006ms
+[T] t=54690 84,311,0>>> Audio Alert <- OBSTACLE(322mm) pitch 3474 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=322mm TTC=65535ms
+[T] t=54770 93,313,0>>> Audio Alert <- OBSTACLE(326mm) pitch 3469 Hz
+ ->>> BLE task <- obstacle ACTIVE d=326mm TTC=65535ms
+ -
+[T] t=54860 97,315,-8>>> Audio Alert <- OBSTACLE(329mm) pitch 3465 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=329mm TTC=4112ms
+[T] t=54950 105,316,8>>> Audio Alert <- OBSTACLE(332mm) pitch 3462 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=332mm TTC=65535ms
+[T] t=55040 111,319,8>>> Audio Alert <- OBSTACLE(337mm) pitch 3456 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=337mm TTC=65535ms
+[T] t=55130 142,324,16>>> Audio Alert <- OBSTACLE(337mm) pitch 3456 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=337mm TTC=65535ms
+[T] t=55220 164,334,16>>> Audio Alert <- OBSTACLE(337mm) pitch 3456 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=337mm TTC=65535ms
+[T] t=55310 166,342,24>>> Audio Alert <- OBSTACLE(CLEAR)
+ - -
+>>> BLE task <- obstacle CLEAR
+[T] t=55400 147,346,16 - -
+monitor: batch  n=180 last=10 from core 1
+[T] t=55490 123,352,16monitor: t=3355825346 ms  samples=180  min=0 max=100 avg=50  free slots=4  free blocks=4
+ - -
+monitor: LED task resumed, state=RUN, pri=12
+[T] t=55580 103,357,16 - -
+[T] t=55660 111,360,16 - -
+[T] t=55750 146,368,16 - -
+[T] t=55840 177,374,16 - -
+[T] t=55930 187,377,16 - -
+[T] t=56020 193,380,8 - -
+[Radar] frames t=56020ms frames=620 bytes=18647 isr=4931 overrun=0 dropped=0 footer_bad=0
+[T] t=56110 194,387,8>>> Audio Alert <- OBSTACLE(432mm) pitch 3344 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=432mm TTC=65535ms
+[T] t=56200 192,395,8>>> Audio Alert <- OBSTACLE(439mm) pitch 3336 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=439mm TTC=65535ms
+[T] t=56290 187,404,8>>> Audio Alert <- OBSTACLE(445mm) pitch 3329 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=445mm TTC=65535ms
+[T] t=56380 181,412,8>>> Audio Alert <- OBSTACLE(450mm) pitch 3323 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=450mm TTC=65535ms
+[T] t=56470 170,417,8>>> Audio Alert <- OBSTACLE(450mm) pitch 3323 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=450mm TTC=65535ms
+[T] t=56550 157,424,0>>> Audio Alert <- OBSTACLE(452mm) pitch 3321 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=452mm TTC=65535ms
+[T] t=56640 142,429,0>>> Audio Alert <- OBSTACLE(451mm) pitch 3322 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=451mm TTC=65535ms
+[T] t=56730 126,430,8>>> Audio Alert <- OBSTACLE(448mm) pitch 3325 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=448mm TTC=65535ms
+[T] t=56820 114,428,0>>> Audio Alert <- OBSTACLE(442mm) pitch 3332 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=442mm TTC=65535ms
+[T] t=56910 126,423,0>>> Audio Alert <- OBSTACLE(441mm) pitch 3334 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=441mm TTC=65535ms
+[T] t=57000 141,417,0>>> Audio Alert <- OBSTACLE(440mm) pitch 3335 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=440mm TTC=65535ms
+monitor: batch  n=185 last=40 from core 1
+monitor: t=3355826896 ms  samples=185  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=57090 138,416,-8>>> Audio Alert <- OBSTACLE(438mm) pitch 3337 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=438mm TTC=5475ms
+[T] t=57180 136,418,-8>>> Audio Alert <- OBSTACLE(439mm) pitch 3336 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=439mm TTC=5487ms
+[T] t=57270 137,421,-8>>> Audio Alert <- OBSTACLE(442mm) pitch 3332 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=442mm TTC=5525ms
+[T] t=57360 134,421,-8>>> Audio Alert <- OBSTACLE(441mm) pitch 3334 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=441mm TTC=5512ms
+[T] t=57440 134,421,0>>> Audio Alert <- OBSTACLE(441mm) pitch 3334 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=441mm TTC=65535ms
+[T] t=57530 128,421,0>>> Audio Alert <- OBSTACLE(440mm) pitch 3335 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=440mm TTC=65535ms
+[T] t=57620 109,421,0>>> Audio Alert <- OBSTACLE(434mm) pitch 3342 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=434mm TTC=65535ms
+[T] t=57710 91,422,0>>> Audio Alert <- OBSTACLE(431mm) pitch 3345 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=431mm TTC=65535ms
+[T] t=57800 74,425,-8>>> Audio Alert <- OBSTACLE(431mm) pitch 3345 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=431mm TTC=5387ms
+[Radar] frames t=57800ms frames=640 bytes=19247 isr=5089 overrun=0 dropped=0 footer_bad=0
+[T] t=57890 58,429,-8>>> Audio Alert <- OBSTACLE(432mm) pitch 3344 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=432mm TTC=5400ms
+[T] t=57980 41,433,-8>>> Audio Alert <- OBSTACLE(434mm) pitch 3342 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=434mm TTC=5425ms
+[T] t=58070 26,437,-8>>> Audio Alert <- OBSTACLE(437mm) pitch 3338 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=437mm TTC=5462ms
+[T] t=58160 10,440,-8>>> Audio Alert <- OBSTACLE(440mm) pitch 3335 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=440mm TTC=5500ms
+[T] t=58240 -5,439,-8 - -
+>>> Audio Alert <- OBSTACLE(439mm) pitch 3336 Hz
+>>> BLE task <- obstacle ACTIVE d=439mm TTC=5487ms
+[T] t=58330 -20,436,-16>>> Audio Alert <- OBSTACLE(436mm) pitch 3340 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=436mm TTC=2725ms
+[T] t=58420 -36,437,-16>>> Audio Alert <- OBSTACLE(438mm) pitch 3337 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=438mm TTC=2737ms
+[T] t=58510 -50,438,-8>>> Audio Alert <- OBSTACLE(440mm) pitch 3335 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=440mm TTC=5500ms
+monitor: batch  n=190 last=90 from core 1
+monitor: t=3355828446 ms  samples=190  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=58600 -64,443,-16>>> Audio Alert <- OBSTACLE(447mm) pitch 3327 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=447mm TTC=2793ms
+[T] t=58690 -76,447,-16>>> Audio Alert <- OBSTACLE(453mm) pitch 3320 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=453mm TTC=2831ms
+[T] t=58780 -84,452,-24>>> Audio Alert <- OBSTACLE(459mm) pitch 3312 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=459mm TTC=1912ms
+[T] t=58870 -93,456,-16>>> Audio Alert <- OBSTACLE(465mm) pitch 3305 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=465mm TTC=2906ms
+[T] t=58960 -98,459,-16>>> Audio Alert <- OBSTACLE(469mm) pitch 3301 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=469mm TTC=2931ms
+[T] t=59050 -105,457,-16>>> Audio Alert <- OBSTACLE(468mm) pitch 3302 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=468mm TTC=2925ms
+[T] t=59140 -105,452,-16>>> Audio Alert <- OBSTACLE(464mm) pitch 3307 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=464mm TTC=2900ms
+[T] t=59220 -103,444,-16>>> Audio Alert <- OBSTACLE(455mm) pitch 3317 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=455mm TTC=2843ms
+[T] t=59310 -107,439,-8>>> Audio Alert <- OBSTACLE(451mm) pitch 3322 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=451mm TTC=5637ms
+[T] t=59400 -112,436,-8>>> Audio Alert <- OBSTACLE(450mm) pitch 3323 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=450mm TTC=5625ms
+[T] t=59490 -118,432,-8>>> Audio Alert <- OBSTACLE(447mm) pitch 3327 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=447mm TTC=5587ms
+[T] t=59580 -128,428,8>>> Audio Alert <- OBSTACLE(446mm) pitch 3328 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=446mm TTC=65535ms
+[Radar] frames t=59580ms frames=660 bytes=19847 isr=5247 overrun=0 dropped=0 footer_bad=0
+[T] t=59670 -138,424,24>>> Audio Alert <- OBSTACLE(446mm) pitch 3328 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=446mm TTC=65535ms
+[T] t=59760 -145,420,24>>> Audio Alert <- OBSTACLE(446mm) pitch 3328 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=446mm TTC=65535ms
+[T] t=59850 -153,422,16>>> Audio Alert <- OBSTACLE(446mm) pitch 3328 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=446mm TTC=65535ms
+[T] t=59940 -157,425,48>>> Audio Alert <- OBSTACLE(446mm) pitch 3328 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=446mm TTC=65535ms
+[T] t=60020 -163,431,16 - -
+>>> Audio Alert <- OBSTACLE(446mm) pitch 3328 Hz
+>>> BLE task <- obstacle ACTIVE d=446mm TTC=65535ms
+[T] t=60110 -169,438,16>>> Audio Alert <- OBSTACLE(CLEAR)
+ - -
+>>> BLE task <- obstacle CLEAR
+monitor: batch  n=195 last=60 from core 1
+monitor: t=3355829996 ms  samples=195  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=60200 -170,444,24 - -
+[T] t=60290 -170,450,24 - -
+[T] t=60380 -176,452,16 - -
+[T] t=60470 -179,449,39 - -
+[T] t=60560 -182,444,39 - -
+[T] t=60650 -180,440,8>>> Audio Alert <- OBSTACLE(475mm) pitch 3294 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=475mm TTC=65535ms
+[T] t=60740 -177,437,8>>> Audio Alert <- OBSTACLE(471mm) pitch 3298 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=471mm TTC=65535ms
+[T] t=60830 -173,434,8>>> Audio Alert <- OBSTACLE(467mm) pitch 3303 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=467mm TTC=65535ms
+[T] t=60910 -175,427,0>>> Audio Alert <- OBSTACLE(461mm) pitch 3310 Hz
+ - ->>> BLE task <- obstacle ACTIVE d=461mm TTC=65535ms
+
+[T] t=61000 -174,420,-8>>> Audio Alert <- OBSTACLE(454mm) pitch 3318 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=454mm TTC=5675ms
+[T] t=61090 -174,413,-8>>> Audio Alert <- OBSTACLE(448mm) pitch 3325 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=448mm TTC=5600ms
+[T] t=61180 -174,406,-8>>> Audio Alert <- OBSTACLE(441mm) pitch 3334 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=441mm TTC=5512ms
+[T] t=61270 -174,399,-8>>> Audio Alert <- OBSTACLE(435mm) pitch 3341 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=435mm TTC=5437ms
+[T] t=61360 -177,397,0>>> Audio Alert <- OBSTACLE(434mm) pitch 3342 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=434mm TTC=65535ms
+[Radar] frames t=61360ms frames=680 bytes=20447 isr=5406 overrun=0 dropped=0 footer_bad=0
+[T] t=61450 -181,399,0>>> Audio Alert <- OBSTACLE(438mm) pitch 3337 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=438mm TTC=65535ms
+[T] t=61540 -186,403,0>>> Audio Alert <- OBSTACLE(443mm) pitch 3331 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=443mm TTC=65535ms
+[T] t=61630 -187,406,0>>> Audio Alert <- OBSTACLE(446mm) pitch 3328 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=446mm TTC=65535ms
+monitor: batch  n=200 last=10 from core 1
+monitor: t=3355831546 ms  samples=200  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=61720 -186,408,0>>> Audio Alert <- OBSTACLE(448mm) pitch 3325 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=448mm TTC=65535ms
+[T] t=61800 -184,411,0>>> Audio Alert <- OBSTACLE(450mm) pitch 3323 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=450mm TTC=65535ms
+[T] t=61890 -187,409,0>>> Audio Alert <- OBSTACLE(449mm) pitch 3324 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=449mm TTC=65535ms
+[T] t=61980 -191,406,0>>> Audio Alert <- OBSTACLE(448mm) pitch 3325 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=448mm TTC=65535ms
+[T] t=62070 -195,403,0>>> Audio Alert <- OBSTACLE(447mm) pitch 3327 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=447mm TTC=65535ms
+[T] t=62160 -199,400,0>>> Audio Alert <- OBSTACLE(446mm) pitch 3328 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=446mm TTC=65535ms
+[T] t=62250 -198,394,0>>> Audio Alert <- OBSTACLE(440mm) pitch 3335 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=440mm TTC=65535ms
+[T] t=62340 -195,389,0>>> Audio Alert <- OBSTACLE(435mm) pitch 3341 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=435mm TTC=65535ms
+[T] t=62430 -188,384,0>>> Audio Alert <- OBSTACLE(427mm) pitch 3350 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=427mm TTC=65535ms
+[T] t=62520 -184,385,0>>> Audio Alert <- OBSTACLE(426mm) pitch 3351 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=426mm TTC=65535ms
+[T] t=62610 -181,392,0>>> Audio Alert <- OBSTACLE(431mm) pitch 3345 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=431mm TTC=65535ms
+[T] t=62690 -175,403,0>>> Audio Alert <- OBSTACLE(439mm) pitch 3336 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=439mm TTC=65535ms
+[T] t=62780 -169,417,0>>> Audio Alert <- OBSTACLE(449mm) pitch 3324 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=449mm TTC=65535ms
+[T] t=62870 -157,433,0>>> Audio Alert <- OBSTACLE(449mm) pitch 3324 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=449mm TTC=65535ms
+[T] t=62960 -144,450,0>>> Audio Alert <- OBSTACLE(CLEAR)
+ - -
+>>> BLE task <- obstacle CLEAR
+[T] t=63050 -131,467,0 - -
+[T] t=63140 -119,482,0 - -
+[Radar] frames t=63140ms frames=700 bytes=21047 isr=5565 overrun=0 dropped=0 footer_bad=0
+[T] t=63230 -110,495,0 - -
+monitor: batch  n=205 last=40 from core 1
+monitor: t=3355833096 ms  samples=205  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=63320 -103,505,0 - -
+[T] t=63410 -106,502,0>>> Audio Alert <- OBSTACLE(513mm) pitch 3249 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=513mm TTC=65535ms
+[T] t=63500 -112,494,0>>> Audio Alert <- OBSTACLE(506mm) pitch 3257 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=506mm TTC=65535ms
+[T] t=63580 -114,489,0>>> Audio Alert <- OBSTACLE(502mm) pitch 3262 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=502mm TTC=65535ms
+[T] t=63670 -113,486,0>>> Audio Alert <- OBSTACLE(498mm) pitch 3267 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=498mm TTC=65535ms
+[T] t=63760 -116,484,0>>> Audio Alert <- OBSTACLE(497mm) pitch 3268 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=497mm TTC=65535ms
+[T] t=63850 -120,483,0>>> Audio Alert <- OBSTACLE(497mm) pitch 3268 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=497mm TTC=65535ms
+[T] t=63940 -129,480,0>>> Audio Alert <- OBSTACLE(497mm) pitch 3268 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=497mm TTC=65535ms
+[T] t=64030 -139,476,0>>> Audio Alert <- OBSTACLE(495mm) pitch 3270 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=495mm TTC=65535ms
+[T] t=64120 -149,472,0>>> Audio Alert <- OBSTACLE(494mm) pitch 3271 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=494mm TTC=65535ms
+[T] t=64210 -158,469,0>>> Audio Alert <- OBSTACLE(494mm) pitch 3271 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=494mm TTC=65535ms
+[T] t=64300 -163,467,0>>> Audio Alert <- OBSTACLE(494mm) pitch 3271 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=494mm TTC=65535ms
+[T] t=64390 -156,467,-8>>> Audio Alert <- OBSTACLE(492mm) pitch 3274 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=492mm TTC=6150ms
+[T] t=64470 -144,467,-8>>> Audio Alert <- OBSTACLE(488mm) pitch 3278 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=488mm TTC=6100ms
+[T] t=64560 -139,466,-16>>> Audio Alert <- OBSTACLE(486mm) pitch 3281 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=486mm TTC=3037ms
+[T] t=64650 -137,466,-16>>> Audio Alert <- OBSTACLE(485mm) pitch 3282 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=485mm TTC=3031ms
+[T] t=64740 -138,464,-32>>> Audio Alert <- OBSTACLE(484mm) pitch 3283 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=484mm TTC=1512ms
+monitor: batch  n=210 last=90 from core 1
+monitor: t=3355834646 ms  samples=210  min=0 max=100 avg=49  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+[T] t=64830 -139,463,-32>>> Audio Alert <- OBSTACLE(483mm) pitch 3284 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=483mm TTC=1509ms
+[T] t=64920 -141,461,-32>>> Audio Alert <- OBSTACLE(482mm) pitch 3285 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=482mm TTC=1506ms
+[Radar] frames t=64920ms frames=720 bytes=21647 isr=5725 overrun=0 dropped=0 footer_bad=0
+[T] t=65010 -138,458,-32>>> Audio Alert <- OBSTACLE(478mm) pitch 3290 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=478mm TTC=1493ms
+[T] t=65100 -135,453,-39>>> Audio Alert <- OBSTACLE(472mm) pitch 3297 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=472mm TTC=1210ms
+[T] t=65190 -131,446,-39>>> Audio Alert <- OBSTACLE(464mm) pitch 3307 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=464mm TTC=1189ms
+[T] t=65280 -132,438,-24>>> Audio Alert <- OBSTACLE(457mm) pitch 3315 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=457mm TTC=1904ms
+[T] t=65360 -132,431,-16>>> Audio Alert <- OBSTACLE(450mm) pitch 3323 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=450mm TTC=2812ms
+[T] t=65450 -125,423,0>>> Audio Alert <- OBSTACLE(441mm) pitch 3334 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=441mm TTC=65535ms
+[T] t=65540 -116,416,0>>> Audio Alert <- OBSTACLE(431mm) pitch 3345 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=431mm TTC=65535ms
+[T] t=65630 -108,409,-16>>> Audio Alert <- OBSTACLE(423mm) pitch 3355 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=423mm TTC=2643ms
+[T] t=65720 -100,403,-16>>> Audio Alert <- OBSTACLE(415mm) pitch 3364 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=415mm TTC=2593ms
+[T] t=65810 -92,396,-16>>> Audio Alert <- OBSTACLE(406mm) pitch 3375 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=406mm TTC=2537ms
+[T] t=65900 -84,390,-16>>> Audio Alert <- OBSTACLE(398mm) pitch 3384 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=398mm TTC=2487ms
+[T] t=65990 -76,384,-16>>> Audio Alert <- OBSTACLE(391mm) pitch 3392 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=391mm TTC=2443ms
+[T] t=66080 -69,379,-16>>> Audio Alert <- OBSTACLE(385mm) pitch 3400 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=385mm TTC=2406ms
+[T] t=66160 -63,372,-8 - -
+>>> Audio Alert <- OBSTACLE(377mm) pitch 3409 Hz
+>>> BLE task <- obstacle ACTIVE d=377mm TTC=4712ms
+[T] t=66250 -57,365,-8>>> Audio Alert <- OBSTACLE(369mm) pitch 3418 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=369mm TTC=4612ms
+monitor: batch  n=215 last=60 from core 1
+monitor: t=3355836196 ms  samples=215  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=66340 -52,358,-8>>> Audio Alert <- OBSTACLE(361mm) pitch 3428 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=361mm TTC=4512ms
+[T] t=66430 -47,351,-8>>> Audio Alert <- OBSTACLE(354mm) pitch 3436 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=354mm TTC=4425ms
+[T] t=66520 -42,345,-8>>> Audio Alert <- OBSTACLE(347mm) pitch 3444 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=347mm TTC=4337ms
+[T] t=66610 -37,339,-8>>> Audio Alert <- OBSTACLE(341mm) pitch 3451 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=341mm TTC=4262ms
+[T] t=66700 -32,333,-8>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=4175ms
+[Radar] frames t=66700ms frames=740 bytes=22247 isr=5884 overrun=0 dropped=0 footer_bad=0
+[T] t=66790 -28,327,-8>>> Audio Alert <- OBSTACLE(328mm) pitch 3467 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=328mm TTC=4100ms
+[T] t=66880 -29,321,0>>> Audio Alert <- OBSTACLE(322mm) pitch 3474 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=322mm TTC=65535ms
+[T] t=66970 -27,314,0>>> Audio Alert <- OBSTACLE(315mm) pitch 3482 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=315mm TTC=65535ms
+[T] t=67050 -25,307,0>>> Audio Alert <- OBSTACLE(308mm) pitch 3490 Hz
+ ->>> BLE task <- obstacle ACTIVE d=308mm TTC=65535ms
+ -
+[T] t=67140 -24,300,0>>> Audio Alert <- OBSTACLE(300mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=300mm TTC=65535ms
+[T] t=67230 -22,294,0>>> Audio Alert <- OBSTACLE(294mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=294mm TTC=65535ms
+[T] t=67320 -21,287,0>>> Audio Alert <- OBSTACLE(287mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=287mm TTC=65535ms
+[T] t=67410 -19,281,0>>> Audio Alert <- OBSTACLE(281mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=281mm TTC=65535ms
+[T] t=67500 -14,275,0>>> Audio Alert <- OBSTACLE(275mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=275mm TTC=65535ms
+[T] t=67590 -7,270,0>>> Audio Alert <- OBSTACLE(270mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=270mm TTC=65535ms
+[T] t=67680 0,264,0>>> Audio Alert <- OBSTACLE(264mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=264mm TTC=65535ms
+[T] t=67770 5,259,0>>> Audio Alert <- OBSTACLE(259mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=259mm TTC=65535ms
+[T] t=67860 11,254,0>>> Audio Alert <- OBSTACLE(254mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=254mm TTC=65535ms
+monitor: batch  n=220 last=10 from core 1
+monitor: t=3355837746 ms  samples=220  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=67940 17,249,0>>> Audio Alert <- OBSTACLE(249mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=249mm TTC=65535ms
+ -
+[T] t=68030 23,245,0>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=65535ms
+[T] t=68120 29,240,0>>> Audio Alert <- OBSTACLE(241mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=241mm TTC=65535ms
+[T] t=68210 34,236,0>>> Audio Alert <- OBSTACLE(238mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=238mm TTC=65535ms
+[T] t=68300 39,232,0>>> Audio Alert <- OBSTACLE(235mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=235mm TTC=65535ms
+[T] t=68390 44,228,0>>> Audio Alert <- OBSTACLE(232mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=232mm TTC=65535ms
+[T] t=68480 49,224,0>>> Audio Alert <- OBSTACLE(229mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=229mm TTC=65535ms
+[Radar] frames t=68480ms frames=760 bytes=22847 isr=6043 overrun=0 dropped=0 footer_bad=0
+[T] t=68570 54,220,0>>> Audio Alert <- OBSTACLE(226mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=226mm TTC=65535ms
+[T] t=68660 58,216,0>>> Audio Alert <- OBSTACLE(223mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=223mm TTC=65535ms
+[T] t=68750 63,213,0>>> Audio Alert <- OBSTACLE(222mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=222mm TTC=65535ms
+[T] t=68830 67,209,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=68920 67,209,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=69010 67,209,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=69100 67,209,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=69190 67,209,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=69280 67,209,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=69370 67,209,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+monitor: batch  n=225 last=40 from core 1
+monitor: t=3355839296 ms  samples=225  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=69460 60,207,0>>> Audio Alert <- OBSTACLE(215mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=215mm TTC=65535ms
+[T] t=69550 51,205,0>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+[T] t=69640 49,203,0>>> Audio Alert <- OBSTACLE(208mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=208mm TTC=65535ms
+[T] t=69720 51,203,0>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=69810 54,203,0>>> Audio Alert <- OBSTACLE(210mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=210mm TTC=65535ms
+[T] t=69900 57,203,0>>> Audio Alert <- OBSTACLE(210mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=210mm TTC=65535ms
+[T] t=69990 60,203,0>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+[T] t=70080 64,203,0>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=70170 67,202,0>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=70260 70,202,0>>> Audio Alert <- OBSTACLE(213mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=213mm TTC=65535ms
+[Radar] frames t=70260ms frames=780 bytes=23447 isr=6201 overrun=0 dropped=0 footer_bad=0
+[T] t=70350 73,202,0>>> Audio Alert <- OBSTACLE(214mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=214mm TTC=65535ms
+[T] t=70440 76,202,0>>> Audio Alert <- OBSTACLE(215mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=215mm TTC=65535ms
+[T] t=70530 79,202,0>>> Audio Alert <- OBSTACLE(216mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=216mm TTC=65535ms
+[T] t=70610 82,201,0>>> Audio Alert <- OBSTACLE(217mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=217mm TTC=65535ms
+[T] t=70700 84,201,0>>> Audio Alert <- OBSTACLE(217mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=217mm TTC=65535ms
+[T] t=70790 87,201,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=70880 89,201,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=70970 92,201,0>>> Audio Alert <- OBSTACLE(221mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=221mm TTC=65535ms
+monitor: batch  n=230 last=90 from core 1
+monitor: t=3355840846 ms  samples=230  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=71060 86,199,0>>> Audio Alert <- OBSTACLE(216mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=216mm TTC=65535ms
+[T] t=71150 76,199,0>>> Audio Alert <- OBSTACLE(213mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=213mm TTC=65535ms
+[T] t=71240 68,198,-8>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=2612ms
+[T] t=71330 60,198,24>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=71420 57,201,16>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=71500 56,206,16>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=71590 49,211,16>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=71680 37,214,16>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=71770 22,216,16>>> Audio Alert <- OBSTACLE(CLEAR)
+ - -
+>>> BLE task <- obstacle CLEAR
+[T] t=71860 8,219,16 - -
+[T] t=71950 -3,227,16 - -
+[T] t=72040 -18,232,16 - -
+[Radar] frames t=72040ms frames=800 bytes=24047 isr=6359 overrun=0 dropped=0 footer_bad=0
+[T] t=72130 -35,235,32 - -
+[T] t=72220 -50,237,8>>> Audio Alert <- OBSTACLE(242mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=242mm TTC=65535ms
+[T] t=72310 -66,238,8>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=65535ms
+[T] t=72390 -80,240,8>>> Audio Alert <- OBSTACLE(252mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=252mm TTC=65535ms
+[T] t=72480 -68,247,8>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+monitor: batch  n=235 last=60 from core 1
+monitor: t=3355842396 ms  samples=235  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=72570 -50,255,8>>> Audio Alert <- OBSTACLE(259mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=259mm TTC=65535ms
+[T] t=72660 -38,261,0>>> Audio Alert <- OBSTACLE(263mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=263mm TTC=65535ms
+[T] t=72750 -28,266,0>>> Audio Alert <- OBSTACLE(267mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=267mm TTC=65535ms
+[T] t=72840 -19,270,0>>> Audio Alert <- OBSTACLE(270mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=270mm TTC=65535ms
+[T] t=72930 -20,271,8>>> Audio Alert <- OBSTACLE(271mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=271mm TTC=65535ms
+[T] t=73020 -25,271,8>>> Audio Alert <- OBSTACLE(272mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=272mm TTC=65535ms
+[T] t=73110 -24,272,0>>> Audio Alert <- OBSTACLE(273mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=273mm TTC=65535ms
+[T] t=73200 -21,273,0>>> Audio Alert <- OBSTACLE(273mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=273mm TTC=65535ms
+[T] t=73280 -19,274,0>>> Audio Alert <- OBSTACLE(274mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=274mm TTC=65535ms
+[T] t=73370 -17,275,0>>> Audio Alert <- OBSTACLE(275mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=275mm TTC=65535ms
+[T] t=73460 -21,277,0>>> Audio Alert <- OBSTACLE(277mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=277mm TTC=65535ms
+[T] t=73550 -24,275,0>>> Audio Alert <- OBSTACLE(276mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=276mm TTC=65535ms
+[T] t=73640 -32,275,8>>> Audio Alert <- OBSTACLE(276mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=276mm TTC=65535ms
+[T] t=73730 -46,278,0>>> Audio Alert <- OBSTACLE(281mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=281mm TTC=65535ms
+[T] t=73820 -94,291,0>>> Audio Alert <- OBSTACLE(281mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=281mm TTC=65535ms
+[Radar] frames t=73820ms frames=820 bytes=24647 isr=6517 overrun=0 dropped=0 footer_bad=0
+[T] t=73910 -110,295,0>>> Audio Alert <- OBSTACLE(CLEAR)
+ - -
+>>> BLE task <- obstacle CLEAR
+[T] t=74000 -119,299,0 - -
+[T] t=74080 -126,302,0>>> Audio Alert <- OBSTACLE(327mm) pitch 3468 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=327mm TTC=65535ms
+monitor: batch  n=240 last=10 from core 1
+monitor: t=3355843946 ms  samples=240  min=0 max=100 avg=50  free slots=4  free blocks=4
+monitor: LED task resumed, state=RUN, pri=12
+[T] t=74170 -133,306,0>>> Audio Alert <- OBSTACLE(333mm) pitch 3461 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=333mm TTC=65535ms
+[T] t=74260 -140,309,0>>> Audio Alert <- OBSTACLE(339mm) pitch 3454 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=339mm TTC=65535ms
+[T] t=74350 -146,312,0>>> Audio Alert <- OBSTACLE(344mm) pitch 3448 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=344mm TTC=65535ms
+[T] t=74440 -143,314,0>>> Audio Alert <- OBSTACLE(345mm) pitch 3447 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=345mm TTC=65535ms
+[T] t=74530 -133,311,0>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=65535ms
+[T] t=74620 -120,307,0>>> Audio Alert <- OBSTACLE(329mm) pitch 3465 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=329mm TTC=65535ms
+[T] t=74710 -106,303,0>>> Audio Alert <- OBSTACLE(321mm) pitch 3475 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=321mm TTC=65535ms
+[T] t=74800 -94,299,0>>> Audio Alert <- OBSTACLE(313mm) pitch 3484 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=313mm TTC=65535ms
+[T] t=74890 -82,295,0>>> Audio Alert <- OBSTACLE(306mm) pitch 3492 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=306mm TTC=65535ms
+[T] t=74970 -76,292,0>>> Audio Alert <- OBSTACLE(301mm) pitch 3498 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=301mm TTC=65535ms
+[T] t=75060 -78,293,-8>>> Audio Alert <- OBSTACLE(303mm) pitch 3496 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=303mm TTC=3787ms
+[T] t=75150 -83,295,-8>>> Audio Alert <- OBSTACLE(306mm) pitch 3492 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=306mm TTC=3825ms
+[T] t=75240 -89,298,-8>>> Audio Alert <- OBSTACLE(311mm) pitch 3487 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=311mm TTC=3887ms
+[T] t=75330 -94,300,-8>>> Audio Alert <- OBSTACLE(314mm) pitch 3483 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=314mm TTC=3925ms
+[T] t=75420 -99,302,-8>>> Audio Alert <- OBSTACLE(317mm) pitch 3480 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=317mm TTC=3962ms
+[T] t=75510 -104,304,-8>>> Audio Alert <- OBSTACLE(321mm) pitch 3475 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=321mm TTC=4012ms
+[T] t=75600 -115,305,8>>> Audio Alert <- OBSTACLE(325mm) pitch 3470 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=325mm TTC=65535ms
+[Radar] frames t=75600ms frames=840 bytes=25247 isr=6675 overrun=0 dropped=0 footer_bad=0
+monitor: batch  n=245 last=40 from core 1
+monitor: t=3355845496 ms  samples=245  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=75690 -128,307,8>>> Audio Alert <- OBSTACLE(332mm) pitch 3462 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=332mm TTC=65535ms
+[T] t=75780 -140,308,8>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=65535ms
+[T] t=75860 -152,309,8>>> Audio Alert <- OBSTACLE(344mm) pitch 3448 Hz
+ ->>> BLE task <- obstacle ACTIVE d=344mm TTC=65535ms
+ -
+[T] t=75950 -163,311,8>>> Audio Alert <- OBSTACLE(351mm) pitch 3440 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=351mm TTC=65535ms
+[T] t=76040 -174,312,8>>> Audio Alert <- OBSTACLE(357mm) pitch 3432 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=357mm TTC=65535ms
+[T] t=76130 -179,314,0>>> Audio Alert <- OBSTACLE(361mm) pitch 3428 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=361mm TTC=65535ms
+[T] t=76220 -181,316,0>>> Audio Alert <- OBSTACLE(364mm) pitch 3424 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=364mm TTC=65535ms
+[T] t=76310 -183,318,0>>> Audio Alert <- OBSTACLE(366mm) pitch 3422 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=366mm TTC=65535ms
+[T] t=76400 -187,318,-8>>> Audio Alert <- OBSTACLE(368mm) pitch 3420 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=368mm TTC=4600ms
+[T] t=76490 -195,317,-8>>> Audio Alert <- OBSTACLE(372mm) pitch 3415 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=372mm TTC=4650ms
+[T] t=76580 -206,318,0>>> Audio Alert <- OBSTACLE(378mm) pitch 3408 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=378mm TTC=65535ms
+[T] t=76670 -216,323,0>>> Audio Alert <- OBSTACLE(388mm) pitch 3396 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=388mm TTC=65535ms
+[T] t=76750>>> Audio Alert <- OBSTACLE(397mm) pitch 3385 Hz
+ -220,331,-8 ->>> BLE task <- obstacle ACTIVE d=397mm TTC=4962ms
+ -
+[T] t=76840 -226,338,-8>>> Audio Alert <- OBSTACLE(397mm) pitch 3385 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=397mm TTC=65535ms
+[T] t=76930 -234,343,-8>>> Audio Alert <- OBSTACLE(CLEAR)
+ - -
+>>> BLE task <- obstacle CLEAR
+[T] t=77020 -243,349,-8 - -
+[T] t=77110 -252,355,-8 - -
+monitor: batch  n=250 last=90 from core 1
+monitor: t=3355847046 ms  samples=250  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=77200 -261,363,0 - -
+[T] t=77290 -270,368,-8 - -
+[T] t=77380 -276,367,-8>>> Audio Alert <- OBSTACLE(459mm) pitch 3312 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=459mm TTC=5737ms
+[Radar] frames t=77380ms frames=860 bytes=25847 isr=6833 overrun=0 dropped=0 footer_bad=0
+[T] t=77470 -282,368,-8>>> Audio Alert <- OBSTACLE(463mm) pitch 3308 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=463mm TTC=5787ms
+[T] t=77560 -284,368,-8>>> Audio Alert <- OBSTACLE(464mm) pitch 3307 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=464mm TTC=5800ms
+[T] t=77640 -284,368,-16>>> Audio Alert <- OBSTACLE(464mm) pitch 3307 Hz
+ ->>> BLE task <- obstacle ACTIVE d=464mm TTC=2900ms
+ -
+[T] t=77730 -282,368,-16>>> Audio Alert <- OBSTACLE(463mm) pitch 3308 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=463mm TTC=2893ms
+[T] t=77820 -282,367,-8>>> Audio Alert <- OBSTACLE(462mm) pitch 3309 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=462mm TTC=5775ms
+[T] t=77910 -281,369,0>>> Audio Alert <- OBSTACLE(463mm) pitch 3308 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=463mm TTC=65535ms
+[T] t=78000 -283,370,-8>>> Audio Alert <- OBSTACLE(465mm) pitch 3305 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=465mm TTC=5812ms
+[T] t=78090 -282,369,-8>>> Audio Alert <- OBSTACLE(464mm) pitch 3307 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=464mm TTC=5800ms
+[T] t=78180 -278,367,-8>>> Audio Alert <- OBSTACLE(460mm) pitch 3311 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=460mm TTC=5750ms
+[T] t=78270 -275,364,-16>>> Audio Alert <- OBSTACLE(456mm) pitch 3316 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=456mm TTC=2850ms
+[T] t=78360 -273,358,-16>>> Audio Alert <- OBSTACLE(450mm) pitch 3323 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=450mm TTC=2812ms
+[T] t=78450 -274,353,-16>>> Audio Alert <- OBSTACLE(446mm) pitch 3328 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=446mm TTC=2787ms
+[T] t=78530 -277,350,-8>>> Audio Alert <- OBSTACLE(446mm) pitch 3328 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=446mm TTC=5575ms
+[T] t=78620 -282,348,-8>>> Audio Alert <- OBSTACLE(447mm) pitch 3327 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=447mm TTC=5587ms
+[T] t=78710 -282,345,-32>>> Audio Alert <- OBSTACLE(445mm) pitch 3329 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=445mm TTC=1390ms
+monitor: batch  n=255 last=60 from core 1
+monitor: t=3355848596 ms  samples=255  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=78800 -280,342,-32>>> Audio Alert <- OBSTACLE(442mm) pitch 3332 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=442mm TTC=1381ms
+[T] t=78890 -277,339,-32>>> Audio Alert <- OBSTACLE(437mm) pitch 3338 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=437mm TTC=1365ms
+[T] t=78980 -274,333,0>>> Audio Alert <- OBSTACLE(431mm) pitch 3345 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=431mm TTC=65535ms
+[T] t=79070 -271,326,0>>> Audio Alert <- OBSTACLE(423mm) pitch 3355 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=423mm TTC=65535ms
+[T] t=79160 -268,319,0>>> Audio Alert <- OBSTACLE(416mm) pitch 3363 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=416mm TTC=65535ms
+[Radar] frames t=79160ms frames=880 bytes=26447 isr=6992 overrun=0 dropped=0 footer_bad=0
+[T] t=79250 -265,311,0>>> Audio Alert <- OBSTACLE(408mm) pitch 3372 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=408mm TTC=65535ms
+[T] t=79340 -263,304,0>>> Audio Alert <- OBSTACLE(401mm) pitch 3381 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=401mm TTC=65535ms
+[T] t=79420 -260,298,0>>> Audio Alert <- OBSTACLE(395mm) pitch 3388 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=395mm TTC=65535ms
+[T] t=79510 -257,291,0>>> Audio Alert <- OBSTACLE(388mm) pitch 3396 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=388mm TTC=65535ms
+[T] t=79600 -255,285,0>>> Audio Alert <- OBSTACLE(382mm) pitch 3403 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=382mm TTC=65535ms
+[T] t=79690 -252,279,0>>> Audio Alert <- OBSTACLE(375mm) pitch 3411 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=375mm TTC=65535ms
+[T] t=79780 -250,273,0>>> Audio Alert <- OBSTACLE(370mm) pitch 3417 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=370mm TTC=65535ms
+[T] t=79870 -248,267,0>>> Audio Alert <- OBSTACLE(364mm) pitch 3424 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=364mm TTC=65535ms
+[T] t=79960 -245,262,0>>> Audio Alert <- OBSTACLE(358mm) pitch 3431 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=358mm TTC=65535ms
+[T] t=80050 -243,257,0>>> Audio Alert <- OBSTACLE(353mm) pitch 3437 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=353mm TTC=65535ms
+[T] t=80140 -241,251,0>>> Audio Alert <- OBSTACLE(347mm) pitch 3444 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=347mm TTC=65535ms
+[T] t=80230 -239,247,0>>> Audio Alert <- OBSTACLE(343mm) pitch 3449 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=343mm TTC=65535ms
+monitor: batch  n=260 last=10 from core 1
+monitor: t=3355850146 ms  samples=260  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=80310 -237,242,0>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=65535ms
+[T] t=80400 -236,237,0>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+[T] t=80490 -236,237,0>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+[T] t=80580 -236,237,0>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+[T] t=80670 -236,237,0>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+[T] t=80760 -236,237,0>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+[T] t=80850 -236,237,0>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+[T] t=80940 -233,235,32>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+[Radar] frames t=80940ms frames=900 bytes=27047 isr=7151 overrun=0 dropped=0 footer_bad=0
+[T] t=81030 -226,235,24>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+[T] t=81120 -222,235,8>>> Audio Alert <- OBSTACLE(323mm) pitch 3472 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=323mm TTC=65535ms
+[T] t=81200 -214,237,8>>> Audio Alert <- OBSTACLE(319mm) pitch 3477 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=319mm TTC=65535ms
+[T] t=81290 -208,236,-8>>> Audio Alert <- OBSTACLE(314mm) pitch 3483 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=314mm TTC=3925ms
+[T] t=81380 -201,235,-8>>> Audio Alert <- OBSTACLE(309mm) pitch 3489 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=309mm TTC=3862ms
+[T] t=81470 -196,234,-8>>> Audio Alert <- OBSTACLE(305mm) pitch 3494 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=305mm TTC=3812ms
+[T] t=81560 -190,233,-8>>> Audio Alert <- OBSTACLE(300mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=300mm TTC=3750ms
+[T] t=81650 -184,231,-8>>> Audio Alert <- OBSTACLE(295mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=295mm TTC=3687ms
+[T] t=81740 -179,230,-8>>> Audio Alert <- OBSTACLE(291mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=291mm TTC=3637ms
+[T] t=81830 -174,230,-8>>> Audio Alert <- OBSTACLE(288mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=288mm TTC=3600ms
+monitor: batch  n=265 last=40 from core 1
+monitor: t=3355851696 ms  samples=265  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=81920 -174,230,0>>> Audio Alert <- OBSTACLE(288mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=288mm TTC=65535ms
+[T] t=82000>>> Audio Alert <- OBSTACLE(291mm) pitch 3500 Hz
+ -177,232,0 - -
+>>> BLE task <- obstacle ACTIVE d=291mm TTC=65535ms
+[T] t=82090 -179,233,0>>> Audio Alert <- OBSTACLE(293mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=293mm TTC=65535ms
+[T] t=82180 -176,232,0>>> Audio Alert <- OBSTACLE(291mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=291mm TTC=65535ms
+[T] t=82270 -167,230,0>>> Audio Alert <- OBSTACLE(284mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=284mm TTC=65535ms
+[T] t=82360 -157,228,0>>> Audio Alert <- OBSTACLE(276mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=276mm TTC=65535ms
+[T] t=82450 -145,225,0>>> Audio Alert <- OBSTACLE(267mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=267mm TTC=65535ms
+[T] t=82540 -133,222,0>>> Audio Alert <- OBSTACLE(258mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=258mm TTC=65535ms
+[T] t=82630 -122,220,0>>> Audio Alert <- OBSTACLE(251mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=251mm TTC=65535ms
+[T] t=82720 -111,217,0>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=243mm TTC=65535ms
+[Radar] frames t=82720ms frames=920 bytes=27647 isr=7310 overrun=0 dropped=0 footer_bad=0
+[T] t=82810 -100,215,0>>> Audio Alert <- OBSTACLE(237mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=237mm TTC=65535ms
+[T] t=82890 -90,213,0>>> Audio Alert <- OBSTACLE(231mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=231mm TTC=65535ms
+ -
+[T] t=82980 -80,210,0>>> Audio Alert <- OBSTACLE(224mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=224mm TTC=65535ms
+[T] t=83070 -71,208,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=83160 -62,206,0>>> Audio Alert <- OBSTACLE(215mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=215mm TTC=65535ms
+[T] t=83250 -53,204,0>>> Audio Alert <- OBSTACLE(210mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=210mm TTC=65535ms
+[T] t=83340 -44,202,0>>> Audio Alert <- OBSTACLE(206mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=206mm TTC=65535ms
+monitor: batch  n=270 last=90 from core 1
+monitor: t=3355853246 ms  samples=270  min=0 max=100 avg=49  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+[T] t=83430 -36,201,0>>> Audio Alert <- OBSTACLE(204mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=204mm TTC=65535ms
+[T] t=83520 -28,199,0>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=83610 -21,197,0>>> Audio Alert <- OBSTACLE(198mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=198mm TTC=65535ms
+[T] t=83700 -13,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=83780 -13,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=83870 -13,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=83960 -13,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=84050 -13,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=84140 -13,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=84230 -13,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=84320 -13,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=84410 -13,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=84500 -13,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[Radar] frames t=84500ms frames=940 bytes=28247 isr=7468 overrun=0 dropped=0 footer_bad=0
+[T] t=84590 -13,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=84670 -16,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=84760 -17,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=84850 -19,196,0>>> Audio Alert <- OBSTACLE(196mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=196mm TTC=65535ms
+monitor: batch  n=275 last=60 from core 1
+monitor: t=3355854796 ms  samples=275  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=84940 -21,196,0>>> Audio Alert <- OBSTACLE(197mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=197mm TTC=65535ms
+[T] t=85030 -23,197,0>>> Audio Alert <- OBSTACLE(198mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=198mm TTC=65535ms
+[T] t=85120 -24,197,0>>> Audio Alert <- OBSTACLE(198mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=198mm TTC=65535ms
+[T] t=85210 -26,198,0>>> Audio Alert <- OBSTACLE(199mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=199mm TTC=65535ms
+[T] t=85300 -27,199,0>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=85390 -29,199,0>>> Audio Alert <- OBSTACLE(201mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=201mm TTC=65535ms
+[T] t=85480 -27,199,8>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=85560 -24,199,8 - -
+>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=85650 -21,198,0>>> Audio Alert <- OBSTACLE(199mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=199mm TTC=65535ms
+[T] t=85740 -20,200,0>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=85830 -20,200,0>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=85920 -20,201,0>>> Audio Alert <- OBSTACLE(201mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=201mm TTC=65535ms
+[T] t=86010 -21,202,0>>> Audio Alert <- OBSTACLE(203mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=203mm TTC=65535ms
+[T] t=86100 -21,203,0>>> Audio Alert <- OBSTACLE(204mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=204mm TTC=65535ms
+[T] t=86190 -20,203,8>>> Audio Alert <- OBSTACLE(203mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=203mm TTC=65535ms
+[T] t=86280 -19,203,8>>> Audio Alert <- OBSTACLE(203mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=203mm TTC=65535ms
+[Radar] frames t=86280ms frames=960 bytes=28847 isr=7627 overrun=0 dropped=0 footer_bad=0
+[T] t=86370 -18,203,8>>> Audio Alert <- OBSTACLE(203mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=203mm TTC=65535ms
+[T] t=86450 -17,203,8>>> Audio Alert <- OBSTACLE(203mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=203mm TTC=65535ms
+monitor: batch  n=280 last=10 from core 1
+monitor: t=3355856346 ms  samples=280  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=86540 -13,201,0>>> Audio Alert <- OBSTACLE(201mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=201mm TTC=65535ms
+[T] t=86630 -7,200,0>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=86720 -2,198,0>>> Audio Alert <- OBSTACLE(198mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=198mm TTC=65535ms
+[T] t=86810 3,196,0>>> Audio Alert <- OBSTACLE(196mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=196mm TTC=65535ms
+[T] t=86900 8,195,0>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=86990 13,193,0>>> Audio Alert <- OBSTACLE(193mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=193mm TTC=65535ms
+[T] t=87080 18,192,0>>> Audio Alert <- OBSTACLE(192mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=192mm TTC=65535ms
+[T] t=87170 22,190,0>>> Audio Alert <- OBSTACLE(191mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=191mm TTC=65535ms
+[T] t=87260 21,190,0>>> Audio Alert <- OBSTACLE(191mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=191mm TTC=65535ms
+[T] t=87340 18,190,0>>> Audio Alert <- OBSTACLE(190mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=190mm TTC=65535ms
+[T] t=87430 15,191,0>>> Audio Alert <- OBSTACLE(191mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=191mm TTC=65535ms
+[T] t=87520 13,191,0>>> Audio Alert <- OBSTACLE(191mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=191mm TTC=65535ms
+[T] t=87610 10,191,0>>> Audio Alert <- OBSTACLE(191mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=191mm TTC=65535ms
+[T] t=87700 7,192,0>>> Audio Alert <- OBSTACLE(192mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=192mm TTC=65535ms
+[T] t=87790 5,192,0>>> Audio Alert <- OBSTACLE(192mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=192mm TTC=65535ms
+[T] t=87880 2,192,0>>> Audio Alert <- OBSTACLE(192mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=192mm TTC=65535ms
+[T] t=87970 0,193,0>>> Audio Alert <- OBSTACLE(193mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=193mm TTC=65535ms
+monitor: batch  n=285 last=40 from core 1
+monitor: t=3355857896 ms  samples=285  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=88060 -1,193,0>>> Audio Alert <- OBSTACLE(193mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=193mm TTC=65535ms
+[Radar] frames t=88060ms frames=980 bytes=29447 isr=7787 overrun=0 dropped=0 footer_bad=0
+[T] t=88140 -3,193,0 - -
+>>> Audio Alert <- OBSTACLE(193mm) pitch 3500 Hz
+>>> BLE task <- obstacle ACTIVE d=193mm TTC=65535ms
+[T] t=88230 -6,193,0>>> Audio Alert <- OBSTACLE(193mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=193mm TTC=65535ms
+[T] t=88320 -4,193,0>>> Audio Alert <- OBSTACLE(193mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=193mm TTC=65535ms
+[T] t=88410 -1,192,0>>> Audio Alert <- OBSTACLE(192mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=192mm TTC=65535ms
+[T] t=88500 0,192,0>>> Audio Alert <- OBSTACLE(192mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=192mm TTC=65535ms
+[T] t=88590 2,191,0>>> Audio Alert <- OBSTACLE(191mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=191mm TTC=65535ms
+[T] t=88680 -1,192,8>>> Audio Alert <- OBSTACLE(192mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=192mm TTC=65535ms
+[T] t=88770 -7,194,8>>> Audio Alert <- OBSTACLE(194mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=194mm TTC=65535ms
+[T] t=88860 -13,195,8>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=65535ms
+[T] t=88950 -18,197,8>>> Audio Alert <- OBSTACLE(197mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=197mm TTC=65535ms
+[T] t=89040 -23,198,8>>> Audio Alert <- OBSTACLE(199mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=199mm TTC=65535ms
+[T] t=89120 -28,199,8>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=89210 -33,201,8>>> Audio Alert <- OBSTACLE(203mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=203mm TTC=65535ms
+[T] t=89300 -38,202,8>>> Audio Alert <- OBSTACLE(205mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=205mm TTC=65535ms
+[T] t=89390 -42,203,8>>> Audio Alert <- OBSTACLE(207mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=207mm TTC=65535ms
+[T] t=89480 -47,204,8>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=89570 -51,205,8>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+monitor: batch  n=290 last=90 from core 1
+monitor: t=3355859446 ms  samples=290  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=89660 -50,206,0>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+[T] t=89750 -46,206,0>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+[T] t=89840 -44,206,0>>> Audio Alert <- OBSTACLE(210mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=210mm TTC=65535ms
+[Radar] frames t=89840ms frames=1000 bytes=30047 isr=7945 overrun=0 dropped=0 footer_bad=0
+[T] t=89930 -41,205,0>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=90010 -41,205,0>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=90100 -41,206,0>>> Audio Alert <- OBSTACLE(210mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=210mm TTC=65535ms
+[T] t=90190 -42,207,0>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+[T] t=90280 -42,207,0>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+[T] t=90370 -42,207,8>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+[T] t=90460 -38,205,24>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+[T] t=90550 -32,203,24>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+[T] t=90640 -27,206,8>>> Audio Alert <- OBSTACLE(207mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=207mm TTC=65535ms
+[T] t=90730 -27,208,-24>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=870ms
+[T] t=90820 -29,211,-24>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=883ms
+[T] t=90900 -32,215,-24>>> Audio Alert <- OBSTACLE(217mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=217mm TTC=904ms
+[T] t=90990 -27,218,-32>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=684ms
+[T] t=91080 -21,221,-32>>> Audio Alert <- OBSTACLE(221mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=221mm TTC=690ms
+monitor: batch  n=295 last=60 from core 1
+monitor: t=3355860996 ms  samples=295  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=91170 -15,223,-39>>> Audio Alert <- OBSTACLE(223mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=223mm TTC=571ms
+[T] t=91260 -10,224,-48>>> Audio Alert <- OBSTACLE(224mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=224mm TTC=466ms
+[T] t=91350 -5,223,-39>>> Audio Alert <- OBSTACLE(223mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=223mm TTC=571ms
+[T] t=91440 -1,220,-39>>> Audio Alert <- OBSTACLE(220mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=220mm TTC=564ms
+[T] t=91530 2,217,-39>>> Audio Alert <- OBSTACLE(217mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=217mm TTC=556ms
+[T] t=91620 5,213,-39>>> Audio Alert <- OBSTACLE(213mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=213mm TTC=546ms
+[Radar] frames t=91620ms frames=1020 bytes=30647 isr=8104 overrun=0 dropped=0 footer_bad=0
+[T] t=91700 9,210,-39>>> Audio Alert <- OBSTACLE(210mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=210mm TTC=538ms
+[T] t=91790 12,206,-39>>> Audio Alert <- OBSTACLE(206mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=206mm TTC=528ms
+[T] t=91880 15,203,-39>>> Audio Alert <- OBSTACLE(203mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=203mm TTC=520ms
+[T] t=91970 18,200,-39>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=512ms
+[T] t=92060 21,197,-39>>> Audio Alert <- OBSTACLE(198mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=198mm TTC=507ms
+[T] t=92150 24,194,-39>>> Audio Alert <- OBSTACLE(195mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=195mm TTC=500ms
+[T] t=92240 30,197,0>>> Audio Alert <- OBSTACLE(199mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=199mm TTC=65535ms
+[T] t=92330 37,201,0>>> Audio Alert <- OBSTACLE(204mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=204mm TTC=65535ms
+[T] t=92420 43,205,0>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=92510 50,209,0>>> Audio Alert <- OBSTACLE(214mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=214mm TTC=65535ms
+[T] t=92590 56,212,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=92680 56,213,8>>> Audio Alert <- OBSTACLE(220mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=220mm TTC=65535ms
+monitor: batch  n=300 last=10 from core 1
+monitor: t=3355862546 ms  samples=300  min=0 max=100 avg=50  free slots=4  free blocks=4
+monitor: LED task resumed, state=RUN, pri=12
+[T] t=92770 54,213,8>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=92860 52,214,8>>> Audio Alert <- OBSTACLE(220mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=220mm TTC=65535ms
+[T] t=92950 48,212,0>>> Audio Alert <- OBSTACLE(217mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=217mm TTC=65535ms
+[T] t=93040 47,211,0>>> Audio Alert <- OBSTACLE(216mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=216mm TTC=65535ms
+[T] t=93130 47,210,0>>> Audio Alert <- OBSTACLE(215mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=215mm TTC=65535ms
+[T] t=93220 49,209,0>>> Audio Alert <- OBSTACLE(214mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=214mm TTC=65535ms
+[T] t=93310 48,207,0>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=93400 40,209,0>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[Radar] frames t=93400ms frames=1040 bytes=31247 isr=8263 overrun=0 dropped=0 footer_bad=0
+[T] t=93480 32,212,0 - -
+>>> Audio Alert <- OBSTACLE(214mm) pitch 3500 Hz
+>>> BLE task <- obstacle ACTIVE d=214mm TTC=65535ms
+[T] t=93570 40,219,0>>> Audio Alert <- OBSTACLE(222mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=222mm TTC=65535ms
+[T] t=93660 46,227,0>>> Audio Alert <- OBSTACLE(231mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=231mm TTC=65535ms
+[T] t=93750 54,235,0>>> Audio Alert <- OBSTACLE(241mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=241mm TTC=65535ms
+[T] t=93840 52,236,0>>> Audio Alert <- OBSTACLE(241mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=241mm TTC=65535ms
+[T] t=93930 48,233,0>>> Audio Alert <- OBSTACLE(237mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=237mm TTC=65535ms
+[T] t=94020 43,231,0>>> Audio Alert <- OBSTACLE(234mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=234mm TTC=65535ms
+[T] t=94110 43,229,0>>> Audio Alert <- OBSTACLE(233mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=233mm TTC=65535ms
+[T] t=94200 44,227,0>>> Audio Alert <- OBSTACLE(231mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=231mm TTC=65535ms
+monitor: batch  n=305 last=40 from core 1
+monitor: t=3355864096 ms  samples=305  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=94290 41,229,0>>> Audio Alert <- OBSTACLE(232mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=232mm TTC=65535ms
+[T] t=94370 32,231,0>>> Audio Alert <- OBSTACLE(233mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=233mm TTC=65535ms
+ -
+[T] t=94460 26,232,0>>> Audio Alert <- OBSTACLE(233mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=233mm TTC=65535ms
+[T] t=94550 27,233,8>>> Audio Alert <- OBSTACLE(234mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=234mm TTC=65535ms
+[T] t=94640 25,235,8>>> Audio Alert <- OBSTACLE(236mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=236mm TTC=65535ms
+[T] t=94730 31,237,8>>> Audio Alert <- OBSTACLE(239mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=239mm TTC=65535ms
+[T] t=94820 33,240,8>>> Audio Alert <- OBSTACLE(242mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=242mm TTC=65535ms
+[T] t=94910 22,242,8>>> Audio Alert <- OBSTACLE(242mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=242mm TTC=65535ms
+[T] t=95000 7,244,8>>> Audio Alert <- OBSTACLE(244mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=244mm TTC=65535ms
+[T] t=95090 -5,246,8>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=65535ms
+[T] t=95180 -19,248,8>>> Audio Alert <- OBSTACLE(248mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=248mm TTC=65535ms
+[Radar] frames t=95180ms frames=1060 bytes=31847 isr=8421 overrun=0 dropped=0 footer_bad=0
+[T] t=95260 -30,246,-8>>> Audio Alert <- OBSTACLE(247mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=247mm TTC=3087ms
+ -
+[T] t=95350 -40,243,-8>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=3075ms
+[T] t=95440 -50,239,-8>>> Audio Alert <- OBSTACLE(244mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=244mm TTC=3050ms
+[T] t=95530 -60,236,-8>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=243mm TTC=3037ms
+[T] t=95620 -69,234,-8>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=243mm TTC=3037ms
+[T] t=95710 -78,231,-8>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=243mm TTC=3037ms
+monitor: batch  n=310 last=90 from core 1
+monitor: t=3355865646 ms  samples=310  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=95800 -86,228,-8>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=243mm TTC=3037ms
+[T] t=95890 -95,225,-8>>> Audio Alert <- OBSTACLE(244mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=244mm TTC=3050ms
+[T] t=95980 -103,223,-8>>> Audio Alert <- OBSTACLE(245mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=245mm TTC=3062ms
+[T] t=96070 -105,222,0>>> Audio Alert <- OBSTACLE(245mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=245mm TTC=65535ms
+[T] t=96150 -106,219,-8>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=243mm TTC=3037ms
+ -
+[T] t=96240 -110,217,0>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=243mm TTC=65535ms
+[T] t=96330 -113,215,0>>> Audio Alert <- OBSTACLE(242mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=242mm TTC=65535ms
+[T] t=96420 -112,214,0>>> Audio Alert <- OBSTACLE(241mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=241mm TTC=65535ms
+[T] t=96510 -108,213,8>>> Audio Alert <- OBSTACLE(238mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=238mm TTC=65535ms
+[T] t=96600 -103,213,8>>> Audio Alert <- OBSTACLE(236mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=236mm TTC=65535ms
+[T] t=96690 -98,212,8>>> Audio Alert <- OBSTACLE(233mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=233mm TTC=65535ms
+[T] t=96780 -93,212,8>>> Audio Alert <- OBSTACLE(231mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=231mm TTC=65535ms
+[T] t=96870 -88,212,8>>> Audio Alert <- OBSTACLE(229mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=229mm TTC=65535ms
+[T] t=96960 -83,212,8>>> Audio Alert <- OBSTACLE(227mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=227mm TTC=65535ms
+[Radar] frames t=96960ms frames=1080 bytes=32447 isr=8579 overrun=0 dropped=0 footer_bad=0
+[T] t=97040 -79,211,8>>> Audio Alert <- OBSTACLE(225mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=225mm TTC=65535ms
+[T] t=97130 -74,211,8>>> Audio Alert <- OBSTACLE(223mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=223mm TTC=65535ms
+[T] t=97220 -70,211,8>>> Audio Alert <- OBSTACLE(222mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=222mm TTC=65535ms
+[T] t=97310 -66,211,8>>> Audio Alert <- OBSTACLE(221mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=221mm TTC=65535ms
+monitor: batch  n=315 last=60 from core 1
+monitor: t=3355867196 ms  samples=315  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=97400 -62,211,8>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=97490 -58,210,8>>> Audio Alert <- OBSTACLE(217mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=217mm TTC=65535ms
+[T] t=97580 -50,214,-8>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=2737ms
+[T] t=97670 -42,214,0>>> Audio Alert <- OBSTACLE(218mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=218mm TTC=65535ms
+[T] t=97760 -32,214,0>>> Audio Alert <- OBSTACLE(216mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=216mm TTC=65535ms
+[T] t=97850 -28,214,0>>> Audio Alert <- OBSTACLE(215mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=215mm TTC=65535ms
+[T] t=97930 -29,214,0>>> Audio Alert <- OBSTACLE(215mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=215mm TTC=65535ms
+[T] t=98020 -33,214,0>>> Audio Alert <- OBSTACLE(216mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=216mm TTC=65535ms
+[T] t=98110 -37,217,0>>> Audio Alert <- OBSTACLE(220mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=220mm TTC=65535ms
+[T] t=98200 -43,220,0>>> Audio Alert <- OBSTACLE(224mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=224mm TTC=65535ms
+[T] t=98290 -49,222,0>>> Audio Alert <- OBSTACLE(227mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=227mm TTC=65535ms
+[T] t=98380 -55,223,0>>> Audio Alert <- OBSTACLE(229mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=229mm TTC=65535ms
+[T] t=98470 -60,224,0>>> Audio Alert <- OBSTACLE(231mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=231mm TTC=65535ms
+[T] t=98560 -64,227,0>>> Audio Alert <- OBSTACLE(235mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=235mm TTC=65535ms
+[T] t=98650 -67,232,0>>> Audio Alert <- OBSTACLE(241mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=241mm TTC=65535ms
+[T] t=98740 -70,232,0>>> Audio Alert <- OBSTACLE(242mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=242mm TTC=65535ms
+[Radar] frames t=98740ms frames=1100 bytes=33047 isr=8736 overrun=0 dropped=0 footer_bad=0
+[T] t=98820 -73,230,0>>> Audio Alert <- OBSTACLE(241mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=241mm TTC=65535ms
+monitor: batch  n=320 last=10 from core 1
+monitor: t=3355868746 ms  samples=320  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=98910 -72,229,8>>> Audio Alert <- OBSTACLE(240mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=240mm TTC=65535ms
+[T] t=99000 -69,229,8>>> Audio Alert <- OBSTACLE(239mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=239mm TTC=65535ms
+[T] t=99090 -66,229,8>>> Audio Alert <- OBSTACLE(238mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=238mm TTC=65535ms
+[T] t=99180 -63,229,8>>> Audio Alert <- OBSTACLE(237mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=237mm TTC=65535ms
+[T] t=99270 -61,229,8>>> Audio Alert <- OBSTACLE(236mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=236mm TTC=65535ms
+[T] t=99360 -58,229,8>>> Audio Alert <- OBSTACLE(236mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=236mm TTC=65535ms
+[T] t=99450 -55,229,8>>> Audio Alert <- OBSTACLE(235mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=235mm TTC=65535ms
+[T] t=99540 -53,228,8>>> Audio Alert <- OBSTACLE(234mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=234mm TTC=65535ms
+[T] t=99630 -42,230,0>>> Audio Alert <- OBSTACLE(233mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=233mm TTC=65535ms
+[T] t=99710 -31,233,0>>> Audio Alert <- OBSTACLE(235mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=235mm TTC=65535ms
+[T] t=99800 -30,233,0>>> Audio Alert <- OBSTACLE(234mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=234mm TTC=65535ms
+[T] t=99890 -32,234,0>>> Audio Alert <- OBSTACLE(236mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=236mm TTC=65535ms
+[T] t=99980 -36,233,0>>> Audio Alert <- OBSTACLE(235mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=235mm TTC=65535ms
+[T] t=100070 -40,231,0>>> Audio Alert <- OBSTACLE(234mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=234mm TTC=65535ms
+[T] t=100160 -44,229,0>>> Audio Alert <- OBSTACLE(233mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=233mm TTC=65535ms
+[T] t=100250 -47,227,0>>> Audio Alert <- OBSTACLE(231mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=231mm TTC=65535ms
+[T] t=100340 -50,224,0>>> Audio Alert <- OBSTACLE(229mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=229mm TTC=65535ms
+[T] t=100430 -52,221,0>>> Audio Alert <- OBSTACLE(227mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=227mm TTC=65535ms
+monitor: batch  n=325 last=40 from core 1
+monitor: t=3355870296 ms  samples=325  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=100520 -55,218,0>>> Audio Alert <- OBSTACLE(224mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=224mm TTC=65535ms
+[Radar] frames t=100520ms frames=1120 bytes=33647 isr=8895 overrun=0 dropped=0 footer_bad=0
+[T] t=100600 -55,219,0>>> Audio Alert <- OBSTACLE(225mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=225mm TTC=65535ms
+[T] t=100690 -60,221,0>>> Audio Alert <- OBSTACLE(229mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=229mm TTC=65535ms
+[T] t=100780 -64,226,0>>> Audio Alert <- OBSTACLE(234mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=234mm TTC=65535ms
+[T] t=100870 -65,230,0>>> Audio Alert <- OBSTACLE(239mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=239mm TTC=65535ms
+[T] t=100960 -64,235,0>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=243mm TTC=65535ms
+[T] t=101050 -63,240,0>>> Audio Alert <- OBSTACLE(248mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=248mm TTC=65535ms
+[T] t=101140 -56,240,8>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=65535ms
+[T] t=101230 -47,239,8>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=243mm TTC=65535ms
+[T] t=101320 -38,237,8>>> Audio Alert <- OBSTACLE(240mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=240mm TTC=65535ms
+[T] t=101400 -30,236,8>>> Audio Alert <- OBSTACLE(237mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=237mm TTC=65535ms
+[T] t=101490 -28,235,-8>>> Audio Alert <- OBSTACLE(236mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=236mm TTC=2950ms
+[T] t=101580 -34,237,0>>> Audio Alert <- OBSTACLE(239mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=239mm TTC=65535ms
+[T] t=101670 -41,240,0>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=243mm TTC=65535ms
+[T] t=101760 -49,242,0>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=65535ms
+[T] t=101850 -58,248,0>>> Audio Alert <- OBSTACLE(254mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=254mm TTC=65535ms
+[T] t=101940 -85,273,0>>> Audio Alert <- OBSTACLE(254mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=254mm TTC=65535ms
+monitor: batch  n=330 last=90 from core 1
+monitor: t=3355871846 ms  samples=330  min=0 max=100 avg=49  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+[T] t=102030 -114,301,0>>> Audio Alert <- OBSTACLE(CLEAR)
+ - -
+>>> BLE task <- obstacle CLEAR
+[T] t=102120 -140,326,0 - -
+[T] t=102210 -150,339,0 - -
+[T] t=102290 -152,342,0 - -
+[Radar] frames t=102290ms frames=1140 bytes=34247 isr=9054 overrun=0 dropped=0 footer_bad=0
+[T] t=102380 -154,345,0>>> Audio Alert <- OBSTACLE(377mm) pitch 3409 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=377mm TTC=65535ms
+[T] t=102470 -155,348,0>>> Audio Alert <- OBSTACLE(380mm) pitch 3405 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=380mm TTC=65535ms
+[T] t=102560 -156,346,0>>> Audio Alert <- OBSTACLE(379mm) pitch 3407 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=379mm TTC=65535ms
+[T] t=102650 -158,345,8>>> Audio Alert <- OBSTACLE(379mm) pitch 3407 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=379mm TTC=65535ms
+[T] t=102740 -163,343,0>>> Audio Alert <- OBSTACLE(379mm) pitch 3407 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=379mm TTC=65535ms
+[T] t=102830 -165,340,8>>> Audio Alert <- OBSTACLE(377mm) pitch 3409 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=377mm TTC=65535ms
+[T] t=102920 -166,337,8>>> Audio Alert <- OBSTACLE(375mm) pitch 3411 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=375mm TTC=65535ms
+[T] t=103010 -167,334,8>>> Audio Alert <- OBSTACLE(373mm) pitch 3414 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=373mm TTC=65535ms
+[T] t=103100 -166,335,8>>> Audio Alert <- OBSTACLE(373mm) pitch 3414 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=373mm TTC=65535ms
+[T] t=103180 -164,336,8>>> Audio Alert <- OBSTACLE(373mm) pitch 3414 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=373mm TTC=65535ms
+[T] t=103270 -162,338,8>>> Audio Alert <- OBSTACLE(374mm) pitch 3412 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=374mm TTC=65535ms
+[T] t=103360 -160,340,8>>> Audio Alert <- OBSTACLE(375mm) pitch 3411 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=375mm TTC=65535ms
+[T] t=103450 -152,341,8>>> Audio Alert <- OBSTACLE(373mm) pitch 3414 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=373mm TTC=65535ms
+monitor: batch  n=335 last=60 from core 1
+monitor: t=3355873396 ms  samples=335  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=103540 -142,343,8>>> Audio Alert <- OBSTACLE(371mm) pitch 3416 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=371mm TTC=65535ms
+[T] t=103630 -133,344,8>>> Audio Alert <- OBSTACLE(368mm) pitch 3420 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=368mm TTC=65535ms
+[T] t=103720 -127,348,0>>> Audio Alert <- OBSTACLE(370mm) pitch 3417 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=370mm TTC=65535ms
+[T] t=103810 -121,352,0>>> Audio Alert <- OBSTACLE(372mm) pitch 3415 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=372mm TTC=65535ms
+[T] t=103900 -118,350,0>>> Audio Alert <- OBSTACLE(369mm) pitch 3418 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=369mm TTC=65535ms
+[T] t=103990 -110,346,0>>> Audio Alert <- OBSTACLE(363mm) pitch 3425 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=363mm TTC=65535ms
+[T] t=104070 -106,343,-8>>> Audio Alert <- OBSTACLE(359mm) pitch 3430 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=359mm TTC=4487ms
+[Radar] frames t=104070ms frames=1160 bytes=34847 isr=9211 overrun=0 dropped=0 footer_bad=0
+[T] t=104160 -102,339,-8>>> Audio Alert <- OBSTACLE(354mm) pitch 3436 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=354mm TTC=4425ms
+[T] t=104250 -98,336,-8>>> Audio Alert <- OBSTACLE(350mm) pitch 3441 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=350mm TTC=4375ms
+[T] t=104340 -92,330,0>>> Audio Alert <- OBSTACLE(342mm) pitch 3450 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=342mm TTC=65535ms
+[T] t=104430 -86,324,0>>> Audio Alert <- OBSTACLE(335mm) pitch 3458 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=335mm TTC=65535ms
+[T] t=104520 -80,319,0>>> Audio Alert <- OBSTACLE(328mm) pitch 3467 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=328mm TTC=65535ms
+[T] t=104610 -74,313,0>>> Audio Alert <- OBSTACLE(321mm) pitch 3475 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=321mm TTC=65535ms
+[T] t=104700 -68,308,0>>> Audio Alert <- OBSTACLE(315mm) pitch 3482 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=315mm TTC=65535ms
+[T] t=104790 -63,303,0>>> Audio Alert <- OBSTACLE(309mm) pitch 3489 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=309mm TTC=65535ms
+[T] t=104880 -57,298,0>>> Audio Alert <- OBSTACLE(303mm) pitch 3496 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=303mm TTC=65535ms
+[T] t=104960 -52,293,0>>> Audio Alert <- OBSTACLE(297mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=297mm TTC=65535ms
+[T] t=105050 -47,288,0>>> Audio Alert <- OBSTACLE(291mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=291mm TTC=65535ms
+monitor: batch  n=340 last=10 from core 1
+monitor: t=3355874946 ms  samples=340  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=105140 -43,284,0>>> Audio Alert <- OBSTACLE(287mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=287mm TTC=65535ms
+[T] t=105230 -38,280,0>>> Audio Alert <- OBSTACLE(282mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=282mm TTC=65535ms
+[T] t=105320 -34,275,0>>> Audio Alert <- OBSTACLE(277mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=277mm TTC=65535ms
+[T] t=105410 -29,271,0>>> Audio Alert <- OBSTACLE(272mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=272mm TTC=65535ms
+[T] t=105500 -23,269,0>>> Audio Alert <- OBSTACLE(269mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=269mm TTC=65535ms
+[T] t=105590 -16,267,0>>> Audio Alert <- OBSTACLE(267mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=267mm TTC=65535ms
+[T] t=105680 -12,269,0>>> Audio Alert <- OBSTACLE(269mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=269mm TTC=65535ms
+[T] t=105770 -17,286,0>>> Audio Alert <- OBSTACLE(286mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=286mm TTC=65535ms
+[T] t=105850 -25,307,0>>> Audio Alert <- OBSTACLE(286mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=286mm TTC=65535ms
+[Radar] frames t=105850ms frames=1180 bytes=35447 isr=9370 overrun=0 dropped=0 footer_bad=0
+[T] t=105940 -30,323,0>>> Audio Alert <- OBSTACLE(CLEAR)
+ - -
+>>> BLE task <- obstacle CLEAR
+[T] t=106030 -26,327,0 - -
+[T] t=106120 -24,328,0>>> Audio Alert <- OBSTACLE(328mm) pitch 3467 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=328mm TTC=65535ms
+[T] t=106210 -22,325,0>>> Audio Alert <- OBSTACLE(325mm) pitch 3470 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=325mm TTC=65535ms
+[T] t=106300 -22,324,0>>> Audio Alert <- OBSTACLE(324mm) pitch 3471 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=324mm TTC=65535ms
+[T] t=106390 -21,320,0>>> Audio Alert <- OBSTACLE(320mm) pitch 3476 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=320mm TTC=65535ms
+[T] t=106480 -15,308,0>>> Audio Alert <- OBSTACLE(308mm) pitch 3490 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=308mm TTC=65535ms
+[T] t=106570 -3,302,0>>> Audio Alert <- OBSTACLE(302mm) pitch 3497 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=302mm TTC=65535ms
+monitor: batch  n=345 last=40 from core 1
+monitor: t=3355876496 ms  samples=345  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=106660 0,295,0>>> Audio Alert <- OBSTACLE(295mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=295mm TTC=65535ms
+[T] t=106740 -6,293,0>>> Audio Alert <- OBSTACLE(293mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=293mm TTC=65535ms
+[T] t=106830 -9,295,8>>> Audio Alert <- OBSTACLE(295mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=295mm TTC=65535ms
+[T] t=106920 -17,299,0>>> Audio Alert <- OBSTACLE(299mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=299mm TTC=65535ms
+[T] t=107010 -22,305,0>>> Audio Alert <- OBSTACLE(305mm) pitch 3494 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=305mm TTC=65535ms
+[T] t=107100 -25,310,0>>> Audio Alert <- OBSTACLE(311mm) pitch 3487 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=311mm TTC=65535ms
+[T] t=107190 -27,313,0>>> Audio Alert <- OBSTACLE(314mm) pitch 3483 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=314mm TTC=65535ms
+[T] t=107280 -29,311,0>>> Audio Alert <- OBSTACLE(312mm) pitch 3485 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=312mm TTC=65535ms
+[T] t=107370 -32,308,0>>> Audio Alert <- OBSTACLE(309mm) pitch 3489 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=309mm TTC=65535ms
+[T] t=107460 -40,306,0>>> Audio Alert <- OBSTACLE(308mm) pitch 3490 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=308mm TTC=65535ms
+[T] t=107550 -46,306,0>>> Audio Alert <- OBSTACLE(309mm) pitch 3489 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=309mm TTC=65535ms
+[T] t=107630 -48,307,0>>> Audio Alert <- OBSTACLE(310mm) pitch 3488 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=310mm TTC=65535ms
+[Radar] frames t=107630ms frames=1200 bytes=36047 isr=9529 overrun=0 dropped=0 footer_bad=0
+[T] t=107720 -48,314,0>>> Audio Alert <- OBSTACLE(317mm) pitch 3480 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=317mm TTC=65535ms
+[T] t=107810 -48,324,0>>> Audio Alert <- OBSTACLE(327mm) pitch 3468 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=327mm TTC=65535ms
+[T] t=107900 -50,329,0>>> Audio Alert <- OBSTACLE(332mm) pitch 3462 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=332mm TTC=65535ms
+[T] t=107990 -52,334,0>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=65535ms
+[T] t=108080 -52,334,0>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=65535ms
+[T] t=108170 -51,331,0>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+monitor: batch  n=350 last=90 from core 1
+monitor: t=3355878046 ms  samples=350  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=108260 -51,328,0>>> Audio Alert <- OBSTACLE(331mm) pitch 3463 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=331mm TTC=65535ms
+[T] t=108350 -50,325,0>>> Audio Alert <- OBSTACLE(328mm) pitch 3467 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=328mm TTC=65535ms
+[T] t=108430 -49,322,0>>> Audio Alert <- OBSTACLE(325mm) pitch 3470 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=325mm TTC=65535ms
+[T] t=108520 -49,319,0>>> Audio Alert <- OBSTACLE(322mm) pitch 3474 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=322mm TTC=65535ms
+[T] t=108610 -48,316,0>>> Audio Alert <- OBSTACLE(319mm) pitch 3477 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=319mm TTC=65535ms
+[T] t=108700 -48,314,0>>> Audio Alert <- OBSTACLE(317mm) pitch 3480 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=317mm TTC=65535ms
+[T] t=108790 -47,311,0>>> Audio Alert <- OBSTACLE(314mm) pitch 3483 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=314mm TTC=65535ms
+[T] t=108880 -47,309,0>>> Audio Alert <- OBSTACLE(312mm) pitch 3485 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=312mm TTC=65535ms
+[T] t=108970 -46,306,0>>> Audio Alert <- OBSTACLE(309mm) pitch 3489 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=309mm TTC=65535ms
+[T] t=109060 -46,304,0>>> Audio Alert <- OBSTACLE(307mm) pitch 3491 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=307mm TTC=65535ms
+[T] t=109150 -45,302,0>>> Audio Alert <- OBSTACLE(305mm) pitch 3494 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=305mm TTC=65535ms
+[T] t=109240 -44,301,0>>> Audio Alert <- OBSTACLE(304mm) pitch 3495 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=304mm TTC=65535ms
+[T] t=109320 -43,300,0 - -
+>>> Audio Alert <- OBSTACLE(303mm) pitch 3496 Hz
+>>> BLE task <- obstacle ACTIVE d=303mm TTC=65535ms
+[T] t=109410 -41,299,0>>> Audio Alert <- OBSTACLE(301mm) pitch 3498 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=301mm TTC=65535ms
+[Radar] frames t=109410ms frames=1220 bytes=36647 isr=9687 overrun=0 dropped=0 footer_bad=0
+[T] t=109500 -40,298,0>>> Audio Alert <- OBSTACLE(300mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=300mm TTC=65535ms
+[T] t=109590 -39,297,0>>> Audio Alert <- OBSTACLE(299mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=299mm TTC=65535ms
+[T] t=109680 -38,296,0>>> Audio Alert <- OBSTACLE(298mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=298mm TTC=65535ms
+monitor: batch  n=355 last=60 from core 1
+monitor: t=3355879596 ms  samples=355  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=109770 -33,294,0>>> Audio Alert <- OBSTACLE(295mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=295mm TTC=65535ms
+[T] t=109860 -28,292,0>>> Audio Alert <- OBSTACLE(293mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=293mm TTC=65535ms
+[T] t=109950 -26,289,-8>>> Audio Alert <- OBSTACLE(290mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=290mm TTC=3625ms
+[T] t=110040 -27,288,0>>> Audio Alert <- OBSTACLE(289mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=289mm TTC=65535ms
+[T] t=110130 -29,289,0>>> Audio Alert <- OBSTACLE(290mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=290mm TTC=65535ms
+[T] t=110210 -34,290,0>>> Audio Alert <- OBSTACLE(291mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=291mm TTC=65535ms
+[T] t=110300 -38,292,0>>> Audio Alert <- OBSTACLE(294mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=294mm TTC=65535ms
+[T] t=110390 -42,294,0>>> Audio Alert <- OBSTACLE(296mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=296mm TTC=65535ms
+[T] t=110480 -46,296,0>>> Audio Alert <- OBSTACLE(299mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=299mm TTC=65535ms
+[T] t=110570 -44,293,24>>> Audio Alert <- OBSTACLE(299mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=299mm TTC=65535ms
+[T] t=110660 -42,290,32>>> Audio Alert <- OBSTACLE(299mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=299mm TTC=65535ms
+[T] t=110750 -39,287,32>>> Audio Alert <- OBSTACLE(299mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=299mm TTC=65535ms
+[T] t=110840 -31,283,-8>>> Audio Alert <- OBSTACLE(284mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=284mm TTC=3550ms
+[T] t=110930 -21,281,-8>>> Audio Alert <- OBSTACLE(281mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=281mm TTC=3512ms
+[T] t=111020 -13,281,0>>> Audio Alert <- OBSTACLE(281mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=281mm TTC=65535ms
+[T] t=111100 -5,283,0>>> Audio Alert <- OBSTACLE(283mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=283mm TTC=65535ms
+ -
+[T] t=111190 0,285,8>>> Audio Alert <- OBSTACLE(285mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=285mm TTC=65535ms
+[Radar] frames t=111190ms frames=1240 bytes=37247 isr=9846 overrun=0 dropped=0 footer_bad=0
+[T] t=111280 6,287,-8>>> Audio Alert <- OBSTACLE(287mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=287mm TTC=3587ms
+monitor: batch  n=360 last=10 from core 1
+monitor: t=3355881146 ms  samples=360  min=0 max=100 avg=50  free slots=4  free blocks=4
+monitor: LED task resumed, state=RUN, pri=12
+[T] t=111370 15,287,0>>> Audio Alert <- OBSTACLE(287mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=287mm TTC=65535ms
+[T] t=111460 23,288,0>>> Audio Alert <- OBSTACLE(288mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=288mm TTC=65535ms
+[T] t=111550 31,288,0>>> Audio Alert <- OBSTACLE(289mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=289mm TTC=65535ms
+[T] t=111640 36,289,0>>> Audio Alert <- OBSTACLE(291mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=291mm TTC=65535ms
+[T] t=111730 36,291,0>>> Audio Alert <- OBSTACLE(293mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=293mm TTC=65535ms
+[T] t=111820 34,293,0>>> Audio Alert <- OBSTACLE(294mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=294mm TTC=65535ms
+[T] t=111910 28,291,0>>> Audio Alert <- OBSTACLE(292mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=292mm TTC=65535ms
+[T] t=111990 22,291,8>>> Audio Alert <- OBSTACLE(291mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=291mm TTC=65535ms
+[T] t=112080 21,292,8>>> Audio Alert <- OBSTACLE(292mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=292mm TTC=65535ms
+[T] t=112170 22,295,8>>> Audio Alert <- OBSTACLE(295mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=295mm TTC=65535ms
+[T] t=112260 24,300,8>>> Audio Alert <- OBSTACLE(300mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=300mm TTC=65535ms
+[T] t=112350 28,305,8>>> Audio Alert <- OBSTACLE(306mm) pitch 3492 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=306mm TTC=65535ms
+[T] t=112440 32,310,8>>> Audio Alert <- OBSTACLE(311mm) pitch 3487 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=311mm TTC=65535ms
+[T] t=112530 35,315,8>>> Audio Alert <- OBSTACLE(316mm) pitch 3481 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=316mm TTC=65535ms
+[T] t=112620 40,314,0>>> Audio Alert <- OBSTACLE(316mm) pitch 3481 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=316mm TTC=65535ms
+[T] t=112710 44,311,0>>> Audio Alert <- OBSTACLE(314mm) pitch 3483 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=314mm TTC=65535ms
+[T] t=112800 43,309,-8>>> Audio Alert <- OBSTACLE(311mm) pitch 3487 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=311mm TTC=3887ms
+monitor: batch  n=365 last=40 from core 1
+monitor: t=3355882696 ms  samples=365  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=112880 43,309,8>>> Audio Alert <- OBSTACLE(311mm) pitch 3487 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=311mm TTC=65535ms
+[T] t=112970 38,309,8>>> Audio Alert <- OBSTACLE(311mm) pitch 3487 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=311mm TTC=65535ms
+[Radar] frames t=112970ms frames=1260 bytes=37847 isr=10005 overrun=0 dropped=0 footer_bad=0
+[T] t=113060 29,309,8>>> Audio Alert <- OBSTACLE(310mm) pitch 3488 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=310mm TTC=65535ms
+[T] t=113150 27,311,8>>> Audio Alert <- OBSTACLE(312mm) pitch 3485 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=312mm TTC=65535ms
+[T] t=113240 25,315,8>>> Audio Alert <- OBSTACLE(315mm) pitch 3482 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=315mm TTC=65535ms
+[T] t=113330 27,319,8>>> Audio Alert <- OBSTACLE(320mm) pitch 3476 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=320mm TTC=65535ms
+[T] t=113420 33,321,0>>> Audio Alert <- OBSTACLE(322mm) pitch 3474 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=322mm TTC=65535ms
+[T] t=113510 41,320,0>>> Audio Alert <- OBSTACLE(322mm) pitch 3474 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=322mm TTC=65535ms
+[T] t=113600 50,317,0>>> Audio Alert <- OBSTACLE(320mm) pitch 3476 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=320mm TTC=65535ms
+[T] t=113690 58,317,0>>> Audio Alert <- OBSTACLE(322mm) pitch 3474 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=322mm TTC=65535ms
+[T] t=113770 67,317,0>>> Audio Alert <- OBSTACLE(324mm) pitch 3471 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=324mm TTC=65535ms
+[T] t=113860 76,317,0>>> Audio Alert <- OBSTACLE(325mm) pitch 3470 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=325mm TTC=65535ms
+[T] t=113950 79,315,-8>>> Audio Alert <- OBSTACLE(324mm) pitch 3471 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=324mm TTC=4050ms
+[T] t=114040 76,313,-8>>> Audio Alert <- OBSTACLE(322mm) pitch 3474 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=322mm TTC=4025ms
+[T] t=114130 70,315,-8>>> Audio Alert <- OBSTACLE(322mm) pitch 3474 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=322mm TTC=4025ms
+[T] t=114220 61,313,-8>>> Audio Alert <- OBSTACLE(318mm) pitch 3478 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=318mm TTC=3975ms
+[T] t=114310 55,311,0>>> Audio Alert <- OBSTACLE(315mm) pitch 3482 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=315mm TTC=65535ms
+monitor: batch  n=370 last=90 from core 1
+monitor: t=3355884246 ms  samples=370  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=114400 48,310,0>>> Audio Alert <- OBSTACLE(313mm) pitch 3484 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=313mm TTC=65535ms
+[T] t=114490 41,309,0>>> Audio Alert <- OBSTACLE(311mm) pitch 3487 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=311mm TTC=65535ms
+[T] t=114580 34,307,0>>> Audio Alert <- OBSTACLE(308mm) pitch 3490 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=308mm TTC=65535ms
+[T] t=114660 33,305,8>>> Audio Alert <- OBSTACLE(306mm) pitch 3492 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=306mm TTC=65535ms
+[T] t=114750 34,301,-8>>> Audio Alert <- OBSTACLE(302mm) pitch 3497 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=302mm TTC=3775ms
+[Radar] frames t=114750ms frames=1280 bytes=38447 isr=10163 overrun=0 dropped=0 footer_bad=0
+[T] t=114840 36,298,0>>> Audio Alert <- OBSTACLE(300mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=300mm TTC=65535ms
+[T] t=114930 41,295,0>>> Audio Alert <- OBSTACLE(297mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=297mm TTC=65535ms
+[T] t=115020 45,293,0>>> Audio Alert <- OBSTACLE(296mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=296mm TTC=65535ms
+[T] t=115110 49,290,0>>> Audio Alert <- OBSTACLE(294mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=294mm TTC=65535ms
+[T] t=115200 51,286,8>>> Audio Alert <- OBSTACLE(290mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=290mm TTC=65535ms
+[T] t=115290 53,282,0>>> Audio Alert <- OBSTACLE(286mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=286mm TTC=65535ms
+[T] t=115380 55,278,0>>> Audio Alert <- OBSTACLE(283mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=283mm TTC=65535ms
+[T] t=115470 56,275,0>>> Audio Alert <- OBSTACLE(280mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=280mm TTC=65535ms
+[T] t=115550 57,273,-8>>> Audio Alert <- OBSTACLE(278mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=278mm TTC=3475ms
+[T] t=115640 62,269,8>>> Audio Alert <- OBSTACLE(276mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=276mm TTC=65535ms
+[T] t=115730 68,266,8>>> Audio Alert <- OBSTACLE(274mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=274mm TTC=65535ms
+[T] t=115820 69,263,0>>> Audio Alert <- OBSTACLE(271mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=271mm TTC=65535ms
+[T] t=115910 72,258,0>>> Audio Alert <- OBSTACLE(267mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=267mm TTC=65535ms
+monitor: batch  n=375 last=60 from core 1
+monitor: t=3355885796 ms  samples=375  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=116000 71,254,0>>> Audio Alert <- OBSTACLE(263mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=263mm TTC=65535ms
+[T] t=116090 70,250,0>>> Audio Alert <- OBSTACLE(259mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=259mm TTC=65535ms
+[T] t=116180 68,247,0>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=116270 62,248,-8>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=3187ms
+[T] t=116360 56,251,8>>> Audio Alert <- OBSTACLE(257mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=257mm TTC=65535ms
+[T] t=116440 51,255,0>>> Audio Alert <- OBSTACLE(260mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=260mm TTC=65535ms
+[T] t=116530 52,258,0>>> Audio Alert <- OBSTACLE(263mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=263mm TTC=65535ms
+[Radar] frames t=116530ms frames=1300 bytes=39047 isr=10321 overrun=0 dropped=0 footer_bad=0
+[T] t=116620 57,261,-8>>> Audio Alert <- OBSTACLE(267mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=267mm TTC=3337ms
+[T] t=116710 63,261,0>>> Audio Alert <- OBSTACLE(268mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=268mm TTC=65535ms
+[T] t=116800 69,262,0>>> Audio Alert <- OBSTACLE(270mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=270mm TTC=65535ms
+[T] t=116890 76,261,-16>>> Audio Alert <- OBSTACLE(271mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=271mm TTC=1693ms
+[T] t=116980 82,257,0>>> Audio Alert <- OBSTACLE(269mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=269mm TTC=65535ms
+[T] t=117070 74,253,0>>> Audio Alert <- OBSTACLE(263mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=263mm TTC=65535ms
+[T] t=117160 65,249,8>>> Audio Alert <- OBSTACLE(257mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=257mm TTC=65535ms
+[T] t=117240 53,244,8 - -
+>>> Audio Alert <- OBSTACLE(249mm) pitch 3500 Hz
+>>> BLE task <- obstacle ACTIVE d=249mm TTC=65535ms
+[T] t=117330 51,243,-8>>> Audio Alert <- OBSTACLE(248mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=248mm TTC=3100ms
+[T] t=117420 54,240,-24>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=1025ms
+monitor: batch  n=380 last=10 from core 1
+monitor: t=3355887346 ms  samples=380  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=117510 62,237,-24>>> Audio Alert <- OBSTACLE(244mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=244mm TTC=1016ms
+[T] t=117600 69,234,-24>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=243mm TTC=1012ms
+[T] t=117690 73,229,16>>> Audio Alert <- OBSTACLE(243mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=243mm TTC=65535ms
+[T] t=117780 80,226,0>>> Audio Alert <- OBSTACLE(239mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=239mm TTC=65535ms
+[T] t=117870 84,224,0>>> Audio Alert <- OBSTACLE(239mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=239mm TTC=65535ms
+[T] t=117960 88,221,-8>>> Audio Alert <- OBSTACLE(237mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=237mm TTC=2962ms
+[T] t=118050 90,219,-8>>> Audio Alert <- OBSTACLE(236mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=236mm TTC=2950ms
+[T] t=118130 91,217,-8>>> Audio Alert <- OBSTACLE(235mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=235mm TTC=2937ms
+[T] t=118220 93,216,-8>>> Audio Alert <- OBSTACLE(235mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=235mm TTC=2937ms
+[T] t=118310 94,214,-8>>> Audio Alert <- OBSTACLE(233mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=233mm TTC=2912ms
+[Radar] frames t=118310ms frames=1320 bytes=39647 isr=10480 overrun=0 dropped=0 footer_bad=0
+[T] t=118400 95,213,-8>>> Audio Alert <- OBSTACLE(233mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=233mm TTC=2912ms
+[T] t=118490 90,213,0>>> Audio Alert <- OBSTACLE(231mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=231mm TTC=65535ms
+[T] t=118580 88,218,0>>> Audio Alert <- OBSTACLE(235mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=235mm TTC=65535ms
+[T] t=118670 90,222,0>>> Audio Alert <- OBSTACLE(239mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=239mm TTC=65535ms
+[T] t=118760 92,227,0>>> Audio Alert <- OBSTACLE(244mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=244mm TTC=65535ms
+[T] t=118850 93,228,-39>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=630ms
+[T] t=118940 94,228,-39>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=630ms
+[T] t=119020 90,231,0>>> Audio Alert <- OBSTACLE(247mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=247mm TTC=65535ms
+ -
+monitor: batch  n=385 last=40 from core 1
+monitor: t=3355888896 ms  samples=385  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=119110 90,235,0>>> Audio Alert <- OBSTACLE(251mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=251mm TTC=65535ms
+[T] t=119200 96,237,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=119290 100,240,0>>> Audio Alert <- OBSTACLE(260mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=260mm TTC=65535ms
+[T] t=119380 97,244,-8>>> Audio Alert <- OBSTACLE(262mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=262mm TTC=3275ms
+[T] t=119470 90,243,-96>>> Audio Alert <- OBSTACLE(259mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=259mm TTC=269ms
+[T] t=119560 82,246,0>>> Audio Alert <- OBSTACLE(259mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=259mm TTC=65535ms
+[T] t=119650 73,249,0>>> Audio Alert <- OBSTACLE(259mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=259mm TTC=65535ms
+[T] t=119740 70,255,0>>> Audio Alert <- OBSTACLE(264mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=264mm TTC=65535ms
+[T] t=119830 66,260,-8>>> Audio Alert <- OBSTACLE(268mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=268mm TTC=3350ms
+[T] t=119910 62,264,0>>> Audio Alert <- OBSTACLE(271mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=271mm TTC=65535ms
+[T] t=120000 56,268,0>>> Audio Alert <- OBSTACLE(273mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=273mm TTC=65535ms
+[T] t=120090 51,273,-8>>> Audio Alert <- OBSTACLE(277mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=277mm TTC=3462ms
+[Radar] frames t=120090ms frames=1340 bytes=40247 isr=10639 overrun=0 dropped=0 footer_bad=0
+[T] t=120180 46,278,0>>> Audio Alert <- OBSTACLE(281mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=281mm TTC=65535ms
+[T] t=120270 43,283,-8>>> Audio Alert <- OBSTACLE(286mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=286mm TTC=3575ms
+[T] t=120360 39,289,-8>>> Audio Alert <- OBSTACLE(291mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=291mm TTC=3637ms
+[T] t=120450 34,290,64>>> Audio Alert <- OBSTACLE(291mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=291mm TTC=65535ms
+[T] t=120540 32,292,0>>> Audio Alert <- OBSTACLE(293mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=293mm TTC=65535ms
+monitor: batch  n=390 last=90 from core 1
+monitor: t=3355890446 ms  samples=390  min=0 max=100 avg=49  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+[T] t=120630 31,294,0>>> Audio Alert <- OBSTACLE(295mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=295mm TTC=65535ms
+[T] t=120720 30,295,0>>> Audio Alert <- OBSTACLE(296mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=296mm TTC=65535ms
+[T] t=120800 31,299,-8>>> Audio Alert <- OBSTACLE(300mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=300mm TTC=3750ms
+[T] t=120890 29,304,-8>>> Audio Alert <- OBSTACLE(305mm) pitch 3494 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=305mm TTC=3812ms
+[T] t=120980 27,311,-8>>> Audio Alert <- OBSTACLE(312mm) pitch 3485 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=312mm TTC=3900ms
+[T] t=121070 24,317,-8>>> Audio Alert <- OBSTACLE(317mm) pitch 3480 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=317mm TTC=3962ms
+[T] t=121160 24,318,72>>> Audio Alert <- OBSTACLE(317mm) pitch 3480 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=317mm TTC=65535ms
+[T] t=121250 24,320,0>>> Audio Alert <- OBSTACLE(320mm) pitch 3476 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=320mm TTC=65535ms
+[T] t=121340 21,320,0>>> Audio Alert <- OBSTACLE(320mm) pitch 3476 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=320mm TTC=65535ms
+[T] t=121430 17,324,0>>> Audio Alert <- OBSTACLE(324mm) pitch 3471 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=324mm TTC=65535ms
+[T] t=121520 17,330,-8>>> Audio Alert <- OBSTACLE(330mm) pitch 3464 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=330mm TTC=4125ms
+[T] t=121610 15,333,0>>> Audio Alert <- OBSTACLE(333mm) pitch 3461 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=333mm TTC=65535ms
+[T] t=121690 12,335,0>>> Audio Alert <- OBSTACLE(335mm) pitch 3458 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=335mm TTC=65535ms
+[T] t=121780 9,338,0>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=65535ms
+[T] t=121870 3,334,72>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=65535ms
+[Radar] frames t=121870ms frames=1360 bytes=40847 isr=10797 overrun=0 dropped=0 footer_bad=0
+[T] t=121960 -2,327,72>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=65535ms
+[T] t=122050 -7,327,0>>> Audio Alert <- OBSTACLE(327mm) pitch 3468 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=327mm TTC=65535ms
+monitor: batch  n=395 last=60 from core 1
+monitor: t=3355891996 ms  samples=395  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=122140 -10,327,0>>> Audio Alert <- OBSTACLE(327mm) pitch 3468 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=327mm TTC=65535ms
+[T] t=122230 -9,328,-8>>> Audio Alert <- OBSTACLE(328mm) pitch 3467 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=328mm TTC=4100ms
+[T] t=122320 -9,329,0>>> Audio Alert <- OBSTACLE(329mm) pitch 3465 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=329mm TTC=65535ms
+[T] t=122410 -7,332,0>>> Audio Alert <- OBSTACLE(332mm) pitch 3462 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=332mm TTC=65535ms
+[T] t=122500 -6,334,0>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+[T] t=122580 -2,338,0>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=65535ms
+[T] t=122670 -1,340,8>>> Audio Alert <- OBSTACLE(340mm) pitch 3452 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=340mm TTC=65535ms
+[T] t=122760 -5,345,0>>> Audio Alert <- OBSTACLE(345mm) pitch 3447 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=345mm TTC=65535ms
+[T] t=122850 -7,349,0>>> Audio Alert <- OBSTACLE(349mm) pitch 3442 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=349mm TTC=65535ms
+[T] t=122940 -10,354,0>>> Audio Alert <- OBSTACLE(354mm) pitch 3436 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=354mm TTC=65535ms
+[T] t=123030 -11,356,-79>>> Audio Alert <- OBSTACLE(356mm) pitch 3434 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=356mm TTC=450ms
+[T] t=123120 -12,357,-79>>> Audio Alert <- OBSTACLE(357mm) pitch 3432 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=357mm TTC=451ms
+[T] t=123210 -13,358,-79>>> Audio Alert <- OBSTACLE(358mm) pitch 3431 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=358mm TTC=453ms
+[T] t=123300 -14,360,-79>>> Audio Alert <- OBSTACLE(360mm) pitch 3429 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=360mm TTC=455ms
+[T] t=123390 -5,359,0>>> Audio Alert <- OBSTACLE(359mm) pitch 3430 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=359mm TTC=65535ms
+[T] t=123470 5,361,16>>> Audio Alert <- OBSTACLE(359mm) pitch 3430 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=359mm TTC=65535ms
+[T] t=123560 13,362,0>>> Audio Alert <- OBSTACLE(362mm) pitch 3427 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=362mm TTC=65535ms
+[T] t=123650 16,362,0>>> Audio Alert <- OBSTACLE(362mm) pitch 3427 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=362mm TTC=65535ms
+[Radar] frames t=123650ms frames=1380 bytes=41447 isr=10957 overrun=0 dropped=0 footer_bad=0
+monitor: batch  n=400 last=10 from core 1
+monitor: t=3355893546 ms  samples=400  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=123740 21,363,0>>> Audio Alert <- OBSTACLE(363mm) pitch 3425 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=363mm TTC=65535ms
+[T] t=123830 22,361,-88>>> Audio Alert <- OBSTACLE(361mm) pitch 3428 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=361mm TTC=410ms
+[T] t=123920 22,358,-88>>> Audio Alert <- OBSTACLE(358mm) pitch 3431 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=358mm TTC=406ms
+[T] t=124010 27,353,0>>> Audio Alert <- OBSTACLE(354mm) pitch 3436 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=354mm TTC=65535ms
+[T] t=124100 36,351,0>>> Audio Alert <- OBSTACLE(352mm) pitch 3438 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=352mm TTC=65535ms
+[T] t=124190 43,353,0>>> Audio Alert <- OBSTACLE(355mm) pitch 3435 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=355mm TTC=65535ms
+[T] t=124280 45,356,-8>>> Audio Alert <- OBSTACLE(358mm) pitch 3431 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=358mm TTC=4475ms
+[T] t=124360 41,359,-8>>> Audio Alert <- OBSTACLE(361mm) pitch 3428 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=361mm TTC=4512ms
+[T] t=124450 38,361,0>>> Audio Alert <- OBSTACLE(362mm) pitch 3427 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=362mm TTC=65535ms
+[T] t=124540 29,360,0>>> Audio Alert <- OBSTACLE(361mm) pitch 3428 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=361mm TTC=65535ms
+[T] t=124630 23,359,0>>> Audio Alert <- OBSTACLE(359mm) pitch 3430 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=359mm TTC=65535ms
+[T] t=124720 15,357,0>>> Audio Alert <- OBSTACLE(357mm) pitch 3432 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=357mm TTC=65535ms
+[T] t=124810 19,354,0>>> Audio Alert <- OBSTACLE(354mm) pitch 3436 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=354mm TTC=65535ms
+[T] t=124900 25,353,0>>> Audio Alert <- OBSTACLE(353mm) pitch 3437 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=353mm TTC=65535ms
+[T] t=124990 27,353,0>>> Audio Alert <- OBSTACLE(354mm) pitch 3436 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=354mm TTC=65535ms
+[T] t=125080 21,354,0>>> Audio Alert <- OBSTACLE(354mm) pitch 3436 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=354mm TTC=65535ms
+[T] t=125160 13,356,0 - -
+>>> Audio Alert <- OBSTACLE(356mm) pitch 3434 Hz
+>>> BLE task <- obstacle ACTIVE d=356mm TTC=65535ms
+monitor: batch  n=405 last=40 from core 1
+monitor: t=3355895096 ms  samples=405  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=125250 7,357,0>>> Audio Alert <- OBSTACLE(357mm) pitch 3432 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=357mm TTC=65535ms
+[T] t=125340 13,352,0>>> Audio Alert <- OBSTACLE(352mm) pitch 3438 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=352mm TTC=65535ms
+[T] t=125430 24,346,0>>> Audio Alert <- OBSTACLE(346mm) pitch 3445 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=346mm TTC=65535ms
+[Radar] frames t=125430ms frames=1400 bytes=42047 isr=11115 overrun=0 dropped=0 footer_bad=0
+[T] t=125520 34,342,0>>> Audio Alert <- OBSTACLE(343mm) pitch 3449 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=343mm TTC=65535ms
+[T] t=125610 43,338,0>>> Audio Alert <- OBSTACLE(340mm) pitch 3452 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=340mm TTC=65535ms
+[T] t=125700 70,325,0>>> Audio Alert <- OBSTACLE(332mm) pitch 3462 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=332mm TTC=65535ms
+[T] t=125790 78,325,0>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+[T] t=125880 81,325,0>>> Audio Alert <- OBSTACLE(334mm) pitch 3460 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=334mm TTC=65535ms
+[T] t=125970 82,327,0>>> Audio Alert <- OBSTACLE(337mm) pitch 3456 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=337mm TTC=65535ms
+[T] t=126050 87,331,0>>> Audio Alert <- OBSTACLE(342mm) pitch 3450 Hz
+ ->>> BLE task <- obstacle ACTIVE d=342mm TTC=65535ms
+ -
+[T] t=126140 89,332,0>>> Audio Alert <- OBSTACLE(343mm) pitch 3449 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=343mm TTC=65535ms
+[T] t=126230 86,331,0>>> Audio Alert <- OBSTACLE(341mm) pitch 3451 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=341mm TTC=65535ms
+[T] t=126320 80,329,0>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=65535ms
+[T] t=126410 79,328,0>>> Audio Alert <- OBSTACLE(337mm) pitch 3456 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=337mm TTC=65535ms
+[T] t=126500 80,326,0>>> Audio Alert <- OBSTACLE(335mm) pitch 3458 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=335mm TTC=65535ms
+[T] t=126590 82,328,-8>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=4225ms
+[T] t=126680 88,327,0>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=338mm TTC=65535ms
+[T] t=126770 96,326,0>>> Audio Alert <- OBSTACLE(339mm) pitch 3454 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=339mm TTC=65535ms
+monitor: batch  n=410 last=90 from core 1
+monitor: t=3355896646 ms  samples=410  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=126860 109,321,0>>> Audio Alert <- OBSTACLE(339mm) pitch 3454 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=339mm TTC=65535ms
+[T] t=126940 105,322,-8>>> Audio Alert <- OBSTACLE(338mm) pitch 3455 Hz
+ ->>> BLE task <- obstacle ACTIVE d=338mm TTC=4225ms
+ -
+[T] t=127030 98,323,-8>>> Audio Alert <- OBSTACLE(337mm) pitch 3456 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=337mm TTC=4212ms
+[T] t=127120 97,326,0>>> Audio Alert <- OBSTACLE(340mm) pitch 3452 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=340mm TTC=65535ms
+[T] t=127210 93,327,0>>> Audio Alert <- OBSTACLE(339mm) pitch 3454 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=339mm TTC=65535ms
+[Radar] frames t=127210ms frames=1420 bytes=42647 isr=11274 overrun=0 dropped=0 footer_bad=0
+[T] t=127300 90,328,0>>> Audio Alert <- OBSTACLE(340mm) pitch 3452 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=340mm TTC=65535ms
+[T] t=127390 89,325,-8>>> Audio Alert <- OBSTACLE(336mm) pitch 3457 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=336mm TTC=4200ms
+[T] t=127480 88,321,-8>>> Audio Alert <- OBSTACLE(332mm) pitch 3462 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=332mm TTC=4150ms
+[T] t=127570 81,317,0>>> Audio Alert <- OBSTACLE(327mm) pitch 3468 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=327mm TTC=65535ms
+[T] t=127660 74,312,0>>> Audio Alert <- OBSTACLE(320mm) pitch 3476 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=320mm TTC=65535ms
+[T] t=127750 70,306,0>>> Audio Alert <- OBSTACLE(313mm) pitch 3484 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=313mm TTC=65535ms
+[T] t=127830 70,301,0>>> Audio Alert <- OBSTACLE(309mm) pitch 3489 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=309mm TTC=65535ms
+[T] t=127920 71,296,0>>> Audio Alert <- OBSTACLE(304mm) pitch 3495 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=304mm TTC=65535ms
+[T] t=128010 66,293,0>>> Audio Alert <- OBSTACLE(300mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=300mm TTC=65535ms
+[T] t=128100 60,292,0>>> Audio Alert <- OBSTACLE(298mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=298mm TTC=65535ms
+[T] t=128190 59,290,0>>> Audio Alert <- OBSTACLE(295mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=295mm TTC=65535ms
+[T] t=128280 64,286,0>>> Audio Alert <- OBSTACLE(293mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=293mm TTC=65535ms
+monitor: batch  n=415 last=60 from core 1
+monitor: t=3355898196 ms  samples=415  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=128370 68,284,0>>> Audio Alert <- OBSTACLE(292mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=292mm TTC=65535ms
+[T] t=128460 65,286,0>>> Audio Alert <- OBSTACLE(293mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=293mm TTC=65535ms
+[T] t=128550 64,287,0>>> Audio Alert <- OBSTACLE(294mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=294mm TTC=65535ms
+[T] t=128640 64,287,0>>> Audio Alert <- OBSTACLE(294mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=294mm TTC=65535ms
+[T] t=128720 69,289,0>>> Audio Alert <- OBSTACLE(297mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=297mm TTC=65535ms
+[T] t=128810 71,290,0>>> Audio Alert <- OBSTACLE(298mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=298mm TTC=65535ms
+[T] t=128900 69,292,0>>> Audio Alert <- OBSTACLE(300mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=300mm TTC=65535ms
+[T] t=128990 63,296,0>>> Audio Alert <- OBSTACLE(302mm) pitch 3497 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=302mm TTC=65535ms
+[Radar] frames t=128990ms frames=1440 bytes=43247 isr=11434 overrun=0 dropped=0 footer_bad=0
+[T] t=129080 59,299,0>>> Audio Alert <- OBSTACLE(304mm) pitch 3495 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=304mm TTC=65535ms
+[T] t=129170 56,299,0>>> Audio Alert <- OBSTACLE(304mm) pitch 3495 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=304mm TTC=65535ms
+[T] t=129260 51,300,0>>> Audio Alert <- OBSTACLE(304mm) pitch 3495 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=304mm TTC=65535ms
+[T] t=129350 47,301,0>>> Audio Alert <- OBSTACLE(304mm) pitch 3495 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=304mm TTC=65535ms
+[T] t=129440 38,304,0>>> Audio Alert <- OBSTACLE(306mm) pitch 3492 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=306mm TTC=65535ms
+[T] t=129530 32,307,0>>> Audio Alert <- OBSTACLE(308mm) pitch 3490 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=308mm TTC=65535ms
+[T] t=129610 27,310,0>>> Audio Alert <- OBSTACLE(311mm) pitch 3487 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=311mm TTC=65535ms
+[T] t=129700 25,309,0>>> Audio Alert <- OBSTACLE(310mm) pitch 3488 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=310mm TTC=65535ms
+[T] t=129790 25,311,0>>> Audio Alert <- OBSTACLE(312mm) pitch 3485 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=312mm TTC=65535ms
+[T] t=129880 25,313,0>>> Audio Alert <- OBSTACLE(313mm) pitch 3484 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=313mm TTC=65535ms
+monitor: batch  n=420 last=10 from core 1
+monitor: t=3355899746 ms  samples=420  min=0 max=100 avg=50  free slots=4  free blocks=4
+monitor: LED task resumed, state=RUN, pri=12
+[T] t=129970 29,313,0>>> Audio Alert <- OBSTACLE(314mm) pitch 3483 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=314mm TTC=65535ms
+[T] t=130060 33,310,-8>>> Audio Alert <- OBSTACLE(311mm) pitch 3487 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=311mm TTC=3887ms
+[T] t=130150 38,305,-8>>> Audio Alert <- OBSTACLE(307mm) pitch 3491 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=307mm TTC=3837ms
+[T] t=130240 44,301,-8>>> Audio Alert <- OBSTACLE(304mm) pitch 3495 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=304mm TTC=3800ms
+[T] t=130330 47,297,0>>> Audio Alert <- OBSTACLE(300mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=300mm TTC=65535ms
+[T] t=130420 51,294,0>>> Audio Alert <- OBSTACLE(298mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=298mm TTC=65535ms
+[T] t=130500 54,291,0>>> Audio Alert <- OBSTACLE(295mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=295mm TTC=65535ms
+[T] t=130590 50,289,0>>> Audio Alert <- OBSTACLE(293mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=293mm TTC=65535ms
+[T] t=130680 51,285,0>>> Audio Alert <- OBSTACLE(289mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=289mm TTC=65535ms
+[T] t=130770 49,282,8>>> Audio Alert <- OBSTACLE(286mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=286mm TTC=65535ms
+[Radar] frames t=130770ms frames=1460 bytes=43847 isr=11592 overrun=0 dropped=0 footer_bad=0
+[T] t=130860 51,279,0>>> Audio Alert <- OBSTACLE(283mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=283mm TTC=65535ms
+[T] t=130950 53,276,0>>> Audio Alert <- OBSTACLE(281mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=281mm TTC=65535ms
+[T] t=131040 57,273,-8>>> Audio Alert <- OBSTACLE(278mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=278mm TTC=3475ms
+[T] t=131130 58,272,0>>> Audio Alert <- OBSTACLE(278mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=278mm TTC=65535ms
+[T] t=131220 59,272,0>>> Audio Alert <- OBSTACLE(278mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=278mm TTC=65535ms
+[T] t=131310 60,274,0>>> Audio Alert <- OBSTACLE(280mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=280mm TTC=65535ms
+[T] t=131390 60,273,0>>> Audio Alert <- OBSTACLE(279mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=279mm TTC=65535ms
+monitor: batch  n=425 last=40 from core 1
+monitor: t=3355901296 ms  samples=425  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=131480 61,271,0>>> Audio Alert <- OBSTACLE(277mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=277mm TTC=65535ms
+[T] t=131570 62,269,0>>> Audio Alert <- OBSTACLE(276mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=276mm TTC=65535ms
+[T] t=131660 64,266,0>>> Audio Alert <- OBSTACLE(273mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=273mm TTC=65535ms
+[T] t=131750 65,266,0>>> Audio Alert <- OBSTACLE(273mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=273mm TTC=65535ms
+[T] t=131840 65,267,8>>> Audio Alert <- OBSTACLE(274mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=274mm TTC=65535ms
+[T] t=131930 65,269,8>>> Audio Alert <- OBSTACLE(276mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=276mm TTC=65535ms
+[T] t=132020 65,271,8>>> Audio Alert <- OBSTACLE(278mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=278mm TTC=65535ms
+[T] t=132110 64,272,8>>> Audio Alert <- OBSTACLE(279mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=279mm TTC=65535ms
+[T] t=132190 64,272,0>>> Audio Alert <- OBSTACLE(279mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=279mm TTC=65535ms
+[T] t=132280 65,271,0>>> Audio Alert <- OBSTACLE(278mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=278mm TTC=65535ms
+[T] t=132370 60,270,0>>> Audio Alert <- OBSTACLE(276mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=276mm TTC=65535ms
+[T] t=132460 53,271,0>>> Audio Alert <- OBSTACLE(276mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=276mm TTC=65535ms
+[T] t=132550 48,271,0>>> Audio Alert <- OBSTACLE(275mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=275mm TTC=65535ms
+[Radar] frames t=132550ms frames=1480 bytes=44447 isr=11750 overrun=0 dropped=0 footer_bad=0
+[T] t=132640 44,270,0>>> Audio Alert <- OBSTACLE(273mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=273mm TTC=65535ms
+[T] t=132730 46,268,0>>> Audio Alert <- OBSTACLE(271mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=271mm TTC=65535ms
+[T] t=132820 49,267,0>>> Audio Alert <- OBSTACLE(271mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=271mm TTC=65535ms
+[T] t=132910 55,266,0>>> Audio Alert <- OBSTACLE(271mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=271mm TTC=65535ms
+monitor: batch  n=430 last=90 from core 1
+monitor: t=3355902846 ms  samples=430  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=133000 61,265,0>>> Audio Alert <- OBSTACLE(271mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=271mm TTC=65535ms
+[T] t=133080 66,264,0>>> Audio Alert <- OBSTACLE(272mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=272mm TTC=65535ms
+ -
+[T] t=133170 72,263,0>>> Audio Alert <- OBSTACLE(272mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=272mm TTC=65535ms
+[T] t=133260 77,263,0>>> Audio Alert <- OBSTACLE(274mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=274mm TTC=65535ms
+[T] t=133350 82,262,0>>> Audio Alert <- OBSTACLE(274mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=274mm TTC=65535ms
+[T] t=133440 85,261,0>>> Audio Alert <- OBSTACLE(274mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=274mm TTC=65535ms
+[T] t=133530 87,260,0>>> Audio Alert <- OBSTACLE(274mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=274mm TTC=65535ms
+[T] t=133620 84,261,0>>> Audio Alert <- OBSTACLE(274mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=274mm TTC=65535ms
+[T] t=133710 76,260,0>>> Audio Alert <- OBSTACLE(270mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=270mm TTC=65535ms
+[T] t=133800 70,258,0>>> Audio Alert <- OBSTACLE(267mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=267mm TTC=65535ms
+[T] t=133890 64,257,0>>> Audio Alert <- OBSTACLE(264mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=264mm TTC=65535ms
+[T] t=133970 55,258,0>>> Audio Alert <- OBSTACLE(263mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=263mm TTC=65535ms
+[T] t=134060 43,261,0>>> Audio Alert <- OBSTACLE(264mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=264mm TTC=65535ms
+[T] t=134150 29,264,0>>> Audio Alert <- OBSTACLE(265mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=265mm TTC=65535ms
+[T] t=134240 16,267,0>>> Audio Alert <- OBSTACLE(267mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=267mm TTC=65535ms
+[T] t=134330 9,270,0>>> Audio Alert <- OBSTACLE(270mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=270mm TTC=65535ms
+[Radar] frames t=134330ms frames=1500 bytes=45047 isr=11908 overrun=0 dropped=0 footer_bad=0
+[T] t=134420 5,271,0>>> Audio Alert <- OBSTACLE(271mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=271mm TTC=65535ms
+[T] t=134510 7,270,0>>> Audio Alert <- OBSTACLE(270mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=270mm TTC=65535ms
+monitor: batch  n=435 last=60 from core 1
+monitor: t=3355904396 ms  samples=435  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=134600 13,267,0>>> Audio Alert <- OBSTACLE(267mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=267mm TTC=65535ms
+[T] t=134690 16,266,-8>>> Audio Alert <- OBSTACLE(266mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=266mm TTC=3325ms
+[T] t=134780 18,266,-8>>> Audio Alert <- OBSTACLE(266mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=266mm TTC=3325ms
+[T] t=134860 24,263,0>>> Audio Alert <- OBSTACLE(264mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=264mm TTC=65535ms
+ -
+[T] t=134950 32,258,0>>> Audio Alert <- OBSTACLE(259mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=259mm TTC=65535ms
+[T] t=135040 39,254,0>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=135130 46,252,0>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=135220 51,250,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=135310 52,250,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=135400 51,250,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=135490 50,251,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=135580 53,251,0>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=135670 57,250,0>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=135750 64,249,0>>> Audio Alert <- OBSTACLE(257mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=257mm TTC=65535ms
+[T] t=135840 67,247,8>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=135930 73,246,0>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=136020 78,244,0>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+monitor: batch  n=440 last=10 from core 1
+monitor: t=3355905946 ms  samples=440  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=136110 83,242,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[Radar] frames t=136110ms frames=1520 bytes=45647 isr=12067 overrun=0 dropped=0 footer_bad=0
+[T] t=136200 88,240,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=136290 93,238,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=136380 97,236,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=136470 102,234,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=136560 106,232,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=136640 110,230,0>>> Audio Alert <- OBSTACLE(254mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=254mm TTC=65535ms
+[T] t=136730 115,229,0>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=136820 118,227,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=136910 120,225,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=137000 119,226,0>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=65535ms
+[T] t=137090 117,229,0>>> Audio Alert <- OBSTACLE(257mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=257mm TTC=65535ms
+[T] t=137180 116,231,0>>> Audio Alert <- OBSTACLE(258mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=258mm TTC=65535ms
+[T] t=137270 112,230,-16>>> Audio Alert <- OBSTACLE(255mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=255mm TTC=1593ms
+[T] t=137360 105,228,-24>>> Audio Alert <- OBSTACLE(251mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=251mm TTC=1045ms
+[T] t=137450 96,225,0>>> Audio Alert <- OBSTACLE(244mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=244mm TTC=65535ms
+[T] t=137530 91,221,0>>> Audio Alert <- OBSTACLE(239mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=239mm TTC=65535ms
+ -
+[T] t=137620 85,217,0>>> Audio Alert <- OBSTACLE(233mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=233mm TTC=65535ms
+monitor: batch  n=445 last=40 from core 1
+monitor: t=3355907496 ms  samples=445  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=137710 78,213,-16>>> Audio Alert <- OBSTACLE(226mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=226mm TTC=1412ms
+[T] t=137800 74,212,0>>> Audio Alert <- OBSTACLE(224mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=224mm TTC=65535ms
+[T] t=137890 71,213,0>>> Audio Alert <- OBSTACLE(224mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=224mm TTC=65535ms
+[Radar] frames t=137890ms frames=1540 bytes=46247 isr=12226 overrun=0 dropped=0 footer_bad=0
+[T] t=137980 68,213,0>>> Audio Alert <- OBSTACLE(223mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=223mm TTC=65535ms
+[T] t=138070 66,213,0>>> Audio Alert <- OBSTACLE(222mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=222mm TTC=65535ms
+[T] t=138160 63,213,0>>> Audio Alert <- OBSTACLE(222mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=222mm TTC=65535ms
+[T] t=138250 61,213,0>>> Audio Alert <- OBSTACLE(221mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=221mm TTC=65535ms
+[T] t=138340 58,214,0>>> Audio Alert <- OBSTACLE(221mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=221mm TTC=65535ms
+[T] t=138420 56,214,0>>> Audio Alert <- OBSTACLE(221mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=221mm TTC=65535ms
+[T] t=138510 54,214,0>>> Audio Alert <- OBSTACLE(220mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=220mm TTC=65535ms
+[T] t=138600 48,211,0>>> Audio Alert <- OBSTACLE(216mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=216mm TTC=65535ms
+[T] t=138690 41,208,0>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=138780 34,205,0>>> Audio Alert <- OBSTACLE(207mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=207mm TTC=65535ms
+[T] t=138870 27,202,0>>> Audio Alert <- OBSTACLE(203mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=203mm TTC=65535ms
+[T] t=138960 26,202,0>>> Audio Alert <- OBSTACLE(203mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=203mm TTC=65535ms
+[T] t=139050 27,202,0>>> Audio Alert <- OBSTACLE(203mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=203mm TTC=65535ms
+[T] t=139140 29,203,0>>> Audio Alert <- OBSTACLE(205mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=205mm TTC=65535ms
+monitor: batch  n=450 last=90 from core 1
+monitor: t=3355909046 ms  samples=450  min=0 max=100 avg=49  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+[T] t=139230 30,204,0>>> Audio Alert <- OBSTACLE(206mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=206mm TTC=65535ms
+[T] t=139310 31,205,0>>> Audio Alert <- OBSTACLE(207mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=207mm TTC=65535ms
+[T] t=139400 32,206,0>>> Audio Alert <- OBSTACLE(208mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=208mm TTC=65535ms
+[T] t=139490 33,206,0>>> Audio Alert <- OBSTACLE(208mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=208mm TTC=65535ms
+[T] t=139580 34,207,0>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=139670 35,208,0>>> Audio Alert <- OBSTACLE(210mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=210mm TTC=65535ms
+[Radar] frames t=139670ms frames=1560 bytes=46847 isr=12384 overrun=0 dropped=0 footer_bad=0
+[T] t=139760 36,208,0>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+[T] t=139850 37,209,0>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=139940 37,209,0>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=140030 40,207,-8>>> Audio Alert <- OBSTACLE(210mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=210mm TTC=2625ms
+[T] t=140110 43,205,-8 - -
+>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=2612ms
+[T] t=140200 46,202,-8>>> Audio Alert <- OBSTACLE(207mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=207mm TTC=2587ms
+[T] t=140290 49,200,-8>>> Audio Alert <- OBSTACLE(205mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=205mm TTC=2562ms
+[T] t=140380 52,198,-8>>> Audio Alert <- OBSTACLE(204mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=204mm TTC=2550ms
+[T] t=140470 54,195,-8>>> Audio Alert <- OBSTACLE(202mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=202mm TTC=2525ms
+[T] t=140560 57,193,-8>>> Audio Alert <- OBSTACLE(201mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=201mm TTC=2512ms
+[T] t=140650 56,192,0>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+monitor: batch  n=455 last=60 from core 1
+monitor: t=3355910596 ms  samples=455  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=140740 53,192,0>>> Audio Alert <- OBSTACLE(199mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=199mm TTC=65535ms
+[T] t=140830 50,193,0>>> Audio Alert <- OBSTACLE(199mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=199mm TTC=65535ms
+[T] t=140920 46,193,0>>> Audio Alert <- OBSTACLE(198mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=198mm TTC=65535ms
+[T] t=141000 43,194,0>>> Audio Alert <- OBSTACLE(198mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=198mm TTC=65535ms
+ -
+[T] t=141090 39,194,0>>> Audio Alert <- OBSTACLE(197mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=197mm TTC=65535ms
+[T] t=141180 36,195,0>>> Audio Alert <- OBSTACLE(198mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=198mm TTC=65535ms
+[T] t=141270 33,195,0>>> Audio Alert <- OBSTACLE(197mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=197mm TTC=65535ms
+[T] t=141360 30,195,0>>> Audio Alert <- OBSTACLE(197mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=197mm TTC=65535ms
+[T] t=141450 27,196,0>>> Audio Alert <- OBSTACLE(197mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=197mm TTC=65535ms
+[Radar] frames t=141450ms frames=1580 bytes=47447 isr=12544 overrun=0 dropped=0 footer_bad=0
+[T] t=141540 23,196,0>>> Audio Alert <- OBSTACLE(197mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=197mm TTC=65535ms
+[T] t=141630 18,197,0>>> Audio Alert <- OBSTACLE(197mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=197mm TTC=65535ms
+[T] t=141720 13,198,0>>> Audio Alert <- OBSTACLE(198mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=198mm TTC=65535ms
+[T] t=141810 8,198,0>>> Audio Alert <- OBSTACLE(198mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=198mm TTC=65535ms
+[T] t=141890 4,199,0>>> Audio Alert <- OBSTACLE(199mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=199mm TTC=65535ms
+[T] t=141980 0,199,0>>> Audio Alert <- OBSTACLE(199mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=199mm TTC=65535ms
+[T] t=142070 -4,200,0>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=142160 -8,200,0>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=142250 -12,201,0>>> Audio Alert <- OBSTACLE(201mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=201mm TTC=65535ms
+monitor: batch  n=460 last=10 from core 1
+monitor: t=3355912146 ms  samples=460  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=142340 -16,201,0>>> Audio Alert <- OBSTACLE(201mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=201mm TTC=65535ms
+[T] t=142430 -19,202,0>>> Audio Alert <- OBSTACLE(202mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=202mm TTC=65535ms
+[T] t=142520 -24,199,0>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=142610 -28,195,0>>> Audio Alert <- OBSTACLE(197mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=197mm TTC=65535ms
+[T] t=142700 -33,191,0>>> Audio Alert <- OBSTACLE(193mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=193mm TTC=65535ms
+[T] t=142780 -37,188,0>>> Audio Alert <- OBSTACLE(191mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=191mm TTC=65535ms
+[T] t=142870 -41,184,0>>> Audio Alert <- OBSTACLE(188mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=188mm TTC=65535ms
+[T] t=142960 -45,182,0>>> Audio Alert <- OBSTACLE(187mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=187mm TTC=65535ms
+[T] t=143050 -48,181,0>>> Audio Alert <- OBSTACLE(187mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=187mm TTC=65535ms
+[T] t=143140 -52,180,0>>> Audio Alert <- OBSTACLE(187mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=187mm TTC=65535ms
+[T] t=143230 -54,180,0>>> Audio Alert <- OBSTACLE(187mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=187mm TTC=65535ms
+[Radar] frames t=143230ms frames=1600 bytes=48047 isr=12703 overrun=0 dropped=0 footer_bad=0
+[T] t=143320 -57,181,0>>> Audio Alert <- OBSTACLE(189mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=189mm TTC=65535ms
+[T] t=143410 -59,181,0>>> Audio Alert <- OBSTACLE(190mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=190mm TTC=65535ms
+[T] t=143500 -61,182,0>>> Audio Alert <- OBSTACLE(191mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=191mm TTC=65535ms
+[T] t=143590 -62,182,32>>> Audio Alert <- OBSTACLE(191mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=191mm TTC=65535ms
+[T] t=143670 -58,182,0>>> Audio Alert <- OBSTACLE(191mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=191mm TTC=65535ms
+[T] t=143760 -55,186,8>>> Audio Alert <- OBSTACLE(193mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=193mm TTC=65535ms
+monitor: batch  n=465 last=40 from core 1
+monitor: t=3355913696 ms  samples=465  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=143850 -56,193,0>>> Audio Alert <- OBSTACLE(200mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=200mm TTC=65535ms
+[T] t=143940 -53,197,0>>> Audio Alert <- OBSTACLE(204mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=204mm TTC=65535ms
+[T] t=144030 -44,200,0>>> Audio Alert <- OBSTACLE(204mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=204mm TTC=65535ms
+[T] t=144120 -35,203,0>>> Audio Alert <- OBSTACLE(205mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=205mm TTC=65535ms
+[T] t=144210 -25,206,0>>> Audio Alert <- OBSTACLE(207mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=207mm TTC=65535ms
+[T] t=144300 -15,207,0>>> Audio Alert <- OBSTACLE(207mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=207mm TTC=65535ms
+[T] t=144390 -3,207,0>>> Audio Alert <- OBSTACLE(207mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=207mm TTC=65535ms
+[T] t=144480 7,206,0>>> Audio Alert <- OBSTACLE(206mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=206mm TTC=65535ms
+[T] t=144560 12,208,0>>> Audio Alert <- OBSTACLE(208mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=208mm TTC=65535ms
+[T] t=144650 15,210,0>>> Audio Alert <- OBSTACLE(210mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=210mm TTC=65535ms
+[T] t=144740 21,208,0>>> Audio Alert <- OBSTACLE(209mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=209mm TTC=65535ms
+[T] t=144830 26,209,0>>> Audio Alert <- OBSTACLE(210mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=210mm TTC=65535ms
+[T] t=144920 33,210,0>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=145010 40,208,0>>> Audio Alert <- OBSTACLE(211mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=211mm TTC=65535ms
+[Radar] frames t=145010ms frames=1620 bytes=48647 isr=12862 overrun=0 dropped=0 footer_bad=0
+[T] t=145100 46,207,0>>> Audio Alert <- OBSTACLE(212mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=212mm TTC=65535ms
+[T] t=145190 52,207,0>>> Audio Alert <- OBSTACLE(213mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=213mm TTC=65535ms
+[T] t=145280 56,207,0>>> Audio Alert <- OBSTACLE(214mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=214mm TTC=65535ms
+[T] t=145370 59,208,0>>> Audio Alert <- OBSTACLE(216mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=216mm TTC=65535ms
+monitor: batch  n=470 last=90 from core 1
+monitor: t=3355915246 ms  samples=470  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=145450 63,207,0>>> Audio Alert <- OBSTACLE(216mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=216mm TTC=65535ms
+[T] t=145540 64,207,0>>> Audio Alert <- OBSTACLE(216mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=216mm TTC=65535ms
+[T] t=145630 67,206,0>>> Audio Alert <- OBSTACLE(216mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=216mm TTC=65535ms
+[T] t=145720 70,206,0>>> Audio Alert <- OBSTACLE(217mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=217mm TTC=65535ms
+[T] t=145810 71,206,0>>> Audio Alert <- OBSTACLE(217mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=217mm TTC=65535ms
+[T] t=145900 72,207,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=145990 74,206,0>>> Audio Alert <- OBSTACLE(218mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=218mm TTC=65535ms
+[T] t=146080 79,205,0>>> Audio Alert <- OBSTACLE(219mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=219mm TTC=65535ms
+[T] t=146170 83,207,0>>> Audio Alert <- OBSTACLE(223mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=223mm TTC=65535ms
+[T] t=146260 85,208,0>>> Audio Alert <- OBSTACLE(224mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=224mm TTC=65535ms
+[T] t=146340 82,212,-8>>> Audio Alert <- OBSTACLE(227mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=227mm TTC=2837ms
+[T] t=146430 78,215,0>>> Audio Alert <- OBSTACLE(228mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=228mm TTC=65535ms
+[T] t=146520 71,219,8>>> Audio Alert <- OBSTACLE(230mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=230mm TTC=65535ms
+[T] t=146610 65,224,0>>> Audio Alert <- OBSTACLE(233mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=233mm TTC=65535ms
+[T] t=146700 62,229,0>>> Audio Alert <- OBSTACLE(237mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=237mm TTC=65535ms
+[T] t=146790 63,234,0>>> Audio Alert <- OBSTACLE(242mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=242mm TTC=65535ms
+[Radar] frames t=146790ms frames=1640 bytes=49247 isr=13021 overrun=0 dropped=0 footer_bad=0
+[T] t=146880 68,237,0>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=65535ms
+monitor: batch  n=475 last=60 from core 1
+monitor: t=3355916796 ms  samples=475  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=146970 71,240,0>>> Audio Alert <- OBSTACLE(250mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=250mm TTC=65535ms
+[T] t=147060 75,241,0>>> Audio Alert <- OBSTACLE(252mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=252mm TTC=65535ms
+[T] t=147150 75,245,0>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=147230 73,249,0>>> Audio Alert <- OBSTACLE(259mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=259mm TTC=65535ms
+[T] t=147320 72,252,0>>> Audio Alert <- OBSTACLE(262mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=262mm TTC=65535ms
+[T] t=147410 76,256,0>>> Audio Alert <- OBSTACLE(267mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=267mm TTC=65535ms
+[T] t=147500 79,259,0>>> Audio Alert <- OBSTACLE(270mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=270mm TTC=65535ms
+[T] t=147590 81,260,0>>> Audio Alert <- OBSTACLE(272mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=272mm TTC=65535ms
+[T] t=147680 79,262,0>>> Audio Alert <- OBSTACLE(273mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=273mm TTC=65535ms
+[T] t=147770 80,263,0>>> Audio Alert <- OBSTACLE(274mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=274mm TTC=65535ms
+[T] t=147860 82,264,0>>> Audio Alert <- OBSTACLE(276mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=276mm TTC=65535ms
+[T] t=147950 83,265,0>>> Audio Alert <- OBSTACLE(277mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=277mm TTC=65535ms
+[T] t=148030 81,266,0>>> Audio Alert <- OBSTACLE(278mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=278mm TTC=65535ms
+[T] t=148120 80,268,0>>> Audio Alert <- OBSTACLE(279mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=279mm TTC=65535ms
+[T] t=148210 78,272,0>>> Audio Alert <- OBSTACLE(282mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=282mm TTC=65535ms
+[T] t=148300 82,272,0>>> Audio Alert <- OBSTACLE(284mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=284mm TTC=65535ms
+[T] t=148390 83,273,0>>> Audio Alert <- OBSTACLE(285mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=285mm TTC=65535ms
+[T] t=148480 82,275,-8>>> Audio Alert <- OBSTACLE(286mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=286mm TTC=3575ms
+monitor: batch  n=480 last=10 from core 1
+monitor: t=3355918346 ms  samples=480  min=0 max=100 avg=50  free slots=4  free blocks=4
+monitor: LED task resumed, state=RUN, pri=12
+[T] t=148570 77,275,0>>> Audio Alert <- OBSTACLE(285mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=285mm TTC=65535ms
+[Radar] frames t=148570ms frames=1660 bytes=49847 isr=13180 overrun=0 dropped=0 footer_bad=0
+[T] t=148660 69,278,8>>> Audio Alert <- OBSTACLE(286mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=286mm TTC=65535ms
+[T] t=148750 63,278,0>>> Audio Alert <- OBSTACLE(285mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=285mm TTC=65535ms
+[T] t=148840 56,278,0>>> Audio Alert <- OBSTACLE(283mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=283mm TTC=65535ms
+[T] t=148930 49,279,0>>> Audio Alert <- OBSTACLE(283mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=283mm TTC=65535ms
+[T] t=149010 40,280,0>>> Audio Alert <- OBSTACLE(282mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=282mm TTC=65535ms
+[T] t=149100 34,280,8>>> Audio Alert <- OBSTACLE(282mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=282mm TTC=65535ms
+[T] t=149190 28,282,0>>> Audio Alert <- OBSTACLE(283mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=283mm TTC=65535ms
+[T] t=149280 19,281,0>>> Audio Alert <- OBSTACLE(281mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=281mm TTC=65535ms
+[T] t=149370 11,280,-8>>> Audio Alert <- OBSTACLE(280mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=280mm TTC=3500ms
+[T] t=149460 3,279,8>>> Audio Alert <- OBSTACLE(279mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=279mm TTC=65535ms
+[T] t=149550 -2,281,0>>> Audio Alert <- OBSTACLE(281mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=281mm TTC=65535ms
+[T] t=149640 -7,286,8>>> Audio Alert <- OBSTACLE(286mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=286mm TTC=65535ms
+[T] t=149730 -8,290,0>>> Audio Alert <- OBSTACLE(290mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=290mm TTC=65535ms
+[T] t=149810 -8,295,0>>> Audio Alert <- OBSTACLE(295mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=295mm TTC=65535ms
+[T] t=149900 -7,300,0>>> Audio Alert <- OBSTACLE(300mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=300mm TTC=65535ms
+[T] t=149990 -12,301,0>>> Audio Alert <- OBSTACLE(301mm) pitch 3498 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=301mm TTC=65535ms
+monitor: batch  n=485 last=40 from core 1
+monitor: t=3355919896 ms  samples=485  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=150080 -12,300,0>>> Audio Alert <- OBSTACLE(300mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=300mm TTC=65535ms
+[T] t=150170 -11,296,0>>> Audio Alert <- OBSTACLE(296mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=296mm TTC=65535ms
+[T] t=150260 -6,291,8>>> Audio Alert <- OBSTACLE(291mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=291mm TTC=65535ms
+[T] t=150350 0,288,0>>> Audio Alert <- OBSTACLE(288mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=288mm TTC=65535ms
+[Radar] frames t=150350ms frames=1680 bytes=50447 isr=13338 overrun=0 dropped=0 footer_bad=0
+[T] t=150440 7,285,0>>> Audio Alert <- OBSTACLE(285mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=285mm TTC=65535ms
+[T] t=150530 8,282,8>>> Audio Alert <- OBSTACLE(282mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=282mm TTC=65535ms
+[T] t=150620 1,276,48>>> Audio Alert <- OBSTACLE(282mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=282mm TTC=65535ms
+[T] t=150700 -3,270,0>>> Audio Alert <- OBSTACLE(270mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=270mm TTC=65535ms
+ -
+[T] t=150790 -11,269,0>>> Audio Alert <- OBSTACLE(269mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=269mm TTC=65535ms
+[T] t=150880 -24,271,0>>> Audio Alert <- OBSTACLE(272mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=272mm TTC=65535ms
+[T] t=150970 -9,271,0>>> Audio Alert <- OBSTACLE(271mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=271mm TTC=65535ms
+[T] t=151060 -2,268,0>>> Audio Alert <- OBSTACLE(268mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=268mm TTC=65535ms
+[T] t=151150 6,265,0>>> Audio Alert <- OBSTACLE(265mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=265mm TTC=65535ms
+[T] t=151240 17,260,0>>> Audio Alert <- OBSTACLE(260mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=260mm TTC=65535ms
+[T] t=151330 28,256,0>>> Audio Alert <- OBSTACLE(257mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=257mm TTC=65535ms
+[T] t=151420 33,255,0>>> Audio Alert <- OBSTACLE(257mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=257mm TTC=65535ms
+[T] t=151510 34,255,0>>> Audio Alert <- OBSTACLE(257mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=257mm TTC=65535ms
+monitor: batch  n=490 last=90 from core 1
+monitor: t=3355921446 ms  samples=490  min=0 max=100 avg=49  free slots=4  free blocks=4
+[T] t=151590 34,257,0>>> Audio Alert <- OBSTACLE(259mm) pitch 3500 Hz
+ ->>> BLE task <- obstacle ACTIVE d=259mm TTC=65535ms
+ -
+[T] t=151680 32,262,0>>> Audio Alert <- OBSTACLE(263mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=263mm TTC=65535ms
+[T] t=151770 33,261,0>>> Audio Alert <- OBSTACLE(263mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=263mm TTC=65535ms
+[T] t=151860 37,258,0>>> Audio Alert <- OBSTACLE(260mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=260mm TTC=65535ms
+[T] t=151950 41,253,0>>> Audio Alert <- OBSTACLE(256mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=256mm TTC=65535ms
+[T] t=152040 47,246,0>>> Audio Alert <- OBSTACLE(250mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=250mm TTC=65535ms
+[T] t=152130 46,244,0>>> Audio Alert <- OBSTACLE(248mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=248mm TTC=65535ms
+[Radar] frames t=152130ms frames=1700 bytes=51047 isr=13497 overrun=0 dropped=0 footer_bad=0
+[T] t=152220 40,245,0>>> Audio Alert <- OBSTACLE(248mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=248mm TTC=65535ms
+[T] t=152310 31,248,0>>> Audio Alert <- OBSTACLE(249mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=249mm TTC=65535ms
+[T] t=152400 22,246,0>>> Audio Alert <- OBSTACLE(246mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=246mm TTC=65535ms
+[T] t=152480 17,247,0>>> Audio Alert <- OBSTACLE(247mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=247mm TTC=65535ms
+[T] t=152570 17,249,-8>>> Audio Alert <- OBSTACLE(249mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=249mm TTC=3112ms
+[T] t=152660 21,257,0>>> Audio Alert <- OBSTACLE(257mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=257mm TTC=65535ms
+[T] t=152750 27,264,0>>> Audio Alert <- OBSTACLE(265mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=265mm TTC=65535ms
+[T] t=152840 37,274,0>>> Audio Alert <- OBSTACLE(276mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=276mm TTC=65535ms
+[T] t=152930 41,279,0>>> Audio Alert <- OBSTACLE(281mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=281mm TTC=65535ms
+[T] t=153020 46,277,0>>> Audio Alert <- OBSTACLE(280mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=280mm TTC=65535ms
+[T] t=153110 48,277,0>>> Audio Alert <- OBSTACLE(281mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=281mm TTC=65535ms
+monitor: batch  n=495 last=60 from core 1
+monitor: t=3355922996 ms  samples=495  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=153200 40,276,0>>> Audio Alert <- OBSTACLE(278mm) pitch 3500 Hz
+ - -
+>>> BLE task <- obstacle ACTIVE d=278mm TTC=65535ms
+---- Closed the serial port COM6 ----

@@ -25,16 +25,20 @@
 #define LD2450_ACK_MARKER_LEN      (4u)
 #define LD2450_TARGET_BLOCK_LEN    (8u)
 
-// Byte offsets inside one 8-byte target block.
+// Byte offsets inside one 8-byte target block (bytes 6 and 7, the
+// resolution, are not used).
 #define LD2450_OFFSET_X            (0u)
 #define LD2450_OFFSET_Y            (2u)
 #define LD2450_OFFSET_SPEED        (4u)
-#define LD2450_OFFSET_RESOLUTION   (6u)
 
 // Sign-magnitude fields: bit 15 set means positive.
 #define LD2450_SIGN_BIT            (0x8000u)
 #define LD2450_MAGNITUDE_MASK      (0x7FFFu)
 #define LD2450_BYTE_SHIFT          (8u)
+
+// Integer square root: first bit tested (2^30) and step between bits.
+#define LD2450_ISQRT_START_BIT     (0x40000000u)
+#define LD2450_ISQRT_BIT_STEP      (2u)
 
 // Largest time difference that still counts as "in the future".
 #define LD2450_HALF_RANGE_MS       (0x7FFFFFFFu)
@@ -57,6 +61,9 @@ static const uint8_t g_ack_footer[LD2450_ACK_MARKER_LEN] =
 };
 
 static uint32_t g_footer_mismatch_count = 0u;
+
+static uint32_t ld2450_isqrt (uint32_t value);
+static uint16_t ld2450_distance_mm (int16_t x_mm, int16_t y_mm);
 
 static uint32_t ld2450_remaining_ms (uint32_t deadline_ms);
 static bool ld2450_wait_for_pattern (const uint8_t * p_pattern, size_t length,
@@ -179,11 +186,7 @@ ld2450_decode_body (const uint8_t * p_body, rte_radar_target_t * p_targets)
                 p_block[LD2450_OFFSET_SPEED],
                 p_block[LD2450_OFFSET_SPEED + 1u]);
 
-            // The cast narrows a 16-bit value built from two bytes.
-            p_out->resolution_mm = (uint16_t) (
-                ((uint32_t) p_block[LD2450_OFFSET_RESOLUTION + 1u]
-                 << LD2450_BYTE_SHIFT) |
-                (uint32_t) p_block[LD2450_OFFSET_RESOLUTION]);
+            p_out->d_mm = ld2450_distance_mm(p_out->x_mm, p_out->y_mm);
 
             // An all-zero block is an empty slot.
             p_out->b_valid = !((0 == p_out->x_mm) && (0 == p_out->y_mm) &&
@@ -192,6 +195,68 @@ ld2450_decode_body (const uint8_t * p_body, rte_radar_target_t * p_targets)
     }
 
     return (b_ok);
+}
+
+/*!
+ * @brief Straight-line distance from the sensor to a target.
+ *
+ * Worked out here, in the protocol layer, so the radar queue message carries
+ * one distance instead of x and y.
+ *
+ * @param[in] x_mm  X position.
+ * @param[in] y_mm  Y position.
+ *
+ * @return Distance in mm, rounded down, at most 46339.
+ */
+static uint16_t
+ld2450_distance_mm (int16_t x_mm, int16_t y_mm)
+{
+    int32_t x = x_mm;
+    int32_t y = y_mm;
+
+    // The products are at most 2^30 each, so they fit in int32_t and are
+    // never negative; the casts to uint32_t only change the type.
+    uint32_t sum_sq = (uint32_t) (x * x) + (uint32_t) (y * y);
+
+    // The root of a value below 2^31 is at most 46339, which fits uint16_t.
+    return ((uint16_t) ld2450_isqrt(sum_sq));
+}
+
+/*!
+ * @brief Integer square root (no math library).
+ *
+ * @param[in] value  Radicand.
+ *
+ * @return Largest r with r * r <= value.
+ */
+static uint32_t
+ld2450_isqrt (uint32_t value)
+{
+    uint32_t remainder = value;
+    uint32_t result = 0u;
+    uint32_t bit = LD2450_ISQRT_START_BIT;
+
+    while (bit > remainder)
+    {
+        bit >>= LD2450_ISQRT_BIT_STEP;
+    }
+
+    while (0u != bit)
+    {
+        if (remainder >= (result + bit))
+        {
+            remainder -= (result + bit);
+            result = (result >> 1u) + bit;
+        }
+        else
+        {
+            result >>= 1u;
+        }
+
+        bit >>= LD2450_ISQRT_BIT_STEP;
+    }
+
+    return (result);
 }
 
 /*!
@@ -214,6 +279,18 @@ void
 ld2450_get_rx_stats (ld2450_rx_stats_t * p_stats)
 {
     ld2450_irq_get_stats(p_stats);
+}
+
+/*!
+ * @brief Restart the receive-path counters.
+ *
+ * Called once the sensor is configured, so the counters describe steady
+ * state. Bytes lost while the system was still starting are not counted.
+ */
+void
+ld2450_reset_rx_stats (void)
+{
+    ld2450_irq_reset_stats();
 }
 
 /*!

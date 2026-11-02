@@ -22,7 +22,8 @@ set(INCLUDE_DIRS
     ${ROOT}/src/rte
     ${ROOT}/src/services/osal
     ${ROOT}/src/app/threat_assessment
-    ${ROOT}/src/app/radar_monitor)
+    ${ROOT}/src/app/radar_monitor
+    ${ROOT}/src/app/audio_alert)
 
 set(LD2450_SOURCES
     ${ROOT}/src/drivers/ld2450/ld2450.c
@@ -59,7 +60,13 @@ target_include_directories(unity PUBLIC ${ROOT}/soup/unity)
 target_compile_definitions(unity PUBLIC UNITY_INCLUDE_CONFIG_H)
 target_include_directories(unity PUBLIC ${ROOT}/tests/harness)
 
+# Brian's alert.c: not our code, compiled with its own flags (like SOUP).
+add_library(brian_alert STATIC ${ROOT}/src/app/audio_alert/alert.c)
+target_include_directories(brian_alert PUBLIC
+    ${ROOT}/config ${ROOT}/src/app/audio_alert ${ROOT}/tests/harness)
+
 set(HARNESS_SOURCES
+    ${ROOT}/src/rte/rte_pack.c
     ${ROOT}/tests/harness/mock_hal.c
     ${ROOT}/tests/harness/mock_rte.c
     ${ROOT}/tests/harness/frame_builder.c)
@@ -77,11 +84,18 @@ add_host_test(test_ld2450_parser
     ${ROOT}/tests/unit/test_ld2450_parser.c ${LD2450_SOURCES})
 add_host_test(test_threat_assessment
     ${ROOT}/tests/unit/test_threat_assessment.c ${APP_SOURCES})
+add_host_test(test_rte_pack
+    ${ROOT}/tests/unit/test_rte_pack.c ${APP_SOURCES})
 add_host_test(test_radar_monitor
     ${ROOT}/tests/unit/test_radar_monitor.c ${APP_SOURCES})
 add_host_test(test_alert_pipeline
     ${ROOT}/tests/integration/test_alert_pipeline.c
     ${LD2450_SOURCES} ${APP_SOURCES})
+add_host_test(test_audio_alert_bridge
+    ${ROOT}/tests/unit/test_audio_alert_bridge.c
+    ${ROOT}/src/app/audio_alert/audio_alert_bridge.c
+    ${ROOT}/tests/harness/mock_buzzer.c)
+target_link_libraries(test_audio_alert_bridge brian_alert)
 add_host_test(fuzz_radar_frames
     ${ROOT}/tests/fuzz/fuzz_radar_frames.c
     ${LD2450_SOURCES} ${APP_SOURCES})

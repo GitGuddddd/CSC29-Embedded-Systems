@@ -7,6 +7,7 @@
  */
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include "radar_monitor.h"
@@ -14,7 +15,13 @@
 #include "rte.h"
 #include "rte_type.h"
 
+#define RADAR_MONITOR_HALF_RANGE_MS    (0x80000000u)
+
 static void radar_monitor_enter_fault (radar_monitor_t * p_monitor);
+static bool radar_monitor_is_settling (const radar_monitor_t * p_monitor,
+                                       uint32_t now_ms);
+static void radar_monitor_apply_corridor (
+    const rte_radar_target_t * p_in, rte_radar_target_t * p_out);
 
 /*!
  * @brief Start in INIT, with no delay pending.
@@ -30,6 +37,8 @@ radar_monitor_init (radar_monitor_t * p_monitor)
     p_monitor->b_listening = false;
     p_monitor->failed_tries = 0u;
     p_monitor->deadline_ms = 0u;
+    p_monitor->b_settling = false;
+    p_monitor->settle_until_ms = 0u;
 }
 
 /*!
@@ -92,6 +101,8 @@ radar_monitor_on_config_result (radar_monitor_t * p_monitor, bool b_ok,
         p_monitor->b_listening = false;
         p_monitor->failed_tries = 0u;
         p_monitor->deadline_ms = now_ms + RADAR_MONITOR_POST_CONFIG_GRACE_MS;
+        p_monitor->b_settling = true;
+        p_monitor->settle_until_ms = now_ms + RADAR_MONITOR_SETTLE_MS;
     }
     else
     {
@@ -128,6 +139,8 @@ void
 radar_monitor_on_frame (radar_monitor_t * p_monitor,
                         const rte_radar_target_t * p_targets, uint32_t now_ms)
 {
+    rte_radar_target_t gated[RTE_RADAR_NUM_TARGETS];
+
     p_monitor->deadline_ms = now_ms + RADAR_MONITOR_FRAME_TIMEOUT_MS;
 
     if (p_monitor->b_listening)
@@ -143,7 +156,58 @@ radar_monitor_on_frame (radar_monitor_t * p_monitor,
         p_monitor->b_fault_reported = false;
     }
 
-    rte_write_radar_frame(p_targets, now_ms);
+    radar_monitor_apply_corridor(p_targets, gated);
+    rte_write_radar_frame(gated, now_ms);
+}
+
+/*!
+ * @brief Tell whether the sensor is still settling after its configuration.
+ *
+ * @param[in] p_monitor  Supervision state.
+ * @param[in] now_ms     Current time.
+ *
+ * @return true while now is before the end of the settle time.
+ */
+static bool
+radar_monitor_is_settling (const radar_monitor_t * p_monitor, uint32_t now_ms)
+{
+    // Unsigned subtraction wraps correctly when the 32-bit clock rolls over.
+    uint32_t left_ms = p_monitor->settle_until_ms - now_ms;
+
+    return (p_monitor->b_settling && (left_ms > 0u) &&
+            (left_ms < RADAR_MONITOR_HALF_RANGE_MS));
+}
+
+/*!
+ * @brief Corridor gate: empty every slot that is outside the walking path.
+ *
+ * Decided on this frame alone, so it adds no delay. A slot with
+ * |x| <= RADAR_MONITOR_CORRIDOR_HALF_MM is copied unchanged.
+ *
+ * @param[in]  p_in   The three decoded target slots.
+ * @param[out] p_out  The three slots to send.
+ */
+static void
+radar_monitor_apply_corridor (const rte_radar_target_t * p_in,
+                              rte_radar_target_t * p_out)
+{
+    for (size_t idx = 0u; idx < RTE_RADAR_NUM_TARGETS; idx++)
+    {
+        int32_t x_mm = p_in[idx].x_mm;
+
+        p_out[idx] = p_in[idx];
+
+        if (p_in[idx].b_valid &&
+            ((x_mm > RADAR_MONITOR_CORRIDOR_HALF_MM) ||
+             (x_mm < -RADAR_MONITOR_CORRIDOR_HALF_MM)))
+        {
+            p_out[idx].b_valid = false;
+            p_out[idx].x_mm = 0;
+            p_out[idx].y_mm = 0;
+            p_out[idx].d_mm = 0u;
+            p_out[idx].speed_cms = 0;
+        }
+    }
 }
 
 /*!
@@ -151,6 +215,8 @@ radar_monitor_on_frame (radar_monitor_t * p_monitor,
  *
  * In RUN the first timeout reports the fault and keeps listening for the
  * retry time. If that ends too, the task configures the sensor again.
+ * Inside the settle time after a configuration a timeout only clears the
+ * tone (see RADAR_MONITOR_SETTLE_MS).
  *
  * @param[in,out] p_monitor  Supervision state.
  * @param[in]     now_ms     Time of the timeout.
@@ -158,7 +224,16 @@ radar_monitor_on_frame (radar_monitor_t * p_monitor,
 void
 radar_monitor_on_timeout (radar_monitor_t * p_monitor, uint32_t now_ms)
 {
-    if (RADAR_MONITOR_STATE_RUN == p_monitor->state)
+    if ((RADAR_MONITOR_STATE_RUN == p_monitor->state) &&
+        radar_monitor_is_settling(p_monitor, now_ms))
+    {
+        // The sensor is quiet right after its configuration. Stop the tone
+        // (Threat goes to CLEAR) but raise no fault; wait for the end of the
+        // settle time before treating silence as a fault.
+        rte_write_radar_fault();
+        p_monitor->deadline_ms = p_monitor->settle_until_ms;
+    }
+    else if (RADAR_MONITOR_STATE_RUN == p_monitor->state)
     {
         radar_monitor_enter_fault(p_monitor);
         p_monitor->b_listening = true;

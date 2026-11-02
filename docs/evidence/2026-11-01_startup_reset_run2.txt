@@ -1,0 +1,293 @@
+---- Opened the serial port COM6 ----
+[T] t=2930 -500,3271,0 - -
+[T] t=3020 -498,3274,0 - -
+[T] t=3100 -496,3277,0 - -
+[T] t=3190 -495,3280,0 - -
+[Radar] TIMEOUT t=3700ms frames=10 bytes=301 isr=81 overrun=0 dropped=0 footer_bad=0
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355773876 ms  samples=4  min=0 max=30 avg=15  free slots=0  free blocks=0
+[T] t=4080 - - -
+[T] t=4170 - - -
+[T] t=4260 - - -
+[T] t=4340 - - -
+[T] t=4430 - - -
+[T] t=4520 - - -
+[T] t=4610 - - -
+[T] t=4700 - - -
+[T] t=4790 - - -
+[T] t=4880 - - -
+[Radar] frames t=4880ms frames=20 bytes=601 isr=159 overrun=0 dropped=0 footer_bad=0
+[Radar] BOOT start t=0ms bytes=1 dropped=0 | config OK t=2240ms bytes=587 dropped=66
+[T] t=4970 - - -
+[T] t=5060 - - -
+[T] t=5150 - - -
+[T] t=5240 -410,3382,0 - -
+[T] t=5320 -409,3382,0 - -
+[T] t=5410 -411,3381,0 - -
+[T] t=5500 -412,3380,0 - -
+[T] t=5590 -412,3380,0 - -
+[T] t=5680 -412,3380,0 - -
+[T] t=5770 -411,3380,0 - -
+[T] t=5860 -409,3380,0 - -
+[T] t=5950 -408,3381,0 - -
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355775886 ms  samples=4  min=0 max=30 avg=15  free slots=0  free blocks=0
+[T] t=6040 -407,3381,0 - -
+[T] t=6130 -407,3381,0 - -
+[T] t=6210 -407,3381,0 - -
+[T] t=6300 -407,3382,0 - -
+[T] t=6390 -406,3382,0 - -
+[T] t=6480 -405,3382,0 - -
+monitor: batch  n=5 last=40 from core 1
+monitor: t=3355776346 ms  samples=8  min=0 max=70 avg=35  free slots=3  free blocks=4
+[T] t=6570 -407,3382,8 - -
+[T] t=6660 -406,3382,0 - -
+[Radar] frames t=6660ms frames=40 bytes=1201 isr=314 overrun=0 dropped=0 footer_bad=0
+[Radar] BOOT start t=0ms bytes=1 dropped=0 | config OK t=2240ms bytes=587 dropped=66
+[T] t=6750 -402,3384,-8 - -
+monitor: batch  n=10 last=90 from core 1
+monitor: t=3355776656 ms  samples=10  min=0 max=90 avg=45  free slots=4  free blocks=4
+[T] t=6840 -399,3386,0 - -
+[T] t=6930 -397,3386,0 - -
+[T] t=7020 -396,3385,0 - -
+[T] t=7100 -394,3385,0 - -
+[T] t=7190 -395,3384,0 - -
+[T] t=7280 -396,3389,0 - -
+[T] t=7370 -398,3395,0 - -
+[T] t=7460 -392,3402,-88 - -
+[T] t=7550 -385,3407,0 - -
+[T] t=7640 -378,3411,0 - -
+[T] t=7730 -376,3411,0 - -
+[T] t=7820 -376,3411,0 - -
+[T] t=7900 -374,3410,0 - -
+[T] t=7990 -375,3408,0 - -
+[T] t=8080 -379,3406,0 - -
+[T] t=8170 -381,3404,0 - -
+[T] t=8260 -383,3403,0 - -
+monitor: batch  n=15 last=60 from core 1
+monitor: t=3355778206 ms  samples=15  min=0 max=100 avg=56  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+[T] t=8350 -386,3401,0 - -
+[T] t=8440 -386,3400,0 - -
+[Radar] frames t=8440ms frames=60 bytes=1801 isr=466 overrun=0 dropped=0 footer_bad=0
+[Radar] BOOT start t=0ms bytes=1 dropped=0 | config OK t=2240ms bytes=587 dropped=66
+[T] t=8530 -387,3399,0 - -
+[T] t=8620 -389,3397,0 - -
+[T] t=8710 -395,3395,0 - -
+[T] t=8790 -402,3393,0 - -
+[T] t=8880 -406,3392,0 - -
+[T] t=8970 -408,3390,0 - -
+[T] t=9060 -413,3391,-8 - -
+[T] t=9150 -416,3391,0 - -
+[T] t=9240 -416,3391,0 - -
+[T] t=9330 -411,3391,-8 - -
+[T] t=9420 -410,3391,0 - -
+[T] t=9510 -411,3388,0 - -
+[T] t=9600 -409,3388,8 - -
+[T] t=9680 -410,3388,0 - -
+[T] t=9770 -407,3388,0 - -
+[T] t=9860 -407,3388,0 - -
+monitor: batch  n=20 last=10 from core 1
+monitor: t=3355779756 ms  samples=20  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=9950 -406,3389,0 - -
+[T] t=10040 -406,3388,0 - -
+[T] t=10130 -406,3387,0 - -
+[T] t=10220 -404,3385,0 - -
+[Radar] frames t=10220ms frames=80 bytes=2401 isr=626 overrun=0 dropped=0 footer_bad=0
+[T] t=10310 -401,3383,0 - -
+[T] t=10400 -399,3382,0 - -
+[T] t=10490 -399,3380,0 - -
+[T] t=10570 -398,3379,0 - -
+[T] t=10660 -398,3377,0 - -
+[T] t=10750 -394,3378,-8 - -
+[T] t=10840 -391,3378,0 - -
+[T] t=10930 -389,3378,0 - -
+[T] t=11020 -385,3380,8 - -
+[T] t=11110 -381,3381,0 - -
+[T] t=11200 -381,3382,0 - -
+[T] t=11290 -381,3381,0 - -
+[T] t=11380 -381,3381,0 - -
+monitor: batch  n=25 last=40 from core 1
+monitor: t=3355781306 ms  samples=25  min=0 max=100 avg=44  free slots=4  free blocks=4
+[T] t=11460 -381,3380,0 - -
+[T] t=11550 -380,3379,0 - -
+[T] t=11640 -379,3379,0 - -
+[T] t=11730 -377,3378,0 - -
+[T] t=11820 -374,3377,0 - -
+[T] t=11910 -373,3376,0 - -
+[T] t=12000 -371,3376,0 - -
+[Radar] frames t=12000ms frames=100 bytes=3001 isr=785 overrun=0 dropped=0 footer_bad=0
+[T] t=12090 -371,3378,-8 - -
+[T] t=12180 -370,3379,0 - -
+[T] t=12270 -370,3380,0 - -
+[T] t=12350 -373,3380,8 - -
+[T] t=12440 -374,3380,0 - -
+[T] t=12530 -375,3379,0 - -
+[T] t=12620 -376,3378,0 - -
+[T] t=12710 -374,3378,0 - -
+[T] t=12800 -371,3378,0 - -
+[T] t=12890 -373,3377,0 - -
+[T] t=12980 -372,3376,0 - -
+monitor: batch  n=30 last=90 from core 1
+monitor: t=3355782856 ms  samples=30  min=0 max=100 avg=48  free slots=4  free blocks=4
+[T] t=13070 -366,3381,-8 - -
+[T] t=13160 -358,3388,-8 - -
+[T] t=13240 -350,3394,-8 - -
+[T] t=13330 -342,3400,-8 - -
+[T] t=13420 -335,3401,0 - -
+[T] t=13510 -332,3401,-8 - -
+[T] t=13600 -328,3400,0 - -
+---- Closed serial port COM6 due to disconnection from the machine ----
+---- Reopened serial port COM6 ----
+[T] t=760 -304,3388,-8 - -
+[T] t=850 -304,3387,0 - -
+[Radar] TIMEOUT t=1360ms frames=10 bytes=301 isr=74 overrun=0 dropped=0 footer_bad=0
+[T] t=1740 - - -
+[T] t=1830 - - -
+[T] t=1920 - - -
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355771866 ms  samples=4  min=0 max=30 avg=15  free slots=1  free blocks=1
+[T] t=2010 - - -
+[T] t=2090 - - -
+[T] t=2180 - - -
+[T] t=2270 - - -
+[T] t=2360 - - -
+[T] t=2450 - - -
+[T] t=2540 - - -
+[Radar] frames t=2540ms frames=20 bytes=601 isr=149 overrun=0 dropped=0 footer_bad=0
+[Radar] BOOT start t=0ms bytes=0 dropped=0 | config OK t=0ms bytes=46 dropped=0
+[T] t=2630 - - -
+[T] t=2720 - - -
+[T] t=2810 - - -
+[T] t=2900 - - -
+[T] t=2980 - - -
+[T] t=3070 - - -
+[T] t=3160 - - -
+[T] t=3250 - - -
+[T] t=3340 - - -
+[T] t=3430 - - -
+[T] t=3520 - - -
+[T] t=3610 - - -
+[T] t=3700 - - -
+[T] t=3780 - - -
+[T] t=3870 - - -
+[T] t=3960 - - -
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355773876 ms  samples=4  min=0 max=30 avg=15  free slots=0  free blocks=0
+[T] t=4050 - - -
+[T] t=4140 - - -
+[T] t=4230 - - -
+[T] t=4320 - - -
+[Radar] frames t=4320ms frames=40 bytes=1201 isr=308 overrun=0 dropped=0 footer_bad=0
+[Radar] BOOT start t=0ms bytes=0 dropped=0 | config OK t=0ms bytes=46 dropped=0
+[T] t=4410 - - -
+[T] t=4500 - - -
+[T] t=4590 - - -
+[T] t=4670 -133,3437,0 - -
+[T] t=4760 -165,3428,0 - -
+[T] t=4850 -198,3417,0 - -
+[T] t=4940 -213,3413,0 - -
+[T] t=5030 -226,3408,0 - -
+[T] t=5120 -231,3407,8 - -
+[T] t=5210 -236,3405,0 - -
+[T] t=5300 -242,3405,0 - -
+[T] t=5390 -246,3406,0 - -
+[T] t=5480 -253,3405,8 - -
+[T] t=5560 -257,3404,0 - -
+[T] t=5650 -262,3403,0 - -
+[T] t=5740 -267,3402,0 - -
+[T] t=5830 -269,3401,8 - -
+[T] t=5920 -272,3402,0 - -
+[T] t=6010 -274,3403,0 - -
+monitor: alarm -- no batch for 2000 ms
+monitor: t=3355775886 ms  samples=4  min=0 max=30 avg=15  free slots=0  free blocks=0
+[T] t=6100 -278,3402,0 - -
+[Radar] frames t=6100ms frames=60 bytes=1801 isr=466 overrun=0 dropped=0 footer_bad=0
+[Radar] BOOT start t=0ms bytes=0 dropped=0 | config OK t=0ms bytes=46 dropped=0
+[T] t=6190 -281,3402,0 - -
+[T] t=6280 -284,3401,0 - -
+[T] t=6370 -284,3401,0 - -
+[T] t=6450 -285,3402,0 - -
+monitor: batch  n=5 last=40 from core 1
+monitor: t=3355776346 ms  samples=8  min=0 max=70 avg=35  free slots=3  free blocks=4
+[T] t=6540 -287,3403,-8 - -
+[T] t=6630 -289,3403,0 - -
+[T] t=6720 -292,3403,0 - -
+monitor: batch  n=10 last=90 from core 1
+monitor: t=3355776656 ms  samples=10  min=0 max=90 avg=45  free slots=4  free blocks=4
+[T] t=6810 -295,3402,0 - -
+[T] t=6900 -296,3402,0 - -
+[T] t=6990 -294,3404,-8 - -
+[T] t=7080 -293,3403,0 - -
+[T] t=7170 -297,3402,0 - -
+[T] t=7260 -300,3401,0 - -
+[T] t=7340 -305,3401,8 - -
+[T] t=7430 -313,3400,0 - -
+[T] t=7520 -323,3400,0 - -
+[T] t=7610 -328,3398,0 - -
+[T] t=7700 -330,3399,-16 - -
+[T] t=7790 -327,3398,0 - -
+[T] t=7880 -324,3397,0 - -
+[Radar] frames t=7880ms frames=80 bytes=2401 isr=618 overrun=0 dropped=0 footer_bad=0
+[T] t=7970 -323,3397,0 - -
+[T] t=8060 -325,3394,0 - -
+[T] t=8150 -330,3392,0 - -
+[T] t=8230 -332,3394,-8 - -
+[T] t=8320 -334,3396,0 - -
+monitor: batch  n=15 last=60 from core 1
+monitor: t=3355778206 ms  samples=15  min=0 max=100 avg=56  free slots=4  free blocks=4
+monitor: LED task paused, state=WAIT+SUSPEND, pri=13
+[T] t=8410 -336,3398,0 - -
+[T] t=8500 -334,3398,-8 - -
+[T] t=8590 -335,3397,0 - -
+[T] t=8680 -343,3394,8 - -
+[T] t=8770 -351,3392,0 - -
+[T] t=8860 -351,3389,0 - -
+[T] t=8950 -350,3387,0 - -
+[T] t=9040 -349,3386,0 - -
+[T] t=9120 -344,3385,8 - -
+[T] t=9210 -339,3390,-88 - -
+[T] t=9300 -335,3393,0 - -
+[T] t=9390 -337,3396,-8 - -
+[T] t=9480 -342,3396,0 - -
+[T] t=9570 -347,3394,8 - -
+[T] t=9660 -351,3392,0 - -
+[Radar] frames t=9660ms frames=100 bytes=3001 isr=778 overrun=0 dropped=0 footer_bad=0
+[T] t=9750 -352,3393,-8 - -
+[T] t=9840 -352,3393,0 - -
+monitor: batch  n=20 last=10 from core 1
+monitor: t=3355779756 ms  samples=20  min=0 max=100 avg=50  free slots=4  free blocks=4
+[T] t=9920 -350,3397,0 - -
+[T] t=10010 -350,3400,0 - -
+[T] t=10100 -346,3404,8 - -
+[T] t=10190 -340,3409,8 - -
+[T] t=10280 -339,3411,0 - -
+[T] t=10370 -340,3410,0 - -
+[T] t=10460 -342,3409,0 - -
+[T] t=10550 -341,3405,0 - -
+[T] t=10640 -340,3404,-72 - -
+[T] t=10730 -341,3403,0 - -
+[T] t=10810 -338,3401,0 - -
+[T] t=10900 -331,3400,0 - -
+[T] t=10990 -321,3400,-8 - -
+[T] t=11080 -306,3402,0 - -
+[T] t=11170 -293,3408,-56 - -
+[T] t=11260 -274,3419,-8 - -
+[T] t=11350 -217,3455,-8 - -
+[T] t=11440 -177,3482,0 - -
+[Radar] frames t=11440ms frames=120 bytes=3601 isr=937 overrun=0 dropped=0 footer_bad=0
+monitor: batch  n=25 last=40 from core 1
+monitor: t=3355781306 ms  samples=25  min=0 max=100 avg=44  free slots=4  free blocks=4
+[T] t=11530 -179,3482,0 - -
+[T] t=11620 -184,3479,0 - -
+[T] t=11700 -186,3477,0 - -
+[T] t=11790 -194,3472,0 - -
+[T] t=11880 -213,3466,-72 - -
+[T] t=11970 -196,3491,-72 - -
+[T] t=12060 -183,3505,-8 - -
+[T] t=12150 -168,3517,0 - -
+[T] t=12240 -147,3540,-96 - -
+[T] t=12330 -149,3541,0 - -
+[T] t=12420 -154,3538,0 - -
+[T] t=12510 -161,3532,0 - -
+---- Closed the serial port COM6 ----

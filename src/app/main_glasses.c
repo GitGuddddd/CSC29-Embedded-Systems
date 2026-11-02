@@ -5,15 +5,20 @@
  * @par
  * COPYRIGHT NOTICE: (c) 2026 Group 29. All rights reserved.
  *
- * WARNING: The two stub tasks only print what the Audio Alert and BLE tasks
- * would receive. The owners of those modules replace them.
+ * WARNING: Both tasks here are stand-ins. The audio task is a BRING-UP bridge to
+ * Brian's alert.c (he owns the real Audio Alert task and replaces it). The BLE
+ * stub only prints what the BLE task would receive; its owner replaces it.
  */
 
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "alert.h"
+#include "audio_alert_bridge.h"
+#include "board_glasses.h"
 #include "gr_print.h"
+#include "hal_time.h"
 #include "main_glasses.h"
 #include "osal.h"
 #include "rte.h"
@@ -22,6 +27,9 @@
 #include "threat_assessment.h"
 
 #define MAIN_GLASSES_STUB_STACK_WORDS    (512u)
+
+// alert_update() must run regularly (Brian's alert.c is a polled module).
+#define MAIN_GLASSES_ALERT_TICK_MS       (10u)
 
 static void main_glasses_stub_audio_task (void * p_arg);
 static void main_glasses_stub_ble_task (void * p_arg);
@@ -59,7 +67,11 @@ main_glasses_start (void)
 }
 
 /*!
- * @brief BRING-UP ONLY: print what the Audio Alert task would receive.
+ * @brief BRING-UP ONLY: Audio Alert task made of Brian's alert.c.
+ *
+ * Reads the radar messages, passes them to alert.c and runs alert_update()
+ * every MAIN_GLASSES_ALERT_TICK_MS. Still prints each message so the serial
+ * captures read the same. Brian replaces this task with his own.
  *
  * @param[in] p_arg  Unused.
  */
@@ -71,19 +83,19 @@ main_glasses_stub_audio_task (void * p_arg)
     // The void cast only silences the unused-parameter warning.
     (void) p_arg;
 
+    alert_init(BOARD_BUZZER_PIN);
+
     for (;;)
     {
-        if (rte_read_audio_msg(&msg, RTE_WAIT_FOREVER))
+        if (rte_read_audio_msg(&msg, MAIN_GLASSES_ALERT_TICK_MS))
         {
             uint32_t d_mm = msg.d_mm;
-            uint32_t pitch_hz = threat_assessment_pitch_hz(d_mm);
 
             switch (msg.type)
             {
                 case RTE_AUDIO_OBSTACLE:
-                    gr_printf(">>> Audio Alert <- OBSTACLE(%" PRIu32
-                              "mm) pitch %" PRIu32 " Hz\n",
-                              d_mm, pitch_hz);
+                    gr_printf(">>> Audio Alert <- OBSTACLE(%" PRIu32 "mm)\n",
+                              d_mm);
                     break;
 
                 case RTE_AUDIO_OBSTACLE_CLEAR:
@@ -101,7 +113,11 @@ main_glasses_stub_audio_task (void * p_arg)
                 default:
                     break;
             }
+
+            audio_alert_bridge_apply(&msg);
         }
+
+        alert_update(hal_time_now_ms());
     }
 }
 

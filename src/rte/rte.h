@@ -13,6 +13,10 @@
  *   UART0 RX interrupt -> stream buffer -> Glasses_Radar (radar_monitor)
  *     -> radar queue -> Glasses_Threat (threat_assessment)
  *     -> audio queue (OBSTACLE, CLEAR, RADAR_FAULT, RADAR_OK) and BLE queue
+ *
+ * The Glasses BLE task calls rte_write_grip_state() with HELD or RELEASED
+ * from each cane packet, and with UNKNOWN when no cane packet has arrived
+ * for 500 ms. It joins the radar queue so Glasses_Threat blocks in one place.
  */
 
 #ifndef RTE_H
@@ -29,6 +33,7 @@ bool rte_start (void);
 void rte_write_radar_frame (const rte_radar_target_t * p_targets,
                             uint32_t time_ms);
 void rte_write_radar_fault (void);
+void rte_write_grip_state (rte_grip_state_t grip);
 void rte_write_audio_msg (rte_audio_msg_type_t type, uint16_t d_mm);
 void rte_write_ble_obstacle (bool b_active, uint16_t d_mm, uint16_t ttc_ms);
 

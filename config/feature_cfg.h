@@ -24,6 +24,10 @@
 // about 11 lines per second.
 #define FEATURE_DEBUG_LOG_TARGETS           (0)
 
+// 1 = Brian's alert.c plays the obstacle beep (radar bring-up). Brian owns the
+// final value: his file defaults to 0 when this is not defined.
+#define ENABLE_OBSTACLE_BEEP                (1)
+
 // 1 = use scripted data instead of the real sensor (not implemented yet).
 #define FEATURE_SIMULATION_MODE             (0)
 

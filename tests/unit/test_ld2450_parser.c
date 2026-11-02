@@ -41,6 +41,33 @@ test_decode_signed_positive_negative_zero (void)
 }
 
 static void
+test_decode_body_distance (void)
+{
+    uint8_t frame[FRAME_BUILDER_FRAME_LEN];
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+
+    frame_builder_build_one(frame, 3000, 4000, 0);
+    TEST_ASSERT_TRUE(ld2450_decode_body(&frame[4], targets));
+    TEST_ASSERT_EQUAL_UINT16(5000u, targets[0].d_mm);
+
+    frame_builder_build_one(frame, -3000, -4000, 0);
+    TEST_ASSERT_TRUE(ld2450_decode_body(&frame[4], targets));
+    TEST_ASSERT_EQUAL_UINT16(5000u, targets[0].d_mm);
+
+    frame_builder_build_one(frame, 0, 526, 0);
+    TEST_ASSERT_TRUE(ld2450_decode_body(&frame[4], targets));
+    TEST_ASSERT_EQUAL_UINT16(526u, targets[0].d_mm);
+
+    // Largest possible reading from a corrupt frame with a valid footer.
+    frame_builder_build_one(frame, 32767, 32767, 0);
+    TEST_ASSERT_TRUE(ld2450_decode_body(&frame[4], targets));
+    TEST_ASSERT_EQUAL_UINT16(46339u, targets[0].d_mm);
+
+    // Empty slots have distance 0.
+    TEST_ASSERT_EQUAL_UINT16(0u, targets[1].d_mm);
+}
+
+static void
 test_decode_body_valid_and_empty_slots (void)
 {
     uint8_t frame[FRAME_BUILDER_FRAME_LEN];
@@ -53,7 +80,7 @@ test_decode_body_valid_and_empty_slots (void)
     TEST_ASSERT_EQUAL_INT16(-120, targets[0].x_mm);
     TEST_ASSERT_EQUAL_INT16(1500, targets[0].y_mm);
     TEST_ASSERT_EQUAL_INT16(-16, targets[0].speed_cms);
-    TEST_ASSERT_EQUAL_UINT16(360, targets[0].resolution_mm);
+    TEST_ASSERT_EQUAL_UINT16(1504, targets[0].d_mm);
     TEST_ASSERT_FALSE(targets[1].b_valid);
     TEST_ASSERT_FALSE(targets[2].b_valid);
 }
@@ -194,6 +221,7 @@ main (void)
     UNITY_BEGIN();
     RUN_TEST(test_decode_signed_positive_negative_zero);
     RUN_TEST(test_decode_body_valid_and_empty_slots);
+    RUN_TEST(test_decode_body_distance);
     RUN_TEST(test_decode_body_rejects_bad_footer_and_keeps_output);
     RUN_TEST(test_receive_frame_ok);
     RUN_TEST(test_receive_frame_resyncs_after_garbage_and_partial_header);

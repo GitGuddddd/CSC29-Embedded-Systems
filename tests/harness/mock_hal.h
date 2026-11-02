@@ -35,7 +35,9 @@ size_t mock_ble_count (void);
 rte_ble_obstacle_t mock_ble_get (size_t index);
 size_t mock_radar_frame_count (void);
 size_t mock_radar_fault_count (void);
-rte_radar_msg_t mock_radar_get (size_t index);
+size_t mock_radar_grip_count (void);
+rte_radar_data_t mock_radar_get (size_t index);
+rte_radar_msg_t mock_radar_get_packed (size_t index);
 
 #endif /* MOCK_HAL_H */
 

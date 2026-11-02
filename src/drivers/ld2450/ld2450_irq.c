@@ -121,6 +121,22 @@ ld2450_irq_get_stats (ld2450_rx_stats_t * p_stats)
 }
 
 /*!
+ * @brief Set every counter to zero (called after the sensor is configured).
+ *
+ * NOTE: Called from a task. The interrupt only adds to the counters, so a
+ * single 32-bit store of zero cannot be torn.
+ */
+void
+ld2450_irq_reset_stats (void)
+{
+    g_overflow_count = 0u;
+    g_overrun_count = 0u;
+    g_dropped_bytes = 0u;
+    g_byte_count = 0u;
+    g_isr_count = 0u;
+}
+
+/*!
  * @brief UART receive interrupt: copy the FIFO into the stream buffer.
  *
  * WARNING: Runs in interrupt context. Call only interrupt-safe adapter

@@ -13,6 +13,7 @@
 
 #include "mock_hal.h"
 #include "radar_monitor.h"
+#include "radar_monitor_cfg.h"
 #include "rte_type.h"
 
 static radar_monitor_t g_monitor;
@@ -60,9 +61,9 @@ static void
 test_valid_frame_restarts_500ms_timer_and_forwards_frame (void)
 {
     radar_monitor_on_config_result(&g_monitor, true, 0u);
-    feed_good_frame(1200u);
+    feed_good_frame(3600u);
 
-    TEST_ASSERT_EQUAL_UINT32(1700u, radar_monitor_get_deadline_ms(&g_monitor));
+    TEST_ASSERT_EQUAL_UINT32(4100u, radar_monitor_get_deadline_ms(&g_monitor));
     TEST_ASSERT_EQUAL_size_t(1u, mock_radar_frame_count());
     TEST_ASSERT_EQUAL_size_t(0u, mock_audio_count());
 }
@@ -93,8 +94,8 @@ static void
 test_fault_is_reported_once_while_retries_keep_failing (void)
 {
     radar_monitor_on_config_result(&g_monitor, true, 0u);
-    radar_monitor_on_timeout(&g_monitor, 500u);
-    radar_monitor_on_timeout(&g_monitor, 2500u);
+    radar_monitor_on_timeout(&g_monitor, 3500u);
+    radar_monitor_on_timeout(&g_monitor, 5500u);
 
     for (uint32_t tries = 0u; tries < 5u; tries++)
     {
@@ -110,8 +111,8 @@ static void
 test_timeout_in_run_reports_fault_then_ok_when_frames_resume (void)
 {
     radar_monitor_on_config_result(&g_monitor, true, 0u);
-    feed_good_frame(100u);
-    radar_monitor_on_timeout(&g_monitor, 600u);
+    feed_good_frame(3600u);
+    radar_monitor_on_timeout(&g_monitor, 4100u);
 
     TEST_ASSERT_EQUAL(RTE_AUDIO_RADAR_FAULT, mock_audio_get(0u).type);
     TEST_ASSERT_EQUAL_size_t(1u, mock_radar_fault_count());
@@ -119,37 +120,37 @@ test_timeout_in_run_reports_fault_then_ok_when_frames_resume (void)
     // The monitor keeps listening for 2 s before it configures again.
     TEST_ASSERT_EQUAL(RADAR_MONITOR_ACTION_RECEIVE,
                       radar_monitor_get_action(&g_monitor));
-    TEST_ASSERT_EQUAL_UINT32(2600u, radar_monitor_get_deadline_ms(&g_monitor));
+    TEST_ASSERT_EQUAL_UINT32(6100u, radar_monitor_get_deadline_ms(&g_monitor));
 
     // The sensor resumes by itself: OK once, no new config.
     TEST_ASSERT_EQUAL_size_t(1u, mock_audio_count());
-    feed_good_frame(900u);
-    feed_good_frame(1040u);
+    feed_good_frame(4900u);
+    feed_good_frame(5040u);
     TEST_ASSERT_EQUAL_size_t(2u, mock_audio_count());
     TEST_ASSERT_EQUAL(RTE_AUDIO_RADAR_OK, mock_audio_get(1u).type);
     TEST_ASSERT_EQUAL(RADAR_MONITOR_ACTION_RECEIVE,
                       radar_monitor_get_action(&g_monitor));
-    TEST_ASSERT_EQUAL_UINT32(1540u, radar_monitor_get_deadline_ms(&g_monitor));
+    TEST_ASSERT_EQUAL_UINT32(5540u, radar_monitor_get_deadline_ms(&g_monitor));
 }
 
 static void
 test_silent_sensor_is_configured_again_after_listening (void)
 {
     radar_monitor_on_config_result(&g_monitor, true, 0u);
-    feed_good_frame(100u);
-    radar_monitor_on_timeout(&g_monitor, 600u);
-    radar_monitor_on_timeout(&g_monitor, 2600u);
+    feed_good_frame(3600u);
+    radar_monitor_on_timeout(&g_monitor, 4100u);
+    radar_monitor_on_timeout(&g_monitor, 6100u);
 
     TEST_ASSERT_EQUAL(RADAR_MONITOR_ACTION_CONFIGURE,
                       radar_monitor_get_action(&g_monitor));
 
-    radar_monitor_on_config_result(&g_monitor, true, 2700u);
+    radar_monitor_on_config_result(&g_monitor, true, 6200u);
     TEST_ASSERT_EQUAL(RADAR_MONITOR_ACTION_RECEIVE,
                       radar_monitor_get_action(&g_monitor));
 
     // Still one FAULT, and the OK comes with the first valid frame.
     TEST_ASSERT_EQUAL_size_t(1u, mock_audio_count());
-    feed_good_frame(3000u);
+    feed_good_frame(6500u);
     TEST_ASSERT_EQUAL_size_t(2u, mock_audio_count());
     TEST_ASSERT_EQUAL(RTE_AUDIO_RADAR_OK, mock_audio_get(1u).type);
 }
@@ -161,6 +162,109 @@ test_timeout_outside_run_is_ignored (void)
 
     TEST_ASSERT_EQUAL_size_t(0u, mock_audio_count());
     TEST_ASSERT_EQUAL_size_t(0u, mock_radar_fault_count());
+}
+
+static rte_radar_target_t
+make_side_target (int16_t x_mm)
+{
+    rte_radar_target_t target = { true, x_mm, 1500, 1500u, -16 };
+
+    return (target);
+}
+
+static void
+test_corridor_gate_empties_targets_outside_the_path (void)
+{
+    rte_radar_target_t empty = { false, 0, 0, 0, 0 };
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    rte_radar_data_t sent;
+
+    targets[0] = make_side_target(RADAR_MONITOR_CORRIDOR_HALF_MM);
+    targets[1] = make_side_target(RADAR_MONITOR_CORRIDOR_HALF_MM + 1);
+    targets[2] = make_side_target(-(RADAR_MONITOR_CORRIDOR_HALF_MM + 1));
+
+    radar_monitor_on_config_result(&g_monitor, true, 0u);
+    radar_monitor_on_frame(&g_monitor, targets, 100u);
+    sent = mock_radar_get(0u);
+
+    // On the edge is kept (the message has distance and speed only).
+    TEST_ASSERT_TRUE(sent.targets[0].b_valid);
+    TEST_ASSERT_EQUAL_UINT16(1500u, sent.targets[0].d_mm);
+    TEST_ASSERT_EQUAL_INT16(-16, sent.targets[0].speed_cms);
+    // One millimetre beyond the edge, on either side, is dropped.
+    TEST_ASSERT_FALSE(sent.targets[1].b_valid);
+    TEST_ASSERT_FALSE(sent.targets[2].b_valid);
+    TEST_ASSERT_EQUAL_UINT16(empty.d_mm, sent.targets[2].d_mm);
+}
+
+static void
+test_corridor_gate_keeps_the_frame_and_the_timer (void)
+{
+    rte_radar_target_t empty = { false, 0, 0, 0, 0 };
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+
+    targets[0] = make_side_target(2000);
+    targets[1] = empty;
+    targets[2] = empty;
+
+    radar_monitor_on_config_result(&g_monitor, true, 0u);
+    radar_monitor_on_frame(&g_monitor, targets, 3500u);
+
+    // The frame is still forwarded (all slots empty) and still counts as
+    // a valid frame for the 500 ms fault timer.
+    TEST_ASSERT_EQUAL_size_t(1u, mock_radar_frame_count());
+    TEST_ASSERT_EQUAL_UINT32(4000u, radar_monitor_get_deadline_ms(&g_monitor));
+    TEST_ASSERT_FALSE(mock_radar_get(0u).targets[0].b_valid);
+    // The caller's own array is not changed.
+    TEST_ASSERT_TRUE(targets[0].b_valid);
+}
+
+static void
+test_silence_inside_settle_window_clears_the_tone_without_a_fault (void)
+{
+    // Bench: frames, then about 0.9 s of silence right after the config.
+    radar_monitor_on_config_result(&g_monitor, true, 2240u);
+    feed_good_frame(2390u);
+    feed_good_frame(3190u);
+    TEST_ASSERT_EQUAL_UINT32(3690u, radar_monitor_get_deadline_ms(&g_monitor));
+
+    // 500 ms of silence: Threat is told (CLEAR), Audio Alert gets no fault.
+    radar_monitor_on_timeout(&g_monitor, 3700u);
+    TEST_ASSERT_EQUAL_size_t(1u, mock_radar_fault_count());
+    TEST_ASSERT_EQUAL_size_t(0u, mock_audio_count());
+    TEST_ASSERT_EQUAL(RADAR_MONITOR_ACTION_RECEIVE,
+                      radar_monitor_get_action(&g_monitor));
+    TEST_ASSERT_EQUAL_UINT32(2240u + RADAR_MONITOR_SETTLE_MS,
+                             radar_monitor_get_deadline_ms(&g_monitor));
+
+    // Frames come back after the gap: still no fault, no OK needed.
+    feed_good_frame(4080u);
+    TEST_ASSERT_EQUAL_size_t(0u, mock_audio_count());
+    TEST_ASSERT_EQUAL_UINT32(4580u, radar_monitor_get_deadline_ms(&g_monitor));
+}
+
+static void
+test_silence_until_the_end_of_the_settle_window_is_a_fault (void)
+{
+    radar_monitor_on_config_result(&g_monitor, true, 0u);
+    feed_good_frame(100u);
+    radar_monitor_on_timeout(&g_monitor, 600u);
+    TEST_ASSERT_EQUAL_size_t(0u, mock_audio_count());
+
+    // Still silent when the settle time ends: now it is a real fault.
+    radar_monitor_on_timeout(&g_monitor, RADAR_MONITOR_SETTLE_MS);
+    TEST_ASSERT_EQUAL_size_t(1u, mock_audio_count());
+    TEST_ASSERT_EQUAL(RTE_AUDIO_RADAR_FAULT, mock_audio_get(0u).type);
+}
+
+static void
+test_silence_after_settle_window_still_reports_a_fault (void)
+{
+    radar_monitor_on_config_result(&g_monitor, true, 0u);
+    feed_good_frame(3600u);
+    radar_monitor_on_timeout(&g_monitor, 4100u);
+
+    TEST_ASSERT_EQUAL(RTE_AUDIO_RADAR_FAULT, mock_audio_get(0u).type);
 }
 
 int
@@ -175,6 +279,11 @@ main (void)
     RUN_TEST(test_timeout_in_run_reports_fault_then_ok_when_frames_resume);
     RUN_TEST(test_silent_sensor_is_configured_again_after_listening);
     RUN_TEST(test_timeout_outside_run_is_ignored);
+    RUN_TEST(test_corridor_gate_empties_targets_outside_the_path);
+    RUN_TEST(test_corridor_gate_keeps_the_frame_and_the_timer);
+    RUN_TEST(test_silence_inside_settle_window_clears_the_tone_without_a_fault);
+    RUN_TEST(test_silence_until_the_end_of_the_settle_window_is_a_fault);
+    RUN_TEST(test_silence_after_settle_window_still_reports_a_fault);
 
     return (UNITY_END());
 }

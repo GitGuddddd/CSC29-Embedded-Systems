@@ -13,7 +13,7 @@ points to them.
     src/drivers/ld2450/   ld2450 (protocol), _irq (interrupt + stream buffer),
                           _cfg.h, _lcfg.c
     src/rte/       rte (queues, tasks, glue), rte_type.h, rte_cfg.h
-    src/app/threat_assessment/   obstacle decision, TTC, pitch, _cfg.h, _lcfg.c
+    src/app/threat_assessment/   obstacle decision, TTC, _cfg.h, _lcfg.c
     src/app/radar_monitor/       INIT / RUN / FAULT supervision, _cfg.h
     src/app/main_glasses.c       launcher + print-only stubs
     tests/         unit, integration, fuzz, harness (mocks)
@@ -25,6 +25,7 @@ points to them.
     UART0 RX interrupt -> stream buffer -> Glasses_Radar (radar_monitor)
       -> radar queue -> Glasses_Threat (threat_assessment)
       -> Audio Alert queue (OBSTACLE, CLEAR, RADAR_FAULT, RADAR_OK) + BLE queue
+    Glasses BLE task -> rte_write_grip_state -> radar queue (grip state)
 
 Application components call only `rte_write_*`. The RTE is the only module
 that knows both the components and the kernel (through osal).
@@ -47,7 +48,14 @@ OPEN-10).
 ## Behaviour (Group 29 report)
 
 - Obstacle: nearest valid target that is not moving away faster than 10 cm/s;
-  starts below 2000 mm, stops above 2100 mm, or 1 s without such a target.
+  starts below 2000 mm, stops above 2100 mm, or 500 ms without such a target.
+- Grip state (FR6): HELD and UNKNOWN keep the alert on, only a confirmed
+  RELEASED silences it (one OBSTACLE(CLEAR) if it was active). It starts as
+  UNKNOWN, so the glasses alert without a cane. The Glasses BLE task sends it
+  with `rte_write_grip_state()`: HELD or RELEASED from each cane packet, and
+  UNKNOWN when no cane packet has arrived for 500 ms. That 500 ms rule is the
+  BLE task's job; Threat only sees the messages. Tested on the PC with
+  injected messages; the real BLE source is not in this tree.
 - A stationary object inside the range does alert (it is not departing).
 - No valid frame for 500 ms: RADAR_FAULT to Audio Alert, Threat goes to CLEAR,
   config retried every 2 s, RADAR_OK when frames resume. The first frame after

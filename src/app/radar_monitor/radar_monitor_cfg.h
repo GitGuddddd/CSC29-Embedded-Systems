@@ -20,8 +20,23 @@
 
 // WARNING: Measured on the bench: the first frame can take longer than
 // 500 ms to appear after "end config" is acknowledged. Without this grace
-// the radar was re-initialised in a loop. Record it in assumption A5/A6.
+// the radar was re-initialised in a loop. Documented in report 6.6.
 #define RADAR_MONITOR_POST_CONFIG_GRACE_MS  (2000u)
+
+// After a successful configuration the sensor may go quiet for about a second
+// (bench: frames, then 0.9 s of silence, then frames again). Within this time
+// a 500 ms silence only clears the tone (Threat goes to CLEAR); it does not
+// raise RADAR_FAULT. Silence at the end of this time is a fault as before.
+#define RADAR_MONITOR_SETTLE_MS             (3000u)
+
+// Corridor gate: a target whose side-to-side position |x| is larger than this
+// is not in the walking path and is sent to Glasses_Threat as an empty slot.
+// It costs no time: the decision is made on the frame itself. Tune with
+// walking tests (docs/target_gates.md). The debug print still shows the target.
+// 1200 mm (was 1000 mm until 31 Oct): a missed obstacle is worse than a false
+// alert, and the corridor turns with the head, so a wider strip hides fewer
+// real obstacles when the head is turned. Starting value from one walk.
+#define RADAR_MONITOR_CORRIDOR_HALF_MM      (1200)
 
 #endif /* RADAR_MONITOR_CFG_H */
 

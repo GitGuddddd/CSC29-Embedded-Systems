@@ -50,6 +50,8 @@ typedef struct
     bool                  b_listening;
     uint32_t              failed_tries;
     uint32_t              deadline_ms;
+    bool                  b_settling;
+    uint32_t              settle_until_ms;
 } radar_monitor_t;
 
 void radar_monitor_init (radar_monitor_t * p_monitor);

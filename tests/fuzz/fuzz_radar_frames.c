@@ -167,10 +167,11 @@ test_threat_state_machine_invariants_on_random_targets (void)
             bool b_empty = (0u == (next_random() % 3u));
 
             targets[idx].b_valid = !b_empty;
-            targets[idx].x_mm = b_empty ? 0 : random_signed(4000u);
-            targets[idx].y_mm = b_empty ? 0 : random_signed(4000u);
+            targets[idx].x_mm = 0;
+            targets[idx].y_mm = 0;
+            targets[idx].d_mm = b_empty ? 0u : (uint16_t) (next_random() %
+                                                           6000u);
             targets[idx].speed_cms = b_empty ? 0 : random_signed(100u);
-            targets[idx].resolution_mm = 360u;
         }
 
         now_ms += 100u + (next_random() % 100u);

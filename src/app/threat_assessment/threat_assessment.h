@@ -1,6 +1,6 @@
 /** @file threat_assessment.h
  *
- * @brief Glasses obstacle decision: nearest target, hysteresis, TTC, pitch.
+ * @brief Glasses obstacle decision: nearest target, hysteresis, TTC.
  *
  * @par
  * COPYRIGHT NOTICE: (c) 2026 Group 29. All rights reserved.
@@ -15,6 +15,9 @@
  *   A target is departing when its sensor speed or its range trend over
  *   3 frames is above +10 cm/s.
  *   FR13  closing speed and TTC = distance / closing speed go to BLE.
+ *   FR6   grip state from the cane: HELD and UNKNOWN keep the alert active,
+ *         only RELEASED silences it (and ends an active alert with one
+ *         OBSTACLE(CLEAR)). The state starts as UNKNOWN.
  */
 
 #ifndef THREAT_ASSESSMENT_H
@@ -26,7 +29,7 @@
 #include "rte_type.h"
 
 /** Number of past frames kept for the range trend (keep in step with cfg). */
-#define THREAT_ASSESSMENT_HISTORY_LEN    (3u)
+#define THREAT_ASSESSMENT_HISTORY_LEN    (4u)
 
 /** State of Glasses_Threat: CLEAR (b_active false) or OBSTACLE_ACTIVE. */
 typedef struct
@@ -40,6 +43,8 @@ typedef struct
     uint32_t hist_ms[THREAT_ASSESSMENT_HISTORY_LEN];
     uint8_t  hist_count;
     uint8_t  depart_frames;  /**< Frames in a row with only departing. */
+    bool     b_jump_pending; /**< A far jump was ignored once (jump gate). */
+    rte_grip_state_t grip;   /**< Last grip state; kept across a fault. */
 } threat_assessment_t;
 
 /** What the caller must send after one threat_assessment_update(). */
@@ -55,7 +60,7 @@ typedef struct
 /** Link-time configuration (defined in threat_assessment_lcfg.c). */
 typedef struct
 {
-    /** Assumption A8: negative speed means approaching the sensor. */
+    /** Assumption A7: negative speed means approaching the sensor. */
     bool b_negative_speed_is_approaching;
 } threat_assessment_lcfg_t;
 
@@ -73,11 +78,15 @@ void threat_assessment_process_frame (threat_assessment_t * p_state,
                                       uint32_t now_ms);
 void threat_assessment_process_fault (threat_assessment_t * p_state);
 
+bool threat_assessment_set_grip (threat_assessment_t * p_state,
+                                 rte_grip_state_t grip);
+void threat_assessment_process_grip (threat_assessment_t * p_state,
+                                     rte_grip_state_t grip);
+
 uint16_t threat_assessment_distance_mm (const rte_radar_target_t * p_target);
 int32_t threat_assessment_closing_cms (const rte_radar_target_t * p_target);
 bool threat_assessment_is_departing (const rte_radar_target_t * p_target);
 uint16_t threat_assessment_ttc_ms (uint32_t d_mm, int32_t closing_cms);
-uint16_t threat_assessment_pitch_hz (uint32_t d_mm);
 
 #endif /* THREAT_ASSESSMENT_H */
 

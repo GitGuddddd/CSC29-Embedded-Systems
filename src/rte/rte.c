@@ -26,6 +26,7 @@
 #include "radar_monitor_cfg.h"
 #include "rte.h"
 #include "rte_cfg.h"
+#include "rte_pack.h"
 #include "rte_type.h"
 #include "threat_assessment.h"
 
@@ -84,15 +85,19 @@ rte_start (void)
 void
 rte_write_radar_frame (const rte_radar_target_t * p_targets, uint32_t time_ms)
 {
+    rte_radar_data_t data;
     rte_radar_msg_t msg;
 
-    msg.type = RTE_RADAR_MSG_FRAME;
-    msg.time_ms = time_ms;
+    data.type = RTE_RADAR_MSG_FRAME;
+    data.time_ms = time_ms;
+    data.grip = RTE_GRIP_UNKNOWN;
 
     for (size_t idx = 0u; idx < RTE_RADAR_NUM_TARGETS; idx++)
     {
-        msg.targets[idx] = p_targets[idx];
+        data.targets[idx] = p_targets[idx];
     }
+
+    rte_pack_radar(&data, &msg);
 
     // The result is ignored on purpose: a dropped frame is replaced by the
     // next one about 140 ms later.
@@ -105,10 +110,38 @@ rte_write_radar_frame (const rte_radar_target_t * p_targets, uint32_t time_ms)
 void
 rte_write_radar_fault (void)
 {
-    rte_radar_msg_t msg = { .type = RTE_RADAR_MSG_FAULT, .time_ms = 0u };
+    rte_radar_data_t data = { .type = RTE_RADAR_MSG_FAULT, .time_ms = 0u,
+                              .grip = RTE_GRIP_UNKNOWN };
+    rte_radar_msg_t msg;
+
+    rte_pack_radar(&data, &msg);
 
     // The result is ignored on purpose: the short wait makes a lost fault
     // message very unlikely, and no other part can act on the failure.
+    (void) osal_queue_send(&g_radar_queue, &msg, RTE_CRITICAL_WAIT_MS);
+}
+
+/*!
+ * @brief Tell Glasses_Threat the cane grip state (FR6). Called by the BLE task.
+ *
+ * Waits briefly like CLEAR and FAULT: losing a RELEASED or a HELD would leave
+ * the alert in the wrong state until the next grip message.
+ *
+ * @param[in] grip  HELD or RELEASED from a cane packet, UNKNOWN after 500 ms
+ *                  without one.
+ */
+void
+rte_write_grip_state (rte_grip_state_t grip)
+{
+    rte_radar_data_t data = { .type = RTE_RADAR_MSG_GRIP, .time_ms = 0u,
+                              .grip = grip };
+    rte_radar_msg_t msg;
+
+    rte_pack_radar(&data, &msg);
+
+    // The result is ignored on purpose. The BLE task is expected to repeat
+    // the state with every cane packet (about 10 Hz), so a lost message is
+    // corrected by the next one.
     (void) osal_queue_send(&g_radar_queue, &msg, RTE_CRITICAL_WAIT_MS);
 }
 
@@ -182,8 +215,26 @@ rte_read_ble_obstacle (rte_ble_obstacle_t * p_msg, uint32_t timeout_ms)
 }
 
 #if (1 == FEATURE_DEBUG_LOGS)
+// Start-up facts of the radar task, saved when they happen. The START and
+// CONFIG lines are printed before the serial monitor has reconnected after a
+// reset, so the first periodic lines print these values again (BOOT line).
+#define RTE_DEBUG_BOOT_LINES    (3u)
+
+static uint32_t g_dbg_start_ms = 0u;
+static uint32_t g_dbg_start_bytes = 0u;
+static uint32_t g_dbg_start_dropped = 0u;
+static bool g_dbg_config_seen = false;
+static bool g_dbg_config_ok = false;
+static uint32_t g_dbg_config_ms = 0u;
+static uint32_t g_dbg_config_bytes = 0u;
+static uint32_t g_dbg_config_dropped = 0u;
+static uint32_t g_dbg_boot_lines = 0u;
+
 /*!
  * @brief Print the receive-path counters with a time stamp (debug only).
+ *
+ * The first RTE_DEBUG_BOOT_LINES periodic lines are followed by a BOOT line
+ * that repeats the start-up values (task start, last configuration result).
  *
  * @param[in] b_timeout  true for the line printed on a frame timeout.
  * @param[in] frames     Valid frames seen so far.
@@ -200,6 +251,18 @@ rte_debug_print_rx_stats (bool b_timeout, uint32_t frames)
            (b_timeout ? "TIMEOUT" : "frames"), hal_time_now_ms(), frames,
            stats.byte_count, stats.isr_count, stats.overrun_count,
            stats.dropped_bytes, ld2450_get_bad_footer_count());
+
+    if ((!b_timeout) && (g_dbg_boot_lines < RTE_DEBUG_BOOT_LINES))
+    {
+        g_dbg_boot_lines++;
+        gr_printf("[Radar] BOOT start t=%" PRIu32 "ms bytes=%" PRIu32
+               " dropped=%" PRIu32 " | config %s t=%" PRIu32 "ms bytes=%"
+               PRIu32 " dropped=%" PRIu32 "\n", g_dbg_start_ms,
+               g_dbg_start_bytes, g_dbg_start_dropped,
+               (!g_dbg_config_seen) ? "NONE" :
+               (g_dbg_config_ok ? "OK" : "FAILED"), g_dbg_config_ms,
+               g_dbg_config_bytes, g_dbg_config_dropped);
+    }
 }
 #endif
 
@@ -289,6 +352,47 @@ rte_radar_receive_step (radar_monitor_t * p_monitor, uint32_t * p_frame_count)
 }
 
 /*!
+ * @brief One configuration attempt of Glasses_Radar, with a debug line.
+ *
+ * The line shows when each attempt ran, whether it worked and how many
+ * bytes the receive path had already lost (startup backlog check).
+ *
+ * @param[in,out] p_monitor  Supervision state.
+ */
+static void
+rte_radar_configure_step (radar_monitor_t * p_monitor)
+{
+    bool b_ok = ld2450_configure();
+
+    radar_monitor_on_config_result(p_monitor, b_ok, hal_time_now_ms());
+
+#if (1 == FEATURE_DEBUG_LOGS)
+    if (1 == FEATURE_DEBUG_LOGS)
+    {
+        ld2450_rx_stats_t stats;
+
+        ld2450_get_rx_stats(&stats);
+        g_dbg_config_seen = true;
+        g_dbg_config_ok = b_ok;
+        g_dbg_config_ms = hal_time_now_ms();
+        g_dbg_config_bytes = stats.byte_count;
+        g_dbg_config_dropped = stats.dropped_bytes;
+        gr_printf("[Radar] CONFIG %s t=%" PRIu32 "ms bytes=%" PRIu32
+               " dropped=%" PRIu32 " | start t=%" PRIu32 "ms bytes=%" PRIu32
+               " dropped=%" PRIu32 "\n", (b_ok ? "OK" : "FAILED"),
+               hal_time_now_ms(), stats.byte_count, stats.dropped_bytes,
+               g_dbg_start_ms, g_dbg_start_bytes, g_dbg_start_dropped);
+    }
+#endif
+
+    if (b_ok)
+    {
+        // Count from here on: the start-up backlog is not a steady-state loss.
+        ld2450_reset_rx_stats();
+    }
+}
+
+/*!
  * @brief Glasses_Radar task: drives the LD2450 under radar_monitor.
  *
  * @param[in] p_arg  Unused.
@@ -304,13 +408,27 @@ rte_glasses_radar_task (void * p_arg)
 
     radar_monitor_init(&monitor);
 
+#if (1 == FEATURE_DEBUG_LOGS)
+    if (1 == FEATURE_DEBUG_LOGS)
+    {
+        ld2450_rx_stats_t stats;
+
+        ld2450_get_rx_stats(&stats);
+        g_dbg_start_ms = hal_time_now_ms();
+        g_dbg_start_bytes = stats.byte_count;
+        g_dbg_start_dropped = stats.dropped_bytes;
+        gr_printf("[Radar] START t=%" PRIu32 "ms bytes=%" PRIu32
+               " dropped=%" PRIu32 "\n", g_dbg_start_ms, g_dbg_start_bytes,
+               g_dbg_start_dropped);
+    }
+#endif
+
     for (;;)
     {
         switch (radar_monitor_get_action(&monitor))
         {
             case RADAR_MONITOR_ACTION_CONFIGURE:
-                radar_monitor_on_config_result(&monitor, ld2450_configure(),
-                                               hal_time_now_ms());
+                rte_radar_configure_step(&monitor);
                 break;
 
             case RADAR_MONITOR_ACTION_WAIT_RETRY:
@@ -329,7 +447,7 @@ rte_glasses_radar_task (void * p_arg)
 }
 
 /*!
- * @brief Glasses_Threat task: blocks on the radar queue.
+ * @brief Glasses_Threat task: blocks on the radar queue (frames, faults, grip).
  *
  * Frames keep arriving while the radar works, empty frames included, so the
  * 500 ms no-target hold in threat_assessment needs no timer here.
@@ -341,6 +459,7 @@ rte_glasses_threat_task (void * p_arg)
 {
     threat_assessment_t state;
     rte_radar_msg_t msg;
+    rte_radar_data_t data;
 
     // The void cast only silences the unused-parameter warning.
     (void) p_arg;
@@ -351,14 +470,23 @@ rte_glasses_threat_task (void * p_arg)
     {
         if (osal_queue_receive(&g_radar_queue, &msg, OSAL_WAIT_FOREVER))
         {
-            if (RTE_RADAR_MSG_FRAME == msg.type)
+            rte_pack_unpack_radar(&msg, &data);
+
+            switch (data.type)
             {
-                threat_assessment_process_frame(&state, msg.targets,
-                                                msg.time_ms);
-            }
-            else
-            {
-                threat_assessment_process_fault(&state);
+                case RTE_RADAR_MSG_FRAME:
+                    threat_assessment_process_frame(&state, data.targets,
+                                                    data.time_ms);
+                    break;
+
+                case RTE_RADAR_MSG_GRIP:
+                    threat_assessment_process_grip(&state, data.grip);
+                    break;
+
+                case RTE_RADAR_MSG_FAULT:
+                default:
+                    threat_assessment_process_fault(&state);
+                    break;
             }
         }
     }

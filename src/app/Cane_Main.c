@@ -96,7 +96,12 @@ int main(void)
     AlertManager_Init();
     GroundProjection_Init(&s_ground_detector, 0U);
     GroundProjection_SetArmed(&s_ground_detector, true, 0U);
-    GroundProjection_StartCalibration(&s_ground_detector, 0U);
+    /*
+     * No auto-calibration at boot: the baseline is RAM-only, so after every
+     * reboot the cane plays the calibration prompt while gripped until the
+     * user calibrates on level ground ('c' over serial; GP20 button planned).
+     */
+    printf("[GROUND] No calibration after boot. Hold the cane still on level ground and press 'c'.\n");
 
 #ifdef PICO_ON_DEVICE
     /* Launch Core 1 for BLE wireless communication polling */
@@ -114,9 +119,12 @@ int main(void)
     uint32_t last_watchdog_ms = 0U;
     uint32_t last_telemetry_ms = 0U;
 
+    uint32_t last_cmd_ms = 0U;
+
     Grip_State_t prev_grip = GRIP_STATE_RELEASED;
     uint16_t last_dist_mm = 0U;
     Gp_State_t last_gstate = GP_STATE_LEVEL;
+    Alert_Type_t prev_active_cue = ALERT_NONE;
     uint8_t last_glasses_fall_seq = 0xFFU;
     bool prev_link_lost = false;
 
@@ -174,10 +182,38 @@ int main(void)
                 else
                 {
                     printf("[TOUCH] Cane released - Fall Watch Armed\n");
+                    if (s_ground_detector.state == GP_STATE_CALIBRATING)
+                    {
+                        GroundProjection_CancelCalibration(&s_ground_detector, now_ms);
+                        printf("[GROUND] Calibration cancelled (cane released). Previous baseline kept: %s\n",
+                               s_ground_detector.is_calibrated ? "yes" : "none");
+                    }
                 }
                 prev_grip = current_grip;
                 cane_status.grip_state = (uint16_t)current_grip;
+                Haptic_SetGripHeld(current_grip == GRIP_STATE_HELD);
             }
+        }
+
+        /* Serial command: 'c' = calibrate ground baseline (every 50 ms) */
+        if ((now_ms - last_cmd_ms) >= 50U)
+        {
+            last_cmd_ms = now_ms;
+#ifdef PICO_ON_DEVICE
+            int ch = getchar_timeout_us(0);
+            if ((ch == (int)'c') || (ch == (int)'C'))
+            {
+                if (prev_grip == GRIP_STATE_HELD)
+                {
+                    GroundProjection_StartCalibration(&s_ground_detector, now_ms);
+                    printf("[GROUND] Calibrating: hold the cane still on level ground...\n");
+                }
+                else
+                {
+                    printf("[GROUND] Grip the cane before calibrating.\n");
+                }
+            }
+#endif
         }
 
         /* Task 2: IMU Fall Detection (every 5 ms, 200 Hz per Section 3) */
@@ -235,26 +271,6 @@ int main(void)
                 }
                 last_dist_mm = dist_mm;
                 GroundProjection_Feed(&s_ground_detector, GP_RANGE_VALID, dist_mm, now_ms);
-                Gp_State_t gstate = s_ground_detector.state;
-
-                if (gstate != last_gstate)
-                {
-                    printf("[CLIFF] State -> %d (Distance: %u mm)\n", (int)gstate, dist_mm);
-                    last_gstate = gstate;
-                }
-
-                if (gstate == GP_STATE_STEP_DOWN)
-                {
-                    Haptic_PlayPattern(ALERT_CLIFF_WARNING);
-                }
-                else if (gstate == GP_STATE_STEP_UP)
-                {
-                    Haptic_PlayPattern(ALERT_CLIFF_STEP_UP);
-                }
-                else
-                {
-                    Haptic_Abort();
-                }
             }
             else if (read_ok && dist_mm <= 20U)
             {
@@ -263,7 +279,6 @@ int main(void)
                 {
                     cane_status.tof_obstructed = 1U;
                     printf("[TOF FAULT] Optical Sensor Obstructed (<= 20 mm)! Triggering Caution Warning\n");
-                    Haptic_PlayPattern(ALERT_SENSOR_FAULT);
                 }
                 last_dist_mm = 0U;
                 GroundProjection_Feed(&s_ground_detector, GP_RANGE_INVALID, 0U, now_ms);
@@ -277,9 +292,25 @@ int main(void)
             }
             else
             {
+                /* I2C/read error is not a no-return: it must not vote toward NO_GROUND or hide a stale sensor */
                 cane_status.tof_obstructed = 0U;
-                GroundProjection_Feed(&s_ground_detector, GP_RANGE_NO_RETURN, 0U, now_ms);
+                GroundProjection_Feed(&s_ground_detector, GP_RANGE_INVALID, 0U, now_ms);
             }
+
+            Gp_State_t gstate = s_ground_detector.state;
+            if (gstate != last_gstate)
+            {
+                printf("[CLIFF] State -> %s (Distance: %u mm)\n", GroundProjection_GetStateName(gstate), last_dist_mm);
+                if ((gstate == GP_STATE_LEVEL) && (last_gstate == GP_STATE_CALIBRATING))
+                {
+                    printf("[GROUND] Calibration complete. Baseline: %u mm\n", s_ground_detector.baseline_mm);
+                }
+                last_gstate = gstate;
+            }
+
+            Alert_Type_t ground_req = (cane_status.tof_obstructed != 0U) ?
+                                      ALERT_SENSOR_FAULT : GroundProjection_GetHapticRequest(&s_ground_detector);
+            Haptic_Request(HAPTIC_SRC_GROUND, ground_req);
         }
 
         /* Task 4: BLE Packet Reception & Deadman Watchdog Check (every 50 ms) */
@@ -343,11 +374,21 @@ int main(void)
                 }
             }
 
-            if (is_link_lost)
-            {
-                Haptic_PlayPattern(ALERT_LINK_LOSS);
-            }
+            Haptic_Request(HAPTIC_SRC_LINK, is_link_lost ? ALERT_LINK_LOSS : ALERT_NONE);
         }
+
+        /* Haptic arbitration and pattern timing (every loop, non-blocking) */
+        Haptic_Step(now_ms);
+        Alert_Type_t active_cue = Haptic_GetActivePattern();
+        if ((active_cue != prev_active_cue) && Haptic_IsMotorOn() && s_ground_detector.change_pending &&
+            ((active_cue == ALERT_CLIFF_WARNING) || (active_cue == ALERT_CLIFF_STEP_UP)))
+        {
+            /* Gap 9 evidence: first changed ToF reading -> motor PWM on */
+            printf("[GROUND LATENCY] %s: first changed reading -> motor on = %lu ms\n",
+                   (active_cue == ALERT_CLIFF_WARNING) ? "STEP_DOWN" : "STEP_UP",
+                   (unsigned long)(now_ms - s_ground_detector.change_start_ms));
+        }
+        prev_active_cue = active_cue;
 
         /* Task 5: Periodic Telemetry Heartbeat & BLE Broadcast (every 100 ms / 10 Hz) */
         if ((now_ms - last_telemetry_ms) >= 100U)

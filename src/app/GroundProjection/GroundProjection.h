@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "Rte_Type.h"
 
 /*
  * \file GroundProjection.h
@@ -51,13 +52,19 @@ typedef struct
     uint32_t cal_sum;
 
     uint32_t last_sample_ms;
+
+    /* Time of the first raw reading past a step threshold, for latency logging */
+    bool change_pending;
+    uint32_t change_start_ms;
 } Gp_Detector_t;
 
 void GroundProjection_Init(Gp_Detector_t * const p_d, uint32_t now_ms);
 void GroundProjection_SetArmed(Gp_Detector_t * const p_d, bool armed, uint32_t now_ms);
 void GroundProjection_StartCalibration(Gp_Detector_t * const p_d, uint32_t now_ms);
+void GroundProjection_CancelCalibration(Gp_Detector_t * const p_d, uint32_t now_ms);
 void GroundProjection_Feed(Gp_Detector_t * const p_d, Gp_Quality_t quality, uint16_t range_mm, uint32_t now_ms);
 void GroundProjection_Tick(Gp_Detector_t * const p_d, uint32_t now_ms);
+Alert_Type_t GroundProjection_GetHapticRequest(const Gp_Detector_t * const p_d);
 const char * GroundProjection_GetStateName(Gp_State_t state);
 
 #endif /* GROUNDPROJECTION_H */

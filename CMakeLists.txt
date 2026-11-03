@@ -186,6 +186,16 @@ add_executable(test_GroundProjection
 target_link_libraries(test_GroundProjection PRIVATE unity)
 add_test(NAME Unit_GroundProjection COMMAND test_GroundProjection)
 
+# 2b. Cane Haptic arbitration Unit Test
+add_executable(test_Haptic
+    tests/unit/test_Haptic.c
+    src/drivers/Haptic/Haptic.c
+    src/drivers/Haptic/Haptic_Lcfg.c
+    src/hal/Hal_Pwm.c
+)
+target_link_libraries(test_Haptic PRIVATE unity)
+add_test(NAME Unit_Haptic COMMAND test_Haptic)
+
 # 3. ThreatAssessment Unit Test
 add_executable(test_ThreatAssessment
     tests/unit/test_ThreatAssessment.c

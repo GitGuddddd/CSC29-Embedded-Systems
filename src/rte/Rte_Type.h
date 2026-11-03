@@ -61,7 +61,8 @@ typedef enum
     ALERT_FALL_ALARM,
     ALERT_FALL_MUTED,
     ALERT_SENSOR_FAULT,
-    ALERT_LINK_LOSS
+    ALERT_LINK_LOSS,
+    ALERT_CALIBRATE_PROMPT
 } Alert_Type_t;
 
 typedef struct

@@ -69,16 +69,30 @@ void GroundProjection_StartCalibration(Gp_Detector_t * const p_d, uint32_t now_m
         return;
     }
 
-    p_d->is_calibrated = false;
-    p_d->baseline_mm = 0U;
-    p_d->filtered_mm = 0U;
+    /* Staged: the previous baseline stays valid until the new one completes */
+    Reset_Votes(p_d);
+    Reset_History(p_d);
+    Reset_CalibrationSamples(p_d);
+    p_d->change_pending = false;
 
+    p_d->last_sample_ms = now_ms;
+    p_d->state = (p_d->is_armed) ? GP_STATE_CALIBRATING : GP_STATE_DISARMED;
+}
+
+void GroundProjection_CancelCalibration(Gp_Detector_t * const p_d, uint32_t now_ms)
+{
+    if ((p_d == NULL) || (p_d->state != GP_STATE_CALIBRATING))
+    {
+        return;
+    }
+
+    /* Drop the partial window; classification resumes on the old baseline if there is one */
     Reset_Votes(p_d);
     Reset_History(p_d);
     Reset_CalibrationSamples(p_d);
 
     p_d->last_sample_ms = now_ms;
-    p_d->state = (p_d->is_armed) ? GP_STATE_CALIBRATING : GP_STATE_DISARMED;
+    p_d->state = GP_STATE_UNKNOWN;
 }
 
 void GroundProjection_Tick(Gp_Detector_t * const p_d, uint32_t now_ms)
@@ -255,6 +269,28 @@ void GroundProjection_Feed(Gp_Detector_t * const p_d,
         return;
     }
 
+    /* Mark the first raw reading past a step threshold (latency start point) */
+    if ((p_d->state != GP_STATE_STEP_UP) && (p_d->state != GP_STATE_STEP_DOWN))
+    {
+        int32_t raw_delta = (int32_t)range_mm - (int32_t)p_d->baseline_mm;
+        bool raw_changed = (raw_delta > (int32_t)GP_DOWN_ENTER_MM) ||
+                           (raw_delta <= -(int32_t)GP_UP_ENTER_MM);
+
+        if (raw_changed && (!p_d->change_pending))
+        {
+            p_d->change_pending = true;
+            p_d->change_start_ms = now_ms;
+        }
+        else if (!raw_changed)
+        {
+            p_d->change_pending = false;
+        }
+        else
+        {
+            /* Change already being timed */
+        }
+    }
+
     Push_History(p_d, range_mm);
 
     if (p_d->history_count < 5U)
@@ -321,6 +357,35 @@ void GroundProjection_Feed(Gp_Detector_t * const p_d,
         }
 
         p_d->baseline_mm = (uint16_t)updated;
+    }
+}
+
+Alert_Type_t GroundProjection_GetHapticRequest(const Gp_Detector_t * const p_d)
+{
+    if ((p_d == NULL) || (!p_d->is_armed))
+    {
+        return ALERT_NONE;
+    }
+
+    switch (p_d->state)
+    {
+        case GP_STATE_STEP_DOWN:
+            return ALERT_CLIFF_WARNING;
+        case GP_STATE_STEP_UP:
+            return ALERT_CLIFF_STEP_UP;
+        case GP_STATE_NO_GROUND:
+        case GP_STATE_SENSOR_FAULT:
+            return ALERT_SENSOR_FAULT;
+        case GP_STATE_UNKNOWN:
+            /*
+             * No baseline after a reboot means step warnings are off: prompt the
+             * user to calibrate (Tribunal 1, 12:50PM). A calibrated UNKNOWN is a
+             * short gap while the filter refills, so it stays silent; a gap that
+             * lasts 500 ms becomes SENSOR_FAULT and gets the caution cue.
+             */
+            return (p_d->is_calibrated) ? ALERT_NONE : ALERT_CALIBRATE_PROMPT;
+        default:
+            return ALERT_NONE;
     }
 }
 

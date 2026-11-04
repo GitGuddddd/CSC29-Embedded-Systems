@@ -34,8 +34,8 @@ extern void vTaskCoreAffinitySet(TaskHandle_t xTask, UBaseType_t uxCoreAffinityM
 
 /*
  * \file Cane_Main.c
- * \brief Smart Walking Cane FreeRTOS Dual-Core (AMP) System Mode Manager
- * Compliance: Barr-C:2018 / AUTOSAR Classical / ISO 26262 ASIL-D
+ * \brief Smart Walking Cane FreeRTOS Dual-Core (AMP) System Mode Manager (BswM / ComM)
+ * Compliance: Barr-C:2018 / AUTOSAR Classical Mode Management / ISO 26262 ASIL-D
  */
 
 static Gp_Detector_t s_ground_detector;
@@ -129,11 +129,24 @@ static void vTask_SafetyPerception(void *pvParameters)
     };
 
     s_sys_mode = SYS_STATE_ACTIVE;
+    Sys_State_t prev_printed_mode = SYS_STATE_INIT;
 
     for (;;)
     {
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
         uint32_t now_ms = GetCurrentTimeMs();
+
+        /* Log System State Transitions */
+        if (s_sys_mode != prev_printed_mode)
+        {
+            const char *mode_str = "ACTIVE";
+            if (s_sys_mode == SYS_STATE_WATCH)          mode_str = "WATCH (HAZARD)";
+            if (s_sys_mode == SYS_STATE_FALL_CONFIRMED) mode_str = "FALL_CONFIRMED";
+            if (s_sys_mode == SYS_STATE_FALL_MUTED)     mode_str = "FALL_MUTED";
+            if (s_sys_mode == SYS_STATE_HARD_FAULT)     mode_str = "HARD_FAULT";
+            printf("[SYS MODE] Cane State Transition -> %s\n", mode_str);
+            prev_printed_mode = s_sys_mode;
+        }
 
         /* IMU Recovery Supervisor */
         if (!imu_ok && ((now_ms - last_imu_retry_ms) >= 1000U))
@@ -143,6 +156,14 @@ static void vTask_SafetyPerception(void *pvParameters)
             if (imu_ok)
             {
                 printf("[IMU RECOVERY] Cane MPU9250 successfully re-initialized!\n");
+                if (s_sys_mode == SYS_STATE_HARD_FAULT)
+                {
+                    s_sys_mode = SYS_STATE_ACTIVE;
+                }
+            }
+            else
+            {
+                s_sys_mode = SYS_STATE_HARD_FAULT;
             }
         }
 
@@ -283,6 +304,19 @@ static void vTask_SafetyPerception(void *pvParameters)
             {
                 printf("[CLIFF] State -> %s (Distance: %u mm)\n", GroundProjection_GetStateName(gstate), last_dist_mm);
                 last_gstate = gstate;
+            }
+
+            /* Update System Mode for Active Hazards */
+            if ((gstate == GP_STATE_STEP_DOWN) || (gstate == GP_STATE_STEP_UP))
+            {
+                if (s_sys_mode == SYS_STATE_ACTIVE)
+                {
+                    s_sys_mode = SYS_STATE_WATCH;
+                }
+            }
+            else if (s_sys_mode == SYS_STATE_WATCH)
+            {
+                s_sys_mode = SYS_STATE_ACTIVE;
             }
 
             Gp_CalEvent_t cal_event = GroundProjection_TakeCalEvent(&s_ground_detector);

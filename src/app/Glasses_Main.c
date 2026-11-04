@@ -29,8 +29,8 @@ extern void vTaskCoreAffinitySet(TaskHandle_t xTask, UBaseType_t uxCoreAffinityM
 
 /*
  * \file Glasses_Main.c
- * \brief Smart Glasses FreeRTOS Dual-Core System Mode Manager
- * Compliance: Barr-C:2018 / AUTOSAR Classical / ISO 26262 ASIL-D
+ * \brief Smart Glasses FreeRTOS Dual-Core System Mode Manager (BswM / ComM)
+ * Compliance: Barr-C:2018 / AUTOSAR Classical Mode Management / ISO 26262 ASIL-D
  */
 
 static Sys_State_t s_glasses_mode = SYS_STATE_INIT;
@@ -67,7 +67,6 @@ static void vTask_GlassesPerception(void *pvParameters)
     uint32_t last_telemetry_ms = 0U;
 
     bool head_fall_latched = false;
-    bool ble_tx_paused = false;
     uint8_t glasses_fall_count = 0U;
     uint8_t glasses_tx_seq = 0U;
     Threat_Result_t current_threat = {0};
@@ -77,11 +76,23 @@ static void vTask_GlassesPerception(void *pvParameters)
     uint32_t last_cane_pkt_ms = 0U;
 
     s_glasses_mode = SYS_STATE_ACTIVE;
+    Sys_State_t prev_printed_mode = SYS_STATE_INIT;
 
     for (;;)
     {
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
         uint32_t now_ms = GetCurrentTimeMs();
+
+        /* Log System Mode State Transitions */
+        if (s_glasses_mode != prev_printed_mode)
+        {
+            const char *mode_str = "ACTIVE";
+            if (s_glasses_mode == SYS_STATE_WATCH)          mode_str = "WATCH (HAZARD)";
+            if (s_glasses_mode == SYS_STATE_FALL_CONFIRMED) mode_str = "FALL_CONFIRMED";
+            if (s_glasses_mode == SYS_STATE_HARD_FAULT)     mode_str = "HARD_FAULT";
+            printf("[SYS MODE] Glasses State Transition -> %s\n", mode_str);
+            prev_printed_mode = s_glasses_mode;
+        }
 
         /* Process incoming BLE packets from Cane Node */
         Ble_AdvancedThreatPacket_t rx_pkt;
@@ -104,6 +115,14 @@ static void vTask_GlassesPerception(void *pvParameters)
         {
             last_imu_retry_ms = now_ms;
             imu_ok = Mpu9250_Init(&Mpu9250_Config_Glasses);
+            if (imu_ok && (s_glasses_mode == SYS_STATE_HARD_FAULT))
+            {
+                s_glasses_mode = SYS_STATE_ACTIVE;
+            }
+            else if (!imu_ok)
+            {
+                s_glasses_mode = SYS_STATE_HARD_FAULT;
+            }
         }
 
         /* Sub-Task 1A: Head Fall Detection (100 Hz / Every Tick) */
@@ -156,6 +175,10 @@ static void vTask_GlassesPerception(void *pvParameters)
 
                     if (current_threat.is_threat_active)
                     {
+                        if (s_glasses_mode == SYS_STATE_ACTIVE)
+                        {
+                            s_glasses_mode = SYS_STATE_WATCH;
+                        }
                         Alert_Output_t alert_out;
                         AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, current_threat.nearest_distance_mm, now_ms, &alert_out);
                         if (alert_out.buzzer_active)
@@ -165,6 +188,10 @@ static void vTask_GlassesPerception(void *pvParameters)
                     }
                     else
                     {
+                        if (s_glasses_mode == SYS_STATE_WATCH)
+                        {
+                            s_glasses_mode = SYS_STATE_ACTIVE;
+                        }
                         Buzzer_Silence();
                     }
                     Ld2450_Irq_SetTail((tail + 30U) % 256U);
@@ -200,16 +227,6 @@ static void vTask_GlassesPerception(void *pvParameters)
                 head_fall_latched = false;
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
                 AlertManager_AcknowledgeReset();
-            }
-            else if ((ch == (int)'p') || (ch == (int)'P'))
-            {
-                printf("[TEST TRIGGER] BLE Radio Transmit Muted (Scenario A: Auto Low-Power Standby)\n");
-                ble_tx_paused = true;
-            }
-            else if ((ch == (int)'r') || (ch == (int)'R'))
-            {
-                printf("[TEST TRIGGER] BLE Radio Transmit Resumed\n");
-                ble_tx_paused = false;
             }
         }
 

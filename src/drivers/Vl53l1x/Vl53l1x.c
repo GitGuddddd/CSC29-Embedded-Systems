@@ -17,6 +17,7 @@
 #define VL53L1X_REG_SYSTEM_INTERRUPT_CLEAR     (0x0086U)
 #define VL53L1X_REG_SYSTEM_MODE_START          (0x0087U)
 #define VL53L1X_REG_RESULT_RANGE_STATUS        (0x0089U)
+#define VL53L1X_RANGE_STATUS_MASK               (0x1FU)
 #define VL53L1X_REG_RESULT_DISTANCE_MM         (0x0096U)
 #define VL53L1X_REG_FIRMWARE_SYSTEM_STATUS     (0x00E5U)
 #define VL53L1X_REG_MODEL_ID                   (0x010FU)
@@ -141,6 +142,6 @@ bool Vl53l1x_ReadRangeStatus(const Vl53l1x_Config_t * const p_cfg, uint8_t * con
         return false;
     }
 
-    *p_status = (uint8_t)(raw & 0x1FU);
+    *p_status = (uint8_t)(raw & VL53L1X_RANGE_STATUS_MASK);
     return true;
 }

@@ -421,20 +421,58 @@ void BleComm_InjectRxPacket(const Ble_AdvancedThreatPacket_t * const p_pkt)
     (void)BleComm_ReceivePacket(p_pkt);
 }
 
+static bool s_ble_power_active = true;
+static volatile bool s_power_change_requested = false;
+static volatile bool s_target_power_state = true;
+
+void BleComm_SetPowerMode(bool enable)
+{
+    s_target_power_state = enable;
+    __dmb();
+    s_power_change_requested = true;
+}
+
 void BleComm_Core1_Task(void)
 {
 #ifdef PICO_ON_DEVICE
-    cyw43_arch_poll();
-
-    /* Core 1 Consumer: process pending outbound packets from Core 0 */
-    if (s_tx_q_tail != s_tx_q_head)
+    if (s_power_change_requested)
     {
-        Ble_AdvancedThreatPacket_t pkt_to_send = s_tx_queue[s_tx_q_tail];
+        s_power_change_requested = false;
         __dmb();
-        s_tx_q_tail = (uint8_t)((s_tx_q_tail + 1U) % BLECOMM_TX_QUEUE_SIZE);
+        bool enable = s_target_power_state;
 
-        SetupAdvData(&pkt_to_send);
-        gap_advertisements_set_data(adv_data_len, adv_data);
+        if (enable && !s_ble_power_active)
+        {
+            hci_power_control(HCI_POWER_ON);
+            gap_advertisements_enable(1);
+            gap_start_scan();
+            s_ble_power_active = true;
+            printf("[BLE POWER] Radio Resumed (ON)\n");
+        }
+        else if (!enable && s_ble_power_active)
+        {
+            gap_advertisements_enable(0);
+            gap_stop_scan();
+            hci_power_control(HCI_POWER_OFF);
+            s_ble_power_active = false;
+            printf("[BLE POWER] Radio Suspended (OFF Low-Power Mode)\n");
+        }
+    }
+
+    if (s_ble_power_active)
+    {
+        cyw43_arch_poll();
+
+        /* Core 1 Consumer: process pending outbound packets from Core 0 */
+        if (s_tx_q_tail != s_tx_q_head)
+        {
+            Ble_AdvancedThreatPacket_t pkt_to_send = s_tx_queue[s_tx_q_tail];
+            __dmb();
+            s_tx_q_tail = (uint8_t)((s_tx_q_tail + 1U) % BLECOMM_TX_QUEUE_SIZE);
+
+            SetupAdvData(&pkt_to_send);
+            gap_advertisements_set_data(adv_data_len, adv_data);
+        }
     }
 #endif
 }

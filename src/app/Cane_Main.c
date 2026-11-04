@@ -110,6 +110,7 @@ static void vTask_SafetyPerception(void *pvParameters)
     uint32_t last_tof_reinit_ms = last_tof_alive_ms;
     uint32_t last_telemetry_ms = 0U;
     uint32_t last_cmd_ms = 0U;
+    uint32_t release_time_ms = 0U;
 
     Grip_State_t prev_grip = GRIP_STATE_RELEASED;
     uint16_t last_dist_mm = 0U;
@@ -144,8 +145,19 @@ static void vTask_SafetyPerception(void *pvParameters)
             if (s_sys_mode == SYS_STATE_FALL_CONFIRMED) mode_str = "FALL_CONFIRMED";
             if (s_sys_mode == SYS_STATE_FALL_MUTED)     mode_str = "FALL_MUTED";
             if (s_sys_mode == SYS_STATE_HARD_FAULT)     mode_str = "HARD_FAULT";
+            if (s_sys_mode == SYS_STATE_STANDBY)        mode_str = "STANDBY (DOCKED)";
             printf("[SYS MODE] Cane State Transition -> %s\n", mode_str);
             prev_printed_mode = s_sys_mode;
+        }
+
+        /* Check for Standby Mode (Released + 60s idle) */
+        if (prev_grip == GRIP_STATE_RELEASED && s_sys_mode != SYS_STATE_STANDBY)
+        {
+            if ((now_ms - release_time_ms) > 60000U)
+            {
+                s_sys_mode = SYS_STATE_STANDBY;
+                BleComm_SetPowerMode(false);
+            }
         }
 
         /* IMU Recovery Supervisor */
@@ -187,11 +199,18 @@ static void vTask_SafetyPerception(void *pvParameters)
                     AlertManager_AcknowledgeReset();
                     Buzzer_Silence();
                 }
+                else if (s_sys_mode == SYS_STATE_STANDBY)
+                {
+                    printf("[WAKEUP] Cane gripped! Waking up from Standby mode.\n");
+                    s_sys_mode = SYS_STATE_ACTIVE;
+                    BleComm_SetPowerMode(true);
+                }
                 FallDetection_Reset();
             }
             else
             {
-                printf("[TOUCH] Cane released - Fall Watch Armed\n");
+                printf("[TOUCH] Cane released - Fall Watch Armed. Standby timer started.\n");
+                release_time_ms = now_ms;
                 GroundProjection_CancelCalibration(&s_ground_detector, now_ms);
             }
             prev_grip = current_grip;
@@ -221,18 +240,21 @@ static void vTask_SafetyPerception(void *pvParameters)
         if (imu_ok && Mpu9250_ReadSample(&Mpu9250_Config_Cane, &imu_sample))
         {
             cane_status.imu_healthy = 1U;
-            bool fall_detected = FallDetection_Step(&imu_sample, now_ms);
-            if (fall_detected)
+            if (s_sys_mode != SYS_STATE_STANDBY)
             {
-                printf("[ALERT] *** FALL DETECTED! *** Triggering Buzzer Siren\n");
-                s_sys_mode = SYS_STATE_FALL_CONFIRMED;
-                cane_status.fall_latched = 1U;
-                cane_status.fall_seq = (uint16_t)((cane_status.fall_seq + 1U) & 0x0FU);
-                Alert_Output_t alert_out;
-                AlertManager_Arbitrate(ALERT_FALL_ALARM, 0U, now_ms, &alert_out);
-                if (alert_out.buzzer_active)
+                bool fall_detected = FallDetection_Step(&imu_sample, now_ms);
+                if (fall_detected)
                 {
-                    Buzzer_PlayTone(alert_out.generated_freq_hz);
+                    printf("[ALERT] *** FALL DETECTED! *** Triggering Buzzer Siren\n");
+                    s_sys_mode = SYS_STATE_FALL_CONFIRMED;
+                    cane_status.fall_latched = 1U;
+                    cane_status.fall_seq = (uint16_t)((cane_status.fall_seq + 1U) & 0x0FU);
+                    Alert_Output_t alert_out;
+                    AlertManager_Arbitrate(ALERT_FALL_ALARM, 0U, now_ms, &alert_out);
+                    if (alert_out.buzzer_active)
+                    {
+                        Buzzer_PlayTone(alert_out.generated_freq_hz);
+                    }
                 }
             }
         }

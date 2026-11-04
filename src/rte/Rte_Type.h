@@ -26,7 +26,8 @@ typedef enum
     SYS_STATE_WATCH,
     SYS_STATE_FALL_CONFIRMED,
     SYS_STATE_FALL_MUTED,
-    SYS_STATE_HARD_FAULT
+    SYS_STATE_HARD_FAULT,
+    SYS_STATE_STANDBY
 } Sys_State_t;
 
 typedef enum

@@ -408,8 +408,15 @@ static void vTask_SafetyPerception(void *pvParameters)
         }
         Haptic_Request(HAPTIC_SRC_LINK, is_link_lost ? ALERT_LINK_LOSS : ALERT_NONE);
 
-        /* Sub-Task 1F: Telemetry Broadcast (10 Hz) */
-        if ((now_ms - last_telemetry_ms) >= 100U)
+        /* Sub-Task 1F: Adaptive Telemetry Broadcast (Power/RF Spectrum Efficiency) */
+        /* Rate: 10 Hz (every 100ms) during active hazards/alarms. 2 Hz (every 500ms) when SAFE/IDLE. */
+        uint32_t active_telemetry_period_ms = 500U;
+        if ((s_sys_mode == SYS_STATE_WATCH) || (s_sys_mode == SYS_STATE_FALL_CONFIRMED) || (s_sys_mode == SYS_STATE_HARD_FAULT))
+        {
+            active_telemetry_period_ms = 100U;
+        }
+
+        if ((now_ms - last_telemetry_ms) >= active_telemetry_period_ms)
         {
             last_telemetry_ms = now_ms;
 

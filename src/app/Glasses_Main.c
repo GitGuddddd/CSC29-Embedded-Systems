@@ -258,8 +258,15 @@ static void vTask_GlassesPerception(void *pvParameters)
             }
         }
 
-        /* Sub-Task 1D: Heartbeat Telemetry & BLE Advertisement (10 Hz) */
-        if ((now_ms - last_telemetry_ms) >= 100U)
+        /* Sub-Task 1D: Adaptive Heartbeat Telemetry & BLE Advertisement */
+        /* Rate: 10 Hz (every 100ms) during active hazards/alarms. 2 Hz (every 500ms) when SAFE/IDLE. */
+        uint32_t active_telemetry_period_ms = 500U;
+        if ((s_glasses_mode == SYS_STATE_WATCH) || (s_glasses_mode == SYS_STATE_FALL_CONFIRMED) || (s_glasses_mode == SYS_STATE_HARD_FAULT))
+        {
+            active_telemetry_period_ms = 100U;
+        }
+
+        if ((now_ms - last_telemetry_ms) >= active_telemetry_period_ms)
         {
             last_telemetry_ms = now_ms;
             bool radar_timeout = (now_ms - last_valid_radar_frame_ms) > 500U;

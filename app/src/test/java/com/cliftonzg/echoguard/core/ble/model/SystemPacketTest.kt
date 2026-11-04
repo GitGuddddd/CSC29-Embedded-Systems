@@ -78,6 +78,59 @@ class SystemPacketTest {
     }
 
     @Test
+    fun `parse 6-byte compact packet decodes all fields correctly`() {
+        // Byte 0: Sync 0xA + PairID 0x1 -> 0xA1
+        // Byte 1: Node Type Glasses (0) + Heartbeat Seq 3 + Rolling Fall Seq 5 -> 0x35
+        // Byte 2: Flags: Fall (1) + Radar Fault (2) = 0x03
+        // Byte 3: Dist Low: 1200 mm -> 600 units (0x0258) -> distLow = 0x58
+        // Byte 4: Dist High (0x2) + TTC Low (1000 ms -> 50 units = 0x032 -> low = 0x2) -> 0x22
+        // Byte 5: TTC High (0x03) -> 0x03
+        val data = byteArrayOf(
+            0xA1.toByte(),
+            0x35.toByte(),
+            0x03.toByte(),
+            0x58.toByte(),
+            0x22.toByte(),
+            0x03.toByte(),
+        )
+
+        val packet = SystemPacket.parse(data)
+        assertNotNull(packet)
+        assertTrue(packet?.compactFormat == true)
+        assertTrue(packet?.isAdvanced == true)
+        assertEquals(0xAA, packet?.magic)
+        assertEquals(2, packet?.deviceId)
+        assertEquals(1, packet?.pairId)
+        assertEquals(3, packet?.seqNum)
+        assertEquals(5, packet?.rollingFallSeq)
+        assertEquals(3, packet?.stateFlags)
+        assertTrue(packet?.isFallAlert == true)
+        assertTrue(packet?.isRadarFault == true)
+        assertEquals(1200, packet?.radarDistMm)
+        assertEquals(1000, packet?.ttcMs)
+    }
+
+    @Test
+    fun `parse 6-byte compact packet handles no target and no threat sentinels`() {
+        // Dist raw = 0xFFF (-1 / no target), TTC raw = 0xFFF (-1 / no threat)
+        val data = byteArrayOf(
+            0xA1.toByte(),
+            0x90.toByte(), // Cane node (1 << 7), hbSeq=1, fallSeq=0
+            0x00.toByte(),
+            0xFF.toByte(),
+            0xFF.toByte(),
+            0xFF.toByte(),
+        )
+
+        val packet = SystemPacket.parse(data)
+        assertNotNull(packet)
+        assertTrue(packet?.compactFormat == true)
+        assertEquals(1, packet?.deviceId)
+        assertEquals(-1, packet?.radarDistMm)
+        assertEquals(-1, packet?.ttcMs)
+    }
+
+    @Test
     fun `threatLevel evaluates correctly based on distance`() {
         val criticalPacket = SystemPacket(magic = 0xAA, seqNum = 1, radarDistMm = 450, checksum = 0)
         assertEquals(ThreatLevel.CRITICAL, criticalPacket.threatLevel)
@@ -106,5 +159,9 @@ class SystemPacketTest {
         // Wrap-around check for 16-bit sequence (max 65536)
         val packetWrap16 = SystemPacket(magic = 0xAA, seqNum = 5, radarDistMm = 500, checksum = 0, isAdvanced = true)
         assertTrue(packetWrap16.isNewerThan(65530))
+
+        // Wrap-around check for compact 3-bit sequence (max 8)
+        val packetWrap3Bit = SystemPacket(magic = 0xAA, seqNum = 0, radarDistMm = 500, checksum = 0, compactFormat = true)
+        assertTrue(packetWrap3Bit.isNewerThan(7))
     }
 }

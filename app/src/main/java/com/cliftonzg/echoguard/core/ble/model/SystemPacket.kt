@@ -11,7 +11,8 @@ enum class ThreatLevel {
 
 /**
  * Represents a packet received over BLE from the EchoGuard system.
- * Supports 5-byte basic packet schema, 10-byte, and 11-byte AdvancedThreatPacket schema.
+ * Supports 5-byte basic packet schema, 10-11 byte AdvancedThreatPacket schema,
+ * and the compact 6-byte packed schema (minimum-bit curveball response).
  */
 data class SystemPacket(
     val magic: Int,
@@ -23,6 +24,9 @@ data class SystemPacket(
     val closingSpeedCms: Int = 0,
     val ttcMs: Int = 0,
     val isAdvanced: Boolean = false,
+    val compactFormat: Boolean = false,
+    val rollingFallSeq: Int = 0,
+    val pairId: Int = 0,
     val receivedAt: Long = System.currentTimeMillis(),
 ) {
     val isFallAlert: Boolean get() = (stateFlags and FLAG_FALL_ALERT) != 0
@@ -39,7 +43,7 @@ data class SystemPacket(
         }
 
     fun isValid(): Boolean {
-        // Strict EchoGuard System Preamble: Must be 0xAA
+        if (compactFormat) return isCompactValid()
         if (magic != 0xAA) return false
 
         if (isAdvanced) {
@@ -51,6 +55,11 @@ data class SystemPacket(
         return calculated == (checksum and 0xFF)
     }
 
+    private fun isCompactValid(): Boolean {
+        // Compact 6-byte packed schema: deviceId derived from node type (0x01=Cane, 0x02=Glasses)
+        return (deviceId == 0x01 || deviceId == 0x02) && pairId in 0 until 16
+    }
+
     /**
      * Monotonic sequence number check per FR15.
      * Rejects stale or out-of-order sequence numbers (accounting for wrap-around).
@@ -58,9 +67,13 @@ data class SystemPacket(
     fun isNewerThan(lastSeqNum: Int): Boolean {
         if (lastSeqNum < 0) return true
         if (seqNum == lastSeqNum) return false
-        val maxSeq = if (isAdvanced) 65536 else 256
+        val maxSeq = when {
+            compactFormat -> 8  // 3-bit heartbeat sequence (0-7)
+            isAdvanced -> 65536 // 16-bit sequence
+            else -> 256         // 8-bit sequence
+        }
         val diff = ((seqNum - lastSeqNum) + maxSeq) % maxSeq
-        return diff in 1 until (maxSeq - 1)
+        return diff in 1..(maxSeq / 2)
     }
 
     companion object {
@@ -95,6 +108,64 @@ data class SystemPacket(
                     )
                     if (packet.isValid()) {
                         Log.i("EchoGuardBLE", "Parsed VALID Advanced Packet: devId=0x%02X, seq=$seq, dist=$dist mm, flags=0x%02X".format(devId, flags))
+                        packet
+                    } else {
+                        null
+                    }
+                }
+                data.size == 6 -> {
+                    // Compact 6-byte Packed Schema (minimum-bit curveball response):
+                    // Byte 0: [Sync Nibble 0xA (4b) | Pair ID (4b)]
+                    // Byte 1: [Node Type (1b) | Heartbeat Seq (3b) | Rolling Fall Seq (4b)]
+                    // Byte 2: [State Flags (8b)]
+                    // Byte 3: [Distance Low (8b)]        Units: 2mm
+                    // Byte 4: [Distance High (4b) | TTC Low (4b)]
+                    // Byte 5: [TTC High (8b)]            Units: 20ms
+                    val preamblePairId = data[0].toInt() and 0xFF
+                    val syncNibble = (preamblePairId shr 4) and 0x0F
+                    val pairId = preamblePairId and 0x0F
+
+                    // Validate sync nibble
+                    if (syncNibble != 0x0A) return null
+
+                    val typeSeqFall = data[1].toInt() and 0xFF
+                    val nodeType = (typeSeqFall shr 7) and 0x01      // 0=Glasses, 1=Cane
+                    val heartbeatSeq = (typeSeqFall shr 4) and 0x07   // 3-bit
+                    val rollingFallSeq = typeSeqFall and 0x0F         // 4-bit
+
+                    val stateFlags = data[2].toInt() and 0xFF
+
+                    val distLow = data[3].toInt() and 0xFF
+                    val distHighTtcLow = data[4].toInt() and 0xFF
+                    val ttcHigh = data[5].toInt() and 0xFF
+
+                    // Decode 12-bit distance (2mm steps, 0-8190mm, 0xFFF=no target)
+                    val distRaw = distLow or (((distHighTtcLow shr 4) and 0x0F) shl 8)
+                    val nearestDistMm = if (distRaw >= 0x0FFF) -1 else distRaw * 2
+
+                    // Decode 12-bit TTC (20ms steps, 0-81900ms, 0xFFF=no threat)
+                    val ttcRaw = (distHighTtcLow and 0x0F) or (ttcHigh shl 4)
+                    val ttcMsVal = if (ttcRaw >= 0x0FFF) -1 else ttcRaw * 20
+
+                    val deviceId = if (nodeType == 1) 0x01 else 0x02
+
+                    val packet = SystemPacket(
+                        magic = 0xAA, // Synthetic preamble for UI compatibility
+                        seqNum = heartbeatSeq,
+                        radarDistMm = nearestDistMm,
+                        checksum = 0,
+                        deviceId = deviceId,
+                        stateFlags = stateFlags,
+                        closingSpeedCms = 0,
+                        ttcMs = ttcMsVal,
+                        isAdvanced = true,
+                        compactFormat = true,
+                        rollingFallSeq = rollingFallSeq,
+                        pairId = pairId,
+                        receivedAt = timestamp,
+                    )
+                    if (packet.isValid()) {
+                        Log.i("EchoGuardBLE", "Parsed VALID Compact Packet: devId=0x%02X, hbSeq=$heartbeatSeq, fallSeq=$rollingFallSeq, dist=$nearestDistMm mm, ttc=$ttcMsVal ms, flags=0x%02X".format(deviceId, stateFlags))
                         packet
                     } else {
                         null

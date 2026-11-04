@@ -163,7 +163,7 @@ class BleScannerEngine @Inject constructor(
             val length = raw[index].toInt() and 0xFF
             if (length == 0 || index + length >= raw.size) break
             val type = raw[index + 1].toInt() and 0xFF
-            if (type == 0xFF && length >= 12) {
+            if (type == 0xFF && length >= 9) {
                 val companyId = (raw[index + 2].toInt() and 0xFF) or ((raw[index + 3].toInt() and 0xFF) shl 8)
                 if (companyId == 0x0029 || companyId == 0x2900) {
                     val dataLen = length - 3

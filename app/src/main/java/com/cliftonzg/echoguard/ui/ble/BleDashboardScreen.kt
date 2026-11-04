@@ -220,13 +220,18 @@ fun BleDashboardContent(
                         )
 
                         Spacer(Modifier.height(8.dp))
+                        val formattedDist = when {
+                            p.radarDistMm < 0 -> "No Target"
+                            p.isRadarFault && p.radarDistMm == 0 -> "0 mm (OBSTRUCTED)"
+                            else -> "${p.radarDistMm} mm"
+                        }
                         Text(
-                            text = if (p.isRadarFault && p.radarDistMm == 0) "0 mm (OBSTRUCTED)" else "${p.radarDistMm} mm",
+                            text = formattedDist,
                             style = MaterialTheme.typography.displayMedium,
                             color = Color.White,
                         )
 
-                        val progress = (p.radarDistMm / 2000f).coerceIn(0f, 1f)
+                        val progress = if (p.radarDistMm < 0) 0f else (p.radarDistMm / 2000f).coerceIn(0f, 1f)
                         Spacer(Modifier.height(6.dp))
                         LinearProgressIndicator(
                             progress = progress,
@@ -251,8 +256,9 @@ fun BleDashboardContent(
                                     color = Color.White.copy(alpha = 0.8f),
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
+                                val ttcText = if (activeGlasses.ttcMs < 0) "TTC: None" else "TTC: ${activeGlasses.ttcMs} ms"
                                 Text(
-                                    text = "TTC: ${activeGlasses.ttcMs} ms",
+                                    text = ttcText,
                                     color = Color.White.copy(alpha = 0.8f),
                                     style = MaterialTheme.typography.bodyMedium,
                                 )

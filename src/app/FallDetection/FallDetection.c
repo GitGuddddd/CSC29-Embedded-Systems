@@ -2,6 +2,12 @@
 #include "FallDetection_Cfg.h"
 #include <stddef.h>
 
+#ifdef PICO_ON_DEVICE
+#include "pico.h"
+#else
+#define __not_in_flash_func(func_name) func_name
+#endif
+
 /*
  * \file FallDetection.c
  * \brief Pure algorithmic fall detection state machine
@@ -84,7 +90,7 @@ const char * FallDetection_GetStateName(void)
     return s_state_names[s_state];
 }
 
-bool FallDetection_Step(const Imu_Sample_t * const p_sample, uint32_t now_ms)
+bool __not_in_flash_func(FallDetection_Step)(const Imu_Sample_t * const p_sample, uint32_t now_ms)
 {
     if (p_sample == NULL)
     {

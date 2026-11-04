@@ -131,17 +131,32 @@ class SystemPacketTest {
     }
 
     @Test
-    fun `threatLevel evaluates correctly based on distance`() {
-        val criticalPacket = SystemPacket(magic = 0xAA, seqNum = 1, radarDistMm = 450, checksum = 0)
-        assertEquals(ThreatLevel.CRITICAL, criticalPacket.threatLevel)
+    fun `threatLevel evaluates correctly based on sensor type and distance`() {
+        // Glasses Radar (Forward obstacle sensor): close = CRITICAL (Red)
+        val glassesCritical = SystemPacket(magic = 0xAA, deviceId = 0x02, seqNum = 1, radarDistMm = 450, checksum = 0)
+        assertEquals(ThreatLevel.CRITICAL, glassesCritical.threatLevel)
 
-        val warningPacket = SystemPacket(magic = 0xAA, seqNum = 2, radarDistMm = 1200, checksum = 0)
-        assertEquals(ThreatLevel.WARNING, warningPacket.threatLevel)
+        val glassesWarning = SystemPacket(magic = 0xAA, deviceId = 0x02, seqNum = 2, radarDistMm = 1200, checksum = 0)
+        assertEquals(ThreatLevel.WARNING, glassesWarning.threatLevel)
 
-        val safePacket = SystemPacket(magic = 0xAA, seqNum = 3, radarDistMm = 1800, checksum = 0)
-        assertEquals(ThreatLevel.SAFE, safePacket.threatLevel)
+        val glassesSafe = SystemPacket(magic = 0xAA, deviceId = 0x02, seqNum = 3, radarDistMm = 1800, checksum = 0)
+        assertEquals(ThreatLevel.SAFE, glassesSafe.threatLevel)
 
-        val unknownPacket = SystemPacket(magic = 0xAA, seqNum = 4, radarDistMm = 0, checksum = 0)
+        // Cane ToF (Downward ground sensor): small distance (solid ground) = SAFE (Green)
+        val caneSolidGround = SystemPacket(magic = 0xAA, deviceId = 0x01, seqNum = 1, radarDistMm = 300, checksum = 0)
+        assertEquals(ThreatLevel.SAFE, caneSolidGround.threatLevel)
+
+        val caneNormalGround = SystemPacket(magic = 0xAA, deviceId = 0x01, seqNum = 2, radarDistMm = 1000, checksum = 0)
+        assertEquals(ThreatLevel.SAFE, caneNormalGround.threatLevel)
+
+        // Cane ToF: large distance or -1 (cliff / drop-off / hole) = CRITICAL (Red)
+        val caneCliff = SystemPacket(magic = 0xAA, deviceId = 0x01, seqNum = 3, radarDistMm = 2000, checksum = 0)
+        assertEquals(ThreatLevel.CRITICAL, caneCliff.threatLevel)
+
+        val caneDropOff = SystemPacket(magic = 0xAA, deviceId = 0x01, seqNum = 4, radarDistMm = -1, checksum = 0)
+        assertEquals(ThreatLevel.CRITICAL, caneDropOff.threatLevel)
+
+        val unknownPacket = SystemPacket(magic = 0xAA, deviceId = 0x01, seqNum = 5, radarDistMm = 0, checksum = 0)
         assertEquals(ThreatLevel.UNKNOWN, unknownPacket.threatLevel)
     }
 

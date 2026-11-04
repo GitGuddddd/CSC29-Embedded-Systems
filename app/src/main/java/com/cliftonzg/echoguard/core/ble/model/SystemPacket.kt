@@ -36,10 +36,28 @@ data class SystemPacket(
     val threatLevel: ThreatLevel
         get() = when {
             isFallAlert || isRadarFault -> ThreatLevel.CRITICAL
-            (radarDistMm in 1..799) -> ThreatLevel.CRITICAL
-            (radarDistMm in 800..1500) -> ThreatLevel.WARNING
-            radarDistMm > 1500 -> ThreatLevel.SAFE
-            else -> ThreatLevel.UNKNOWN
+            deviceId == 0x01 -> {
+                // Cane ToF (Downward ground sensor):
+                // Small distances (1..1500 mm) = Solid ground under cane -> SAFE (Green)
+                // Large distances (> 1500 mm or -1 / 0xFFFF) = Cliff / hole / drop-off -> CRITICAL (Red)
+                when {
+                    radarDistMm in 1..1500 -> ThreatLevel.SAFE
+                    radarDistMm > 1500 || radarDistMm < 0 -> ThreatLevel.CRITICAL
+                    else -> ThreatLevel.UNKNOWN
+                }
+            }
+            else -> {
+                // Glasses Radar (Forward obstacle sensor):
+                // Small distances (< 800 mm) = Proximity Danger -> CRITICAL (Red)
+                // Medium distances (800..1500 mm) = WARNING (Orange)
+                // Far distances (> 1500 mm or -1 / no target) = SAFE (Green)
+                when {
+                    radarDistMm in 1..799 -> ThreatLevel.CRITICAL
+                    radarDistMm in 800..1500 -> ThreatLevel.WARNING
+                    radarDistMm > 1500 || radarDistMm < 0 -> ThreatLevel.SAFE
+                    else -> ThreatLevel.UNKNOWN
+                }
+            }
         }
 
     fun isValid(): Boolean {

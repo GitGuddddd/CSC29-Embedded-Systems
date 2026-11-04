@@ -30,6 +30,16 @@ typedef enum
     GP_RANGE_INVALID
 } Gp_Quality_t;
 
+/* How the last calibration ended; every outcome except DONE keeps the previous baseline */
+typedef enum
+{
+    GP_CAL_EVENT_NONE = 0U,
+    GP_CAL_EVENT_DONE,
+    GP_CAL_EVENT_TIMEOUT,
+    GP_CAL_EVENT_SENSOR_FAULT,
+    GP_CAL_EVENT_CANCELLED
+} Gp_CalEvent_t;
+
 typedef struct
 {
     Gp_State_t state;
@@ -50,6 +60,8 @@ typedef struct
     uint16_t cal_min;
     uint16_t cal_max;
     uint32_t cal_sum;
+    uint32_t cal_start_ms;
+    Gp_CalEvent_t cal_event;
 
     uint32_t last_sample_ms;
 
@@ -62,9 +74,11 @@ void GroundProjection_Init(Gp_Detector_t * const p_d, uint32_t now_ms);
 void GroundProjection_SetArmed(Gp_Detector_t * const p_d, bool armed, uint32_t now_ms);
 void GroundProjection_StartCalibration(Gp_Detector_t * const p_d, uint32_t now_ms);
 void GroundProjection_CancelCalibration(Gp_Detector_t * const p_d, uint32_t now_ms);
+Gp_CalEvent_t GroundProjection_TakeCalEvent(Gp_Detector_t * const p_d);
 void GroundProjection_Feed(Gp_Detector_t * const p_d, Gp_Quality_t quality, uint16_t range_mm, uint32_t now_ms);
 void GroundProjection_Tick(Gp_Detector_t * const p_d, uint32_t now_ms);
 Alert_Type_t GroundProjection_GetHapticRequest(const Gp_Detector_t * const p_d);
 const char * GroundProjection_GetStateName(Gp_State_t state);
+const char * GroundProjection_GetCalEventName(Gp_CalEvent_t event);
 
 #endif /* GROUNDPROJECTION_H */

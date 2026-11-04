@@ -24,6 +24,10 @@ static Alert_Type_t s_active_pattern = ALERT_NONE;
 static uint32_t s_pattern_start_ms = 0U;
 static bool s_motor_on = false;
 
+static Alert_Type_t s_oneshot = ALERT_NONE;
+static uint32_t s_oneshot_start_ms = 0U;
+static uint32_t s_oneshot_len_ms = 0U;
+
 static bool Get_Pattern(Alert_Type_t type, Haptic_Pattern_t * const p_out)
 {
     switch (type)
@@ -48,6 +52,18 @@ static bool Get_Pattern(Alert_Type_t type, Haptic_Pattern_t * const p_out)
             *p_out = (Haptic_Pattern_t){ HAPTIC_CFG_CALPROMPT_PULSES, HAPTIC_CFG_CALPROMPT_PULSE_MS,
                                          HAPTIC_CFG_CALPROMPT_GAP_MS, HAPTIC_CFG_CALPROMPT_PERIOD_MS };
             return true;
+        case ALERT_CAL_STARTED:
+            *p_out = (Haptic_Pattern_t){ HAPTIC_CFG_CALSTART_PULSES, HAPTIC_CFG_CALSTART_PULSE_MS,
+                                         HAPTIC_CFG_CALSTART_GAP_MS, HAPTIC_CFG_CALSTART_PERIOD_MS };
+            return true;
+        case ALERT_CAL_DONE:
+            *p_out = (Haptic_Pattern_t){ HAPTIC_CFG_CALDONE_PULSES, HAPTIC_CFG_CALDONE_PULSE_MS,
+                                         HAPTIC_CFG_CALDONE_GAP_MS, HAPTIC_CFG_CALDONE_PERIOD_MS };
+            return true;
+        case ALERT_CAL_FAILED:
+            *p_out = (Haptic_Pattern_t){ HAPTIC_CFG_CALFAIL_PULSES, HAPTIC_CFG_CALFAIL_PULSE_MS,
+                                         HAPTIC_CFG_CALFAIL_GAP_MS, HAPTIC_CFG_CALFAIL_PERIOD_MS };
+            return true;
         default:
             return false;
     }
@@ -58,11 +74,14 @@ static uint8_t Get_Priority(Alert_Type_t type)
 {
     switch (type)
     {
-        case ALERT_CLIFF_WARNING:    return 5U;
-        case ALERT_CLIFF_STEP_UP:    return 4U;
-        case ALERT_SENSOR_FAULT:     return 3U;
-        case ALERT_LINK_LOSS:        return 2U;
-        case ALERT_CALIBRATE_PROMPT: return 1U;
+        case ALERT_CLIFF_WARNING:    return 7U;
+        case ALERT_CLIFF_STEP_UP:    return 6U;
+        case ALERT_CAL_STARTED:
+        case ALERT_CAL_DONE:
+        case ALERT_CAL_FAILED:       return 5U;
+        case ALERT_SENSOR_FAULT:     return 4U;
+        case ALERT_LINK_LOSS:        return 3U;
+        case ALERT_CALIBRATE_PROMPT: return 2U;
         default:                     return 0U;
     }
 }
@@ -102,6 +121,9 @@ void Haptic_Init(const Haptic_Config_t * const p_cfg)
     s_active_pattern = ALERT_NONE;
     s_pattern_start_ms = 0U;
     s_motor_on = false;
+    s_oneshot = ALERT_NONE;
+    s_oneshot_start_ms = 0U;
+    s_oneshot_len_ms = 0U;
 }
 
 void Haptic_Request(Haptic_Source_t source, Alert_Type_t pattern_type)
@@ -110,6 +132,21 @@ void Haptic_Request(Haptic_Source_t source, Alert_Type_t pattern_type)
     {
         s_requests[source] = pattern_type;
     }
+}
+
+void Haptic_PlayOnce(Alert_Type_t pattern_type, uint32_t now_ms)
+{
+    Haptic_Pattern_t pat;
+    if (!Get_Pattern(pattern_type, &pat))
+    {
+        return;
+    }
+
+    /* A new one-shot replaces any unfinished one */
+    s_oneshot = pattern_type;
+    s_oneshot_start_ms = now_ms;
+    s_oneshot_len_ms = ((uint32_t)pat.pulses * pat.pulse_ms) +
+                       ((uint32_t)(pat.pulses - 1U) * pat.gap_ms);
 }
 
 void Haptic_SetGripHeld(bool held)
@@ -122,6 +159,13 @@ void Haptic_Step(uint32_t now_ms)
     Alert_Type_t winner = ALERT_NONE;
     uint8_t best = 0U;
 
+    /* A one-shot cue expires after it has played once, whether or not it was felt */
+    if ((s_oneshot != ALERT_NONE) &&
+        ((uint32_t)(now_ms - s_oneshot_start_ms) >= s_oneshot_len_ms))
+    {
+        s_oneshot = ALERT_NONE;
+    }
+
     if (s_grip_held)
     {
         for (uint32_t i = 0U; i < (uint32_t)HAPTIC_SRC_COUNT; ++i)
@@ -132,6 +176,12 @@ void Haptic_Step(uint32_t now_ms)
                 best = prio;
                 winner = s_requests[i];
             }
+        }
+
+        if (Get_Priority(s_oneshot) > best)
+        {
+            best = Get_Priority(s_oneshot);
+            winner = s_oneshot;
         }
     }
 
@@ -149,7 +199,9 @@ void Haptic_Step(uint32_t now_ms)
         return;
     }
 
-    uint32_t t = (uint32_t)(now_ms - s_pattern_start_ms) % pat.period_ms;
+    /* A one-shot keeps its own timeline, so pre-empting it never replays it from the start */
+    uint32_t start_ms = (s_active_pattern == s_oneshot) ? s_oneshot_start_ms : s_pattern_start_ms;
+    uint32_t t = (uint32_t)(now_ms - start_ms) % pat.period_ms;
     uint32_t slot_ms = (uint32_t)pat.pulse_ms + (uint32_t)pat.gap_ms;
     bool on = ((t / slot_ms) < pat.pulses) && ((t % slot_ms) < pat.pulse_ms);
 

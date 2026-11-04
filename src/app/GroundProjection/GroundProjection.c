@@ -75,8 +75,22 @@ void GroundProjection_StartCalibration(Gp_Detector_t * const p_d, uint32_t now_m
     Reset_CalibrationSamples(p_d);
     p_d->change_pending = false;
 
+    p_d->cal_start_ms = now_ms;
+    p_d->cal_event = GP_CAL_EVENT_NONE;
     p_d->last_sample_ms = now_ms;
     p_d->state = (p_d->is_armed) ? GP_STATE_CALIBRATING : GP_STATE_DISARMED;
+}
+
+/* Drop the partial window; classification resumes on the old baseline if there is one */
+static void Abort_Calibration(Gp_Detector_t * const p_d, uint32_t now_ms, Gp_CalEvent_t reason)
+{
+    Reset_Votes(p_d);
+    Reset_History(p_d);
+    Reset_CalibrationSamples(p_d);
+
+    p_d->cal_event = reason;
+    p_d->last_sample_ms = now_ms;
+    p_d->state = GP_STATE_UNKNOWN;
 }
 
 void GroundProjection_CancelCalibration(Gp_Detector_t * const p_d, uint32_t now_ms)
@@ -86,13 +100,19 @@ void GroundProjection_CancelCalibration(Gp_Detector_t * const p_d, uint32_t now_
         return;
     }
 
-    /* Drop the partial window; classification resumes on the old baseline if there is one */
-    Reset_Votes(p_d);
-    Reset_History(p_d);
-    Reset_CalibrationSamples(p_d);
+    Abort_Calibration(p_d, now_ms, GP_CAL_EVENT_CANCELLED);
+}
 
-    p_d->last_sample_ms = now_ms;
-    p_d->state = GP_STATE_UNKNOWN;
+Gp_CalEvent_t GroundProjection_TakeCalEvent(Gp_Detector_t * const p_d)
+{
+    if (p_d == NULL)
+    {
+        return GP_CAL_EVENT_NONE;
+    }
+
+    Gp_CalEvent_t event = p_d->cal_event;
+    p_d->cal_event = GP_CAL_EVENT_NONE;
+    return event;
 }
 
 void GroundProjection_Tick(Gp_Detector_t * const p_d, uint32_t now_ms)
@@ -102,8 +122,19 @@ void GroundProjection_Tick(Gp_Detector_t * const p_d, uint32_t now_ms)
         return;
     }
 
+    /* Not enough steady readings in time (cane moving, uneven ground): give up */
+    if ((p_d->state == GP_STATE_CALIBRATING) &&
+        ((uint32_t)(now_ms - p_d->cal_start_ms) >= GP_CAL_TIMEOUT_MS))
+    {
+        Abort_Calibration(p_d, now_ms, GP_CAL_EVENT_TIMEOUT);
+    }
+
     if ((uint32_t)(now_ms - p_d->last_sample_ms) >= GP_STALE_TIMEOUT_MS)
     {
+        if (p_d->state == GP_STATE_CALIBRATING)
+        {
+            p_d->cal_event = GP_CAL_EVENT_SENSOR_FAULT;
+        }
         p_d->state = GP_STATE_SENSOR_FAULT;
         Reset_Votes(p_d);
         Reset_History(p_d);
@@ -255,6 +286,7 @@ void GroundProjection_Feed(Gp_Detector_t * const p_d,
             p_d->baseline_mm = (uint16_t)(p_d->cal_sum / GP_CAL_SAMPLES);
             p_d->filtered_mm = p_d->baseline_mm;
             p_d->is_calibrated = true;
+            p_d->cal_event = GP_CAL_EVENT_DONE;
 
             Reset_History(p_d);
             Reset_Votes(p_d);
@@ -386,6 +418,19 @@ Alert_Type_t GroundProjection_GetHapticRequest(const Gp_Detector_t * const p_d)
             return (p_d->is_calibrated) ? ALERT_NONE : ALERT_CALIBRATE_PROMPT;
         default:
             return ALERT_NONE;
+    }
+}
+
+const char * GroundProjection_GetCalEventName(Gp_CalEvent_t event)
+{
+    switch (event)
+    {
+        case GP_CAL_EVENT_NONE:         return "NONE";
+        case GP_CAL_EVENT_DONE:         return "DONE";
+        case GP_CAL_EVENT_TIMEOUT:      return "TIMEOUT (no steady level reading within 10 s)";
+        case GP_CAL_EVENT_SENSOR_FAULT: return "SENSOR_FAULT (no ToF reading for 500 ms)";
+        case GP_CAL_EVENT_CANCELLED:    return "CANCELLED (cane released)";
+        default:                        return "INVALID_EVENT";
     }
 }
 

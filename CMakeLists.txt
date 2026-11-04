@@ -67,6 +67,8 @@ if (BUILD_FOR_PICO_TARGET)
         src/drivers/Vl53l0x/Vl53l0x_Lcfg.c
         src/drivers/TouchSensor/TouchSensor.c
         src/drivers/TouchSensor/TouchSensor_Lcfg.c
+        src/drivers/CalButton/CalButton.c
+        src/drivers/CalButton/CalButton_Lcfg.c
         src/drivers/Haptic/Haptic.c
         src/drivers/Haptic/Haptic_Lcfg.c
         src/drivers/Buzzer/Buzzer.c
@@ -195,6 +197,16 @@ add_executable(test_Haptic
 )
 target_link_libraries(test_Haptic PRIVATE unity)
 add_test(NAME Unit_Haptic COMMAND test_Haptic)
+
+# 2c. Cane calibration button (GP20) Unit Test
+add_executable(test_CalButton
+    tests/unit/test_CalButton.c
+    src/drivers/CalButton/CalButton.c
+    src/drivers/CalButton/CalButton_Lcfg.c
+    src/hal/Hal_Gpio.c
+)
+target_link_libraries(test_CalButton PRIVATE unity)
+add_test(NAME Unit_CalButton COMMAND test_CalButton)
 
 # 3. ThreatAssessment Unit Test
 add_executable(test_ThreatAssessment

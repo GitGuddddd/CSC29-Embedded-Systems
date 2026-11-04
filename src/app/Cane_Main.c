@@ -11,6 +11,7 @@
 #include "drivers/Vl53l1x/Vl53l1x.h"
 #include "drivers/Vl53l0x/Vl53l0x.h"
 #include "drivers/TouchSensor/TouchSensor.h"
+#include "drivers/CalButton/CalButton.h"
 #include "drivers/Haptic/Haptic.h"
 #include "drivers/Buzzer/Buzzer.h"
 #include "services/BleComm/BleComm.h"
@@ -47,6 +48,23 @@ static uint32_t GetCurrentTimeMs(void)
 }
 
 /*
+ * Starts ground calibration from the GP20 button or serial 'c'. It needs the
+ * grip: the user must be holding the cane in walking position to feel the cues.
+ */
+static void Ground_StartCalibration(uint32_t now_ms, bool grip_held, const char * p_source)
+{
+    if (!grip_held)
+    {
+        printf("[GROUND] Grip the cane before calibrating (%s).\n", p_source);
+        return;
+    }
+
+    GroundProjection_StartCalibration(&s_ground_detector, now_ms);
+    Haptic_PlayOnce(ALERT_CAL_STARTED, now_ms);
+    printf("[GROUND] Calibrating (%s): hold the cane still on level ground...\n", p_source);
+}
+
+/*
  * Core 1 Entry: Dedicated to CYW43439 SPI radio I/O & BLE Broadcaster/Observer
  */
 static void Core1_Entry(void)
@@ -76,6 +94,7 @@ int main(void)
     Hal_I2c_Init(CANE_I2C_TOF_PORT, CANE_PIN_I2C1_SDA, CANE_PIN_I2C1_SCL, 400000U);
 
     TouchSensor_Init(&TouchSensor_Config_Cane);
+    CalButton_Init(&CalButton_Config_Cane);
     Haptic_Init(&Haptic_Config_Cane);
     Buzzer_Init(&Buzzer_Config_Cane);
     Watchdog_Init(&Watchdog_Config_Default);
@@ -94,10 +113,17 @@ int main(void)
 
     FallDetection_Init(&FallConfig_Cane);
     AlertManager_Init();
-    GroundProjection_Init(&s_ground_detector, 0U);
-    GroundProjection_SetArmed(&s_ground_detector, true, 0U);
-    GroundProjection_StartCalibration(&s_ground_detector, 0U);
+    /*
+     * Use the real clock: the 1 s USB wait above means the first ToF sample
+     * arrives > 500 ms after time 0, which the stale-sensor check treated as a
+     * fault and silently killed the boot calibration.
+     */
+    uint32_t boot_ms = GetCurrentTimeMs();
+    GroundProjection_Init(&s_ground_detector, boot_ms);
+    GroundProjection_SetArmed(&s_ground_detector, true, boot_ms);
+    GroundProjection_StartCalibration(&s_ground_detector, boot_ms);
     printf("[GROUND] Auto-calibrating ground height on startup... Hold cane steady.\n");
+    printf("[GROUND] To recalibrate later: grip the cane and hold the GP20 button for 2 s (or send 'c').\n");
 
 #ifdef PICO_ON_DEVICE
     /* Launch Core 1 for BLE wireless communication polling */
@@ -178,12 +204,8 @@ int main(void)
                 else
                 {
                     printf("[TOUCH] Cane released - Fall Watch Armed\n");
-                    if (s_ground_detector.state == GP_STATE_CALIBRATING)
-                    {
-                        GroundProjection_CancelCalibration(&s_ground_detector, now_ms);
-                        printf("[GROUND] Calibration cancelled (cane released). Previous baseline kept: %s\n",
-                               s_ground_detector.is_calibrated ? "yes" : "none");
-                    }
+                    /* Reported as a failed calibration by the ground task */
+                    GroundProjection_CancelCalibration(&s_ground_detector, now_ms);
                 }
                 prev_grip = current_grip;
                 cane_status.grip_state = (uint16_t)current_grip;
@@ -191,23 +213,21 @@ int main(void)
             }
         }
 
-        /* Serial command: 'c' = calibrate ground baseline (every 50 ms) */
+        /* Calibration inputs: GP20 button held 2 s, or serial 'c' for bench tests (every 50 ms) */
         if ((now_ms - last_cmd_ms) >= 50U)
         {
             last_cmd_ms = now_ms;
+            bool grip_held = (prev_grip == GRIP_STATE_HELD);
+
+            if (CalButton_Update(Hal_Gpio_Read(CANE_PIN_CAL_BTN), now_ms) == CALBTN_EVENT_GROUND_HOLD)
+            {
+                Ground_StartCalibration(now_ms, grip_held, "button");
+            }
 #ifdef PICO_ON_DEVICE
             int ch = getchar_timeout_us(0);
             if ((ch == (int)'c') || (ch == (int)'C'))
             {
-                if (prev_grip == GRIP_STATE_HELD)
-                {
-                    GroundProjection_StartCalibration(&s_ground_detector, now_ms);
-                    printf("[GROUND] Calibrating: hold the cane still on level ground...\n");
-                }
-                else
-                {
-                    printf("[GROUND] Grip the cane before calibrating.\n");
-                }
+                Ground_StartCalibration(now_ms, grip_held, "serial");
             }
 #endif
         }
@@ -297,11 +317,26 @@ int main(void)
             if (gstate != last_gstate)
             {
                 printf("[CLIFF] State -> %s (Distance: %u mm)\n", GroundProjection_GetStateName(gstate), last_dist_mm);
-                if ((gstate == GP_STATE_LEVEL) && (last_gstate == GP_STATE_CALIBRATING))
-                {
-                    printf("[GROUND] Calibration complete. Baseline: %u mm\n", s_ground_detector.baseline_mm);
-                }
                 last_gstate = gstate;
+            }
+
+            /* Calibration feedback: 1 s pulse = saved, two 1 s pulses = failed (Week 6 section 6.3) */
+            Gp_CalEvent_t cal_event = GroundProjection_TakeCalEvent(&s_ground_detector);
+            if (cal_event == GP_CAL_EVENT_DONE)
+            {
+                Haptic_PlayOnce(ALERT_CAL_DONE, now_ms);
+                printf("[GROUND] Calibration complete. Baseline: %u mm\n", s_ground_detector.baseline_mm);
+            }
+            else if (cal_event != GP_CAL_EVENT_NONE)
+            {
+                Haptic_PlayOnce(ALERT_CAL_FAILED, now_ms);
+                printf("[GROUND] Calibration failed: %s. Previous baseline kept: %s\n",
+                       GroundProjection_GetCalEventName(cal_event),
+                       s_ground_detector.is_calibrated ? "yes" : "none");
+            }
+            else
+            {
+                /* No calibration finished this cycle */
             }
 
             Alert_Type_t ground_req = (cane_status.tof_obstructed != 0U) ?

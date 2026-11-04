@@ -182,6 +182,69 @@ void test_Haptic_RepeatedRequestDoesNotRestartPattern(void)
     TEST_ASSERT_TRUE(Haptic_IsMotorOn());
 }
 
+static Pulse_Stats_t Measure_Once(Alert_Type_t cue)
+{
+    Haptic_Init(&Haptic_Config_Cane);
+    Haptic_SetGripHeld(true);
+    Haptic_PlayOnce(cue, 0U);
+    return Measure(0U, 5000U);
+}
+
+/* Week 6 section 6.3: start = 1 short pulse, saved = one 1 s pulse, failed = two 1 s pulses, each played once */
+void test_Haptic_CalibrationCues_PlayOnceAndAreDistinct(void)
+{
+    Pulse_Stats_t started = Measure_Once(ALERT_CAL_STARTED);
+    TEST_ASSERT_EQUAL_UINT32(1U, started.pulses);
+    TEST_ASSERT_EQUAL_UINT32(HAPTIC_CFG_CALSTART_PULSE_MS, started.longest_pulse_ms);
+
+    Pulse_Stats_t done = Measure_Once(ALERT_CAL_DONE);
+    TEST_ASSERT_EQUAL_UINT32(1U, done.pulses);
+    TEST_ASSERT_EQUAL_UINT32(HAPTIC_CFG_CALDONE_PULSE_MS, done.longest_pulse_ms);
+
+    Pulse_Stats_t failed = Measure_Once(ALERT_CAL_FAILED);
+    TEST_ASSERT_EQUAL_UINT32(2U, failed.pulses);
+    TEST_ASSERT_EQUAL_UINT32(HAPTIC_CFG_CALFAIL_PULSE_MS, failed.longest_pulse_ms);
+    TEST_ASSERT_EQUAL(ALERT_NONE, Haptic_GetActivePattern());
+
+    /* "Saved" must not feel like caution (1 x 600 ms) and "failed" not like link loss (2 x 500 ms) */
+    TEST_ASSERT_NOT_EQUAL(HAPTIC_CFG_CAUTION_PULSE_MS, done.longest_pulse_ms);
+    TEST_ASSERT_NOT_EQUAL(HAPTIC_CFG_LINKLOSS_PULSE_MS, failed.longest_pulse_ms);
+}
+
+/* The calibration result is felt over a link-loss warning, which then resumes */
+void test_Haptic_CalibrationCueBeatsLinkLossThenLinkLossResumes(void)
+{
+    Haptic_Request(HAPTIC_SRC_LINK, ALERT_LINK_LOSS);
+    Haptic_Step(0U);
+    TEST_ASSERT_EQUAL(ALERT_LINK_LOSS, Haptic_GetActivePattern());
+
+    Haptic_PlayOnce(ALERT_CAL_DONE, 10U);
+    Haptic_Step(10U);
+    TEST_ASSERT_EQUAL(ALERT_CAL_DONE, Haptic_GetActivePattern());
+    TEST_ASSERT_TRUE(Haptic_IsMotorOn());
+
+    Haptic_Step(10U + HAPTIC_CFG_CALDONE_PULSE_MS);
+    TEST_ASSERT_EQUAL(ALERT_LINK_LOSS, Haptic_GetActivePattern());
+}
+
+/* A real hazard still outranks calibration feedback */
+void test_Haptic_StepWarningBeatsCalibrationCue(void)
+{
+    Haptic_PlayOnce(ALERT_CAL_DONE, 0U);
+    Haptic_Request(HAPTIC_SRC_GROUND, ALERT_CLIFF_WARNING);
+    Haptic_Step(0U);
+    TEST_ASSERT_EQUAL(ALERT_CLIFF_WARNING, Haptic_GetActivePattern());
+}
+
+/* Like every cue, calibration feedback is silent while the cane is not gripped */
+void test_Haptic_CalibrationCueSilentWithoutGrip(void)
+{
+    Haptic_SetGripHeld(false);
+    Haptic_PlayOnce(ALERT_CAL_FAILED, 0U);
+    Pulse_Stats_t s = Measure(0U, 3000U);
+    TEST_ASSERT_EQUAL_UINT32(0U, s.pulses);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -192,5 +255,9 @@ int main(void)
     RUN_TEST(test_Haptic_CalibrationPromptIsLowestPriority);
     RUN_TEST(test_Haptic_GripReleaseSilencesEverything);
     RUN_TEST(test_Haptic_RepeatedRequestDoesNotRestartPattern);
+    RUN_TEST(test_Haptic_CalibrationCues_PlayOnceAndAreDistinct);
+    RUN_TEST(test_Haptic_CalibrationCueBeatsLinkLossThenLinkLossResumes);
+    RUN_TEST(test_Haptic_StepWarningBeatsCalibrationCue);
+    RUN_TEST(test_Haptic_CalibrationCueSilentWithoutGrip);
     return UNITY_END();
 }

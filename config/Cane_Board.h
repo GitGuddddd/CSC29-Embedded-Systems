@@ -20,4 +20,7 @@
 #define CANE_PIN_TOUCH_IN         (14U)
 #define CANE_PIN_VIBE_MOTOR       (15U)
 
+/* Maker Pi Pico on-board button: active-low (pressed = GND), internal pull-up */
+#define CANE_PIN_CAL_BTN          (20U)
+
 #endif /* CANE_BOARD_H */

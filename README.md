@@ -20,6 +20,7 @@ Uses an **Asymmetric Multiprocessing (AMP)** model across the RP2040's dual ARM 
 - **Sensor Fusion**: Dynamically projects ToF distance vectors (`VL53L1X` / `VL53L0X`) onto the virtual ground plane using `MPU9250` pitch and roll angle estimates via complementary filtering.
 - **Pendulum Compensation**: Rejects false drop-off alerts caused by the user's natural pendulum cane swinging motion during walking.
 - **Voting Filter**: Applies a 5-sample median filter and 3-vote threshold logic to detect genuine drop-offs (`STEP_DOWN > +150mm`) or curb rises (`STEP_UP <= -80mm`).
+- **Ground Calibration**: Auto-calibrates at power-on. To recalibrate, grip the cane at walking height over level ground and hold the GP20 button for 2 s (or send `c` over serial). Vibration feedback: 1 short pulse = started, one 1 s pulse = saved, two 1 s pulses = failed (no steady reading within 10 s, sensor fault or cane released; the previous baseline is kept). Without a baseline the gripped cane plays 4 quick ticks every 3 s.
 
 ### 2. Dual-Stage Fall Detection Engine
 - **Physics Pipeline**: Monitors 3-axis accelerometer/gyroscope magnitude for free-fall ($|a| < 0.35g$ for cane, $< 0.5g$ for head) followed by impact ($|a| > 2.5g$ within 800–1000 ms) and post-impact stillness/tilt verification.
@@ -54,7 +55,8 @@ Uses an **Asymmetric Multiprocessing (AMP)** model across the RP2040's dual ARM 
 | **MPU9250 IMU** | I2C0 (GP4 SDA / GP5 SCL) | `I2C0_SDA` / `SCL` | 9-DOF IMU for fall detection & pose (`FallDetection`) |
 | **VL53L1X ToF** | I2C1 (GP6 SDA / GP7 SCL) | `I2C1_SDA` / `SCL` | Downward distance measurement (`GroundProjection`) |
 | **Capacitive Touch** | GPIO GP14 | `TOUCH_IN` | Digital grip detection (`TouchSensor`) |
-| **Vibration Motor** | PWM GP15 (Slice 7 Ch A) | `HAPTIC_PWM` | Haptic warning feedback (`Haptic`) |
+| **Vibration Motor** | PWM GP15 (Slice 7 Ch B) | `HAPTIC_PWM` | Haptic warning feedback (`Haptic`) |
+| **Calibration Button** | GPIO GP20 (active-low, pull-up) | `CAL_BTN` | Hold 2 s to calibrate the ground baseline (`CalButton`) |
 | **Piezo Siren** | PWM GP18 (Slice 1 Ch A) | `SIREN_PWM` | Emergency acoustic alarm (`AlertManager`) |
 
 ### Smart Glasses Node (`Glasses_Node` - Pico 2)
@@ -88,6 +90,7 @@ Uses an **Asymmetric Multiprocessing (AMP)** model across the RP2040's dual ARM 
 │   │   └── threat_assessment/      # mmWave radar threat classification, corridor gate & TTC
 │   ├── drivers/                    # Hardware Peripheral Drivers
 │   │   ├── Buzzer/                 # Piezo buzzer PWM frequency driver
+│   │   ├── CalButton/              # Cane calibration button (GP20) debounce & 2 s hold
 │   │   ├── Haptic/                 # Vibration motor pulse pattern driver & non-blocking arbiter
 │   │   ├── Ld2450/                 # HLK-LD2450 mmWave radar driver & UART stream buffer
 │   │   ├── Mpu9250/                # MPU9250 / MPU6500 IMU I2C driver

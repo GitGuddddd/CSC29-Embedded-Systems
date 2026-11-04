@@ -9,6 +9,8 @@
 
 #define GP_CAL_SAMPLES            (25U)
 #define GP_CAL_SPREAD_MM          (40U)
+/* A calibration that has not collected GP_CAL_SAMPLES steady readings by then fails (Week 6 section 6.3) */
+#define GP_CAL_TIMEOUT_MS         (10000U)
 #define GP_MIN_RANGE_MM           (100U)
 #define GP_MAX_RANGE_MM           (3000U)
 

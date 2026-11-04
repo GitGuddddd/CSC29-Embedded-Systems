@@ -43,4 +43,26 @@
 #define HAPTIC_CFG_CALPROMPT_GAP_MS    (80U)
 #define HAPTIC_CFG_CALPROMPT_PERIOD_MS (3000U)
 
+/*
+ * Calibration feedback (Week 6 section 6.3 field procedure). These play once
+ * through Haptic_PlayOnce(); the period equals the cue length.
+ */
+/* Started: 1 short pulse */
+#define HAPTIC_CFG_CALSTART_PULSES     (1U)
+#define HAPTIC_CFG_CALSTART_PULSE_MS   (150U)
+#define HAPTIC_CFG_CALSTART_GAP_MS     (0U)
+#define HAPTIC_CFG_CALSTART_PERIOD_MS  (150U)
+
+/* Baseline saved: 1 pulse of 1 s */
+#define HAPTIC_CFG_CALDONE_PULSES      (1U)
+#define HAPTIC_CFG_CALDONE_PULSE_MS    (1000U)
+#define HAPTIC_CFG_CALDONE_GAP_MS      (0U)
+#define HAPTIC_CFG_CALDONE_PERIOD_MS   (1000U)
+
+/* Failed, previous baseline kept: 2 pulses of 1 s */
+#define HAPTIC_CFG_CALFAIL_PULSES      (2U)
+#define HAPTIC_CFG_CALFAIL_PULSE_MS    (1000U)
+#define HAPTIC_CFG_CALFAIL_GAP_MS      (300U)
+#define HAPTIC_CFG_CALFAIL_PERIOD_MS   (2300U)
+
 #endif /* HAPTIC_CFG_H */

@@ -10,6 +10,13 @@ cmake_minimum_required(VERSION 3.13)
 # Option to build host tests or target firmware
 option(BUILD_TESTS "Build host unit, integration, and fuzz test suite" OFF)
 
+# Set FREERTOS_CONFIG_FILE_DIRECTORY and FREERTOS_PORT before project() or FetchContent
+if (NOT BUILD_TESTS)
+    set(FREERTOS_CONFIG_FILE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/config" CACHE PATH "Directory containing FreeRTOSConfig.h" FORCE)
+    set(FREERTOS_PORT ThirdParty_GCC_RP2040 CACHE STRING "FreeRTOS Port" FORCE)
+    include_directories(${CMAKE_CURRENT_LIST_DIR}/config)
+endif()
+
 # Check if PICO_SDK_PATH is set (environment or CMake cache)
 if (DEFINED ENV{PICO_SDK_PATH} AND NOT DEFINED PICO_SDK_PATH)
     set(PICO_SDK_PATH $ENV{PICO_SDK_PATH})
@@ -26,7 +33,17 @@ if (NOT BUILD_TESTS AND PICO_SDK_PATH AND EXISTS "${PICO_SDK_PATH}/pico_sdk_init
     project(SmartMobilityAid_AUTOSAR C CXX ASM)
     set(CMAKE_C_STANDARD 11)
     set(CMAKE_C_STANDARD_REQUIRED ON)
+
+    include(FetchContent)
+    FetchContent_Declare(
+        FreeRTOS_Kernel
+        GIT_REPOSITORY https://github.com/FreeRTOS/FreeRTOS-Kernel.git
+        GIT_TAG        smp
+    )
+    FetchContent_MakeAvailable(FreeRTOS_Kernel)
+
     pico_sdk_init()
+    add_subdirectory(${freertos_kernel_SOURCE_DIR}/portable/ThirdParty/GCC/RP2040 ${CMAKE_BINARY_DIR}/freertos_rp2040)
     set(BUILD_FOR_PICO_TARGET TRUE)
 else()
     message(STATUS "[Build Host] Building in Host Test/Simulation mode (Native Clang/GCC)")
@@ -51,6 +68,7 @@ include_directories(
 # =============================================================
 if (BUILD_FOR_PICO_TARGET)
     add_compile_definitions(PICO_ON_DEVICE=1)
+    include_directories(${FREERTOS_KERNEL_INCLUDE_DIRS})
 
     # Common Firmware Sources for Cane Node
     set(CANE_SOURCES
@@ -84,10 +102,13 @@ if (BUILD_FOR_PICO_TARGET)
     )
 
     add_executable(Cane_Node ${CANE_SOURCES})
+    target_include_directories(Cane_Node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/config)
     target_link_libraries(Cane_Node PRIVATE
+        FreeRTOS-Kernel
+        FreeRTOS-Kernel-Heap4
         pico_stdlib
         pico_multicore
-        pico_cyw43_arch_none
+        pico_cyw43_arch_lwip_sys_freertos
         pico_btstack_cyw43
         pico_btstack_ble
         hardware_i2c
@@ -139,10 +160,13 @@ if (BUILD_FOR_PICO_TARGET)
     )
 
     add_executable(Glasses_Node ${GLASSES_SOURCES})
+    target_include_directories(Glasses_Node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/config)
     target_link_libraries(Glasses_Node PRIVATE
+        FreeRTOS-Kernel
+        FreeRTOS-Kernel-Heap4
         pico_stdlib
         pico_multicore
-        pico_cyw43_arch_none
+        pico_cyw43_arch_lwip_sys_freertos
         pico_btstack_cyw43
         pico_btstack_ble
         hardware_i2c

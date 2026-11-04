@@ -38,6 +38,9 @@ static uint32_t s_sys_tick_ms = 0U;
 static bool s_is_l0x = false;
 static bool s_is_l1x = false;
 
+/* Re-initialise the ToF after this long without any reading (see Task 3) */
+#define CANE_TOF_RECOVERY_MS      (3000U)
+
 static uint32_t GetCurrentTimeMs(void)
 {
 #ifdef PICO_ON_DEVICE
@@ -45,6 +48,29 @@ static uint32_t GetCurrentTimeMs(void)
 #else
     return s_sys_tick_ms;
 #endif
+}
+
+/*
+ * Re-runs the ToF set-up for the model found at boot (both are tried if none was).
+ * It blocks on I2C for roughly 15 ms, so callers keep it out of fall-detection windows.
+ */
+static bool Tof_Reinit(void)
+{
+    if (s_is_l1x)
+    {
+        return Vl53l1x_Init(&Vl53l1x_Config_Cane);
+    }
+    if (s_is_l0x)
+    {
+        return Vl53l0x_Init(&Vl53l0x_Config_Cane);
+    }
+
+    s_is_l0x = Vl53l0x_Init(&Vl53l0x_Config_Cane);
+    if (!s_is_l0x)
+    {
+        s_is_l1x = Vl53l1x_Init(&Vl53l1x_Config_Cane);
+    }
+    return (s_is_l0x || s_is_l1x);
 }
 
 /*
@@ -142,6 +168,9 @@ int main(void)
     uint32_t last_telemetry_ms = 0U;
 
     uint32_t last_cmd_ms = 0U;
+    uint32_t last_tof_alive_ms = GetCurrentTimeMs();
+    uint32_t last_tof_reinit_ms = last_tof_alive_ms;
+    bool tof_read_failed = false;
 
     Grip_State_t prev_grip = GRIP_STATE_RELEASED;
     uint16_t last_dist_mm = 0U;
@@ -313,6 +342,47 @@ int main(void)
                 GroundProjection_Feed(&s_ground_detector, GP_RANGE_INVALID, 0U, now_ms);
             }
 
+            /* Any answer except "no target" (a real or covered range) shows the sensor is alive */
+            tof_read_failed = !read_ok;
+            if (read_ok && (dist_mm != 0xFFFFU))
+            {
+                last_tof_alive_ms = now_ms;
+            }
+
+            /*
+             * A VL53L1X that glitches or browns out restarts idle, then reports
+             * "no target" (or stops answering) until it is set up again, which
+             * used to need a replug. Re-initialise it after 3 s without a reading,
+             * at most every 3 s, and never while a fall is being checked.
+             */
+            if (((now_ms - last_tof_alive_ms) >= CANE_TOF_RECOVERY_MS) &&
+                ((now_ms - last_tof_reinit_ms) >= CANE_TOF_RECOVERY_MS) &&
+                (FallDetection_GetState() == FALL_STATE_IDLE))
+            {
+                last_tof_reinit_ms = now_ms;
+                uint8_t range_status = 0U;
+                if (s_is_l1x && Vl53l1x_ReadRangeStatus(&Vl53l1x_Config_Cane, &range_status))
+                {
+                    printf("[TOF REINIT] No reading for %lu ms (last read: %s, range status 0x%02X). Re-initialising...\n",
+                           (unsigned long)(now_ms - last_tof_alive_ms), read_ok ? "no target" : "I2C error",
+                           range_status);
+                }
+                else
+                {
+                    printf("[TOF REINIT] No reading for %lu ms (last read: %s, range status unreadable). Re-initialising...\n",
+                           (unsigned long)(now_ms - last_tof_alive_ms), read_ok ? "no target" : "I2C error");
+                }
+
+                if (Tof_Reinit())
+                {
+                    printf("[TOF REINIT] Sensor restarted.\n");
+                }
+                else
+                {
+                    printf("[TOF REINIT] Sensor not responding; retrying in %u ms.\n", (unsigned int)CANE_TOF_RECOVERY_MS);
+                }
+            }
+
             Gp_State_t gstate = s_ground_detector.state;
             if (gstate != last_gstate)
             {
@@ -454,13 +524,15 @@ int main(void)
         if ((now_ms - s_last_diag_print_ms) >= 1000U)
         {
             s_last_diag_print_ms = now_ms;
-            printf("[HEARTBEAT] Grip: %s (GP14=%d) | FallState: %s (latched=%d) | ToF: %u mm (obs=%d) | LinkLost: %d\n",
+            /* err=1: the last ToF read failed on I2C, so the distance shown is stale */
+            printf("[HEARTBEAT] Grip: %s (GP14=%d) | FallState: %s (latched=%d) | ToF: %u mm (obs=%d, err=%d) | LinkLost: %d\n",
                    (cane_status.grip_state == (uint16_t)GRIP_STATE_HELD) ? "HELD" : "RELEASED",
                    Hal_Gpio_Read(CANE_PIN_TOUCH_IN),
                    FallDetection_GetStateName(),
                    (int)cane_status.fall_latched,
                    last_dist_mm,
                    (int)cane_status.tof_obstructed,
+                   (int)tof_read_failed,
                    (int)cane_status.link_lost);
         }
 

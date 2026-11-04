@@ -126,3 +126,21 @@ bool Vl53l1x_ReadDistanceMm(const Vl53l1x_Config_t * const p_cfg, uint16_t * con
 
     return false;
 }
+
+/* Diagnostics only: raw RESULT__RANGE_STATUS (low 5 bits). 9 is a valid range in ST's encoding. */
+bool Vl53l1x_ReadRangeStatus(const Vl53l1x_Config_t * const p_cfg, uint8_t * const p_status)
+{
+    if ((p_cfg == NULL) || (p_status == NULL))
+    {
+        return false;
+    }
+
+    uint8_t raw = 0U;
+    if (!Hal_I2c_ReadRegs16(p_cfg->i2c_port, p_cfg->dev_addr, VL53L1X_REG_RESULT_RANGE_STATUS, &raw, 1U))
+    {
+        return false;
+    }
+
+    *p_status = (uint8_t)(raw & 0x1FU);
+    return true;
+}

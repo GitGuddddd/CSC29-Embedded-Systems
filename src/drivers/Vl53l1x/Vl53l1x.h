@@ -21,5 +21,6 @@ extern const Vl53l1x_Config_t Vl53l1x_Config_Cane;
 
 bool Vl53l1x_Init(const Vl53l1x_Config_t * const p_cfg);
 bool Vl53l1x_ReadDistanceMm(const Vl53l1x_Config_t * const p_cfg, uint16_t * const p_dist_mm);
+bool Vl53l1x_ReadRangeStatus(const Vl53l1x_Config_t * const p_cfg, uint8_t * const p_status);
 
 #endif /* VL53L1X_H */

@@ -21,6 +21,7 @@
 /* Severe cliff fast-path: bypass 3-sample voting if drop > 250mm */
 #define GP_DOWN_FASTPATH_MM       (250)
 
+#define GP_DEFAULT_NOMINAL_MM     (1000U)
 #define GP_CONFIRM_SAMPLES        (3U)
 #define GP_STALE_TIMEOUT_MS       (500U)
 

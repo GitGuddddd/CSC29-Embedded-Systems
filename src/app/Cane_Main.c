@@ -96,12 +96,8 @@ int main(void)
     AlertManager_Init();
     GroundProjection_Init(&s_ground_detector, 0U);
     GroundProjection_SetArmed(&s_ground_detector, true, 0U);
-    /*
-     * No auto-calibration at boot: the baseline is RAM-only, so after every
-     * reboot the cane plays the calibration prompt while gripped until the
-     * user calibrates on level ground ('c' over serial; GP20 button planned).
-     */
-    printf("[GROUND] No calibration after boot. Hold the cane still on level ground and press 'c'.\n");
+    GroundProjection_StartCalibration(&s_ground_detector, 0U);
+    printf("[GROUND] Auto-calibrating ground height on startup... Hold cane steady.\n");
 
 #ifdef PICO_ON_DEVICE
     /* Launch Core 1 for BLE wireless communication polling */

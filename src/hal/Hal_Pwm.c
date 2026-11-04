@@ -55,8 +55,14 @@ void Hal_Pwm_SetFrequency(uint8_t pin, uint32_t freq_hz, uint8_t duty_percent)
 void Hal_Pwm_Stop(uint8_t pin)
 {
 #ifdef PICO_ON_DEVICE
+    /*
+     * Do not disable the slice: a halted slice freezes the pin at whatever level
+     * it had (pico-sdk pwm_set_enabled() docs), which left the cane motor stuck on.
+     * A 0% duty with the slice running drives the pin low from the next period (<= 1 ms).
+     */
     uint slice_num = pwm_gpio_to_slice_num(pin);
-    pwm_set_enabled(slice_num, false);
+    uint channel = pwm_gpio_to_channel(pin);
+    pwm_set_chan_level(slice_num, channel, 0U);
 #else
     (void)pin;
 #endif

@@ -74,6 +74,7 @@ static void vTask_GlassesPerception(void *pvParameters)
 
     Grip_State_t cane_grip_telemetry = GRIP_STATE_UNKNOWN;
     uint32_t last_cane_pkt_ms = 0U;
+    uint32_t cane_release_start_ms = 0U;
 
     s_glasses_mode = SYS_STATE_ACTIVE;
     Sys_State_t prev_printed_mode = SYS_STATE_INIT;
@@ -90,6 +91,7 @@ static void vTask_GlassesPerception(void *pvParameters)
             if (s_glasses_mode == SYS_STATE_WATCH)          mode_str = "WATCH (HAZARD)";
             if (s_glasses_mode == SYS_STATE_FALL_CONFIRMED) mode_str = "FALL_CONFIRMED";
             if (s_glasses_mode == SYS_STATE_HARD_FAULT)     mode_str = "HARD_FAULT";
+            if (s_glasses_mode == SYS_STATE_STANDBY)        mode_str = "STANDBY (DOCKED)";
             printf("[SYS MODE] Glasses State Transition -> %s\n", mode_str);
             prev_printed_mode = s_glasses_mode;
         }
@@ -101,13 +103,36 @@ static void vTask_GlassesPerception(void *pvParameters)
             if (rx_pkt.device_id == 0x01U) /* 0x01 = Cane Node */
             {
                 last_cane_pkt_ms = now_ms;
-                cane_grip_telemetry = ((rx_pkt.state_flags & 0x10U) != 0U) ? GRIP_STATE_HELD : GRIP_STATE_RELEASED;
+                Grip_State_t new_grip = ((rx_pkt.state_flags & BLE_FLAG_CANE_HELD) != 0U) ? GRIP_STATE_HELD : GRIP_STATE_RELEASED;
+                if ((cane_grip_telemetry != GRIP_STATE_RELEASED) && (new_grip == GRIP_STATE_RELEASED))
+                {
+                    cane_release_start_ms = now_ms;
+                }
+                cane_grip_telemetry = new_grip;
             }
         }
 
         if ((last_cane_pkt_ms == 0U) || ((now_ms - last_cane_pkt_ms) > 500U))
         {
             cane_grip_telemetry = GRIP_STATE_UNKNOWN;
+        }
+
+        /* Check for Standby Mode (Linked to Cane's Grip Release Timer + No Motion) */
+        if (s_glasses_mode != SYS_STATE_STANDBY)
+        {
+            if (cane_grip_telemetry == GRIP_STATE_RELEASED && ((now_ms - cane_release_start_ms) > 60000U))
+            {
+                s_glasses_mode = SYS_STATE_STANDBY;
+                BleComm_SetPowerMode(false);
+            }
+        }
+        else
+        {
+            if ((cane_grip_telemetry == GRIP_STATE_HELD) || (cane_grip_telemetry == GRIP_STATE_UNKNOWN))
+            {
+                s_glasses_mode = SYS_STATE_ACTIVE;
+                BleComm_SetPowerMode(true);
+            }
         }
 
         /* Auto-retry IMU initialization */
@@ -129,17 +154,20 @@ static void vTask_GlassesPerception(void *pvParameters)
         Imu_Sample_t imu_sample;
         if (imu_ok && Mpu9250_ReadSample(&Mpu9250_Config_Glasses, &imu_sample))
         {
-            bool fall_detected = FallDetection_Step(&imu_sample, now_ms);
-            if (fall_detected)
+            if (s_glasses_mode != SYS_STATE_STANDBY)
             {
-                printf("[GLASSES ALERT] *** HEAD FALL DETECTED! ***\n");
-                if (!head_fall_latched)
+                bool fall_detected = FallDetection_Step(&imu_sample, now_ms);
+                if (fall_detected)
                 {
-                    s_glasses_mode = SYS_STATE_FALL_CONFIRMED;
-                    head_fall_latched = true;
-                    glasses_fall_count = (uint8_t)((glasses_fall_count + 1U) & 0x0FU);
+                    printf("[GLASSES ALERT] *** HEAD FALL DETECTED! ***\n");
+                    if (!head_fall_latched)
+                    {
+                        s_glasses_mode = SYS_STATE_FALL_CONFIRMED;
+                        head_fall_latched = true;
+                        glasses_fall_count = (uint8_t)((glasses_fall_count + 1U) & 0x0FU);
+                    }
+                    Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
                 }
-                Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
             }
         }
         else

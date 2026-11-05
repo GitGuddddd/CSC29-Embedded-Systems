@@ -27,6 +27,16 @@ static uint8_t s_incidents;
 bool Mpu9250_Init(const Mpu9250_Config_t * const p_cfg)
 {
     (void)p_cfg;
+    TEST_FAIL_MESSAGE("Perception pipeline must not call synchronous IMU init");
+    return false;
+}
+
+bool Mpu9250_RunInitStep(const Mpu9250_Config_t * const p_cfg, Mpu9250_InitStep_t step,
+                         uint32_t request_ms, uint32_t * const p_completed_ms)
+{
+    (void)p_cfg;
+    (void)step;
+    *p_completed_ms = request_ms;
     return true;
 }
 
@@ -35,6 +45,13 @@ bool Mpu9250_SetSleep(const Mpu9250_Config_t * const p_cfg, bool enabled)
     (void)p_cfg;
     (void)enabled;
     return s_sleep_ok;
+}
+
+bool Mpu9250_SetSleepTimed(const Mpu9250_Config_t * const p_cfg, bool enabled,
+                           uint32_t request_ms, uint32_t * const p_completed_ms)
+{
+    *p_completed_ms = request_ms;
+    return Mpu9250_SetSleep(p_cfg, enabled);
 }
 
 bool Mpu9250_ReadSample(const Mpu9250_Config_t * const p_cfg, Imu_Sample_t * const p_sample)
@@ -134,7 +151,7 @@ void setUp(void)
     AlertManager_Init();
     BleComm_Init(&BleComm_Config_Cane);
     ImuSupervisor_Init(&s_imu, &s_cfg, 4U, 5U, s_now);
-    Run(200U);
+    Run(300U);
     TEST_ASSERT_EQUAL(SYS_STATE_ACTIVE, s_out.state);
 }
 
@@ -190,10 +207,31 @@ void test_FailedPowerTransition_CannotClearIncident_AndRealarmKeepsItsSequence(v
     TEST_ASSERT_EQUAL_UINT8(1U, s_decoded.rolling_fall_seq);
 }
 
+void test_RetainedAlarmAndGripAreProcessedDuringResetWait(void)
+{
+    ImuSupervisor_Init(&s_imu, &s_cfg, 4U, 5U, s_now);
+    CaneMode_RestoreIncident(&s_mode);
+    s_sensor = (Imu_Sample_t){.ax = 1.0f};
+    s_touch = false;
+    Run(30U);
+    TEST_ASSERT_EQUAL_UINT8(MPU9250_INIT_WAKE, s_imu.init_step);
+    TEST_ASSERT_FALSE(s_imu.sample_valid);
+    TEST_ASSERT_TRUE(s_out.fall_latched);
+    TEST_ASSERT_TRUE(s_audio.buzzer_active);
+    TEST_ASSERT_BITS_HIGH(BLE_FLAG_FALL_ALERT, s_decoded.state_flags);
+    s_touch = true;
+    Run(30U);
+    TEST_ASSERT_EQUAL_UINT8(MPU9250_INIT_WAKE, s_imu.init_step);
+    TEST_ASSERT_TRUE(s_out.alarm_paused); /* Debounced regrip still runs during reset wait. */
+    TEST_ASSERT_FALSE(s_audio.buzzer_active);
+    TEST_ASSERT_BITS_HIGH(BLE_FLAG_FALL_ALERT | BLE_FLAG_ALARM_PAUSED, s_decoded.state_flags);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_FullDrop_Pause_IntentionalPark_AndTouchWake);
     RUN_TEST(test_FailedPowerTransition_CannotClearIncident_AndRealarmKeepsItsSequence);
+    RUN_TEST(test_RetainedAlarmAndGripAreProcessedDuringResetWait);
     return UNITY_END();
 }

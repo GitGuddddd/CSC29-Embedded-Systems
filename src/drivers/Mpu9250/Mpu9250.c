@@ -45,40 +45,78 @@ uint8_t Mpu9250_ReadWhoAmI(const Mpu9250_Config_t * const p_cfg)
     return 0U;
 }
 
-bool Mpu9250_Init(const Mpu9250_Config_t * const p_cfg)
+static uint32_t Completion_Time(uint32_t request_ms)
 {
-    if (p_cfg == NULL)
-    {
-        return false;
-    }
-
-    uint8_t who = Mpu9250_ReadWhoAmI(p_cfg);
-    if ((who != WHO_AM_I_9250) && (who != WHO_AM_I_9255) && (who != WHO_AM_I_6500))
-    {
-        return false;
-    }
-
-    /* Reset device */
-    if (!Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_PWR_MGMT_1, 0x80U))
-    {
-        return false;
-    }
-
 #ifdef PICO_ON_DEVICE
-    sleep_ms(50);
+    (void)request_ms;
+    return to_ms_since_boot(get_absolute_time());
+#else
+    return request_ms;
 #endif
+}
 
-    bool ok = true;
-    ok = ok && Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_PWR_MGMT_1, 0x01U);
-    ok = ok && Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_CONFIG, MPU9250_CFG_DLPF_CONFIG);
-    ok = ok && Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_GYRO_CONFIG, MPU9250_CFG_GYRO_RANGE_1000DPS);
-    ok = ok && Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_ACCEL_CONFIG, MPU9250_CFG_ACCEL_RANGE_8G);
-    ok = ok && Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_ACCEL_CONFIG2, MPU9250_CFG_DLPF_CONFIG);
-
+bool Mpu9250_RunInitStep(const Mpu9250_Config_t * const p_cfg, Mpu9250_InitStep_t step,
+                         uint32_t request_ms, uint32_t * const p_completed_ms)
+{
+    bool ok = false;
+    if (p_cfg != NULL)
+    {
+        switch (step)
+        {
+            case MPU9250_INIT_IDENTITY:
+            {
+                uint8_t who = Mpu9250_ReadWhoAmI(p_cfg);
+                ok = (who == WHO_AM_I_9250) || (who == WHO_AM_I_9255) || (who == WHO_AM_I_6500);
+                break;
+            }
+            case MPU9250_INIT_RESET:
+                ok = Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_PWR_MGMT_1, PWR_MGMT_RESET);
+                break;
+            case MPU9250_INIT_WAKE:
+                ok = Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_PWR_MGMT_1, 0x01U);
+                break;
+            case MPU9250_INIT_DLPF:
+                ok = Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_CONFIG, MPU9250_CFG_DLPF_CONFIG);
+                break;
+            case MPU9250_INIT_GYRO:
+                ok = Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_GYRO_CONFIG, MPU9250_CFG_GYRO_RANGE_1000DPS);
+                break;
+            case MPU9250_INIT_ACCEL:
+                ok = Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_ACCEL_CONFIG, MPU9250_CFG_ACCEL_RANGE_8G);
+                break;
+            case MPU9250_INIT_ACCEL_DLPF:
+                ok = Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_ACCEL_CONFIG2, MPU9250_CFG_DLPF_CONFIG);
+                break;
+            case MPU9250_INIT_DONE:
+            default:
+                break;
+        }
+    }
+    if (p_completed_ms != NULL)
+    {
+        *p_completed_ms = Completion_Time(request_ms);
+    }
     return ok;
 }
 
-bool Mpu9250_SetSleep(const Mpu9250_Config_t * const p_cfg, bool sleep_enabled)
+bool Mpu9250_Init(const Mpu9250_Config_t * const p_cfg)
+{
+    if (!Mpu9250_RunInitStep(p_cfg, MPU9250_INIT_IDENTITY, 0U, NULL) ||
+        !Mpu9250_RunInitStep(p_cfg, MPU9250_INIT_RESET, 0U, NULL))
+    {
+        return false;
+    }
+#ifdef PICO_ON_DEVICE
+    sleep_ms(MPU9250_INIT_RESET_WAIT_MS);
+#endif
+    for (uint8_t step = MPU9250_INIT_WAKE; step < MPU9250_INIT_DONE; ++step)
+    {
+        if (!Mpu9250_RunInitStep(p_cfg, (Mpu9250_InitStep_t)step, 0U, NULL)) return false;
+    }
+    return true;
+}
+
+static bool Apply_Sleep(const Mpu9250_Config_t * const p_cfg, bool sleep_enabled)
 {
     if (p_cfg == NULL)
     {
@@ -106,7 +144,20 @@ bool Mpu9250_SetSleep(const Mpu9250_Config_t * const p_cfg, bool sleep_enabled)
     }
     uint8_t readback = 0U;
     return Hal_I2c_ReadRegs(p_cfg->i2c_port, p_cfg->dev_addr, REG_PWR_MGMT_1, &readback, 1U) &&
-           (readback == power);
+            (readback == power);
+}
+
+bool Mpu9250_SetSleep(const Mpu9250_Config_t * const p_cfg, bool sleep_enabled)
+{
+    return Apply_Sleep(p_cfg, sleep_enabled);
+}
+
+bool Mpu9250_SetSleepTimed(const Mpu9250_Config_t * const p_cfg, bool sleep_enabled,
+                           uint32_t request_ms, uint32_t * const p_completed_ms)
+{
+    bool ok = Apply_Sleep(p_cfg, sleep_enabled);
+    if (p_completed_ms != NULL) *p_completed_ms = Completion_Time(request_ms);
+    return ok;
 }
 
 bool Mpu9250_ReadSample(const Mpu9250_Config_t * const p_cfg, Imu_Sample_t * const p_sample)

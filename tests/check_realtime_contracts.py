@@ -71,6 +71,11 @@ def source_contracts():
             "The transmitted local fall counter must stay four bits")
     require(re.search(r"ttc_20ms\s*:\s*12", types),
             "TTC must use the bounded wire unit, not too-small millisecond storage")
+    imu = (ROOT / "src/services/ImuSupervisor/ImuSupervisor.c").read_text()
+    require(not re.search(r"\bMpu9250_Init\s*\(|\bsleep_(?:ms|us)\s*\(", imu),
+            "IMU startup/recovery must advance without synchronous init or delays")
+    require("Mpu9250_RunInitStep(" in imu and "MPU9250_INIT_RESET_WAIT_MS" in imu,
+            "Retain staged IMU actions and the required reset wait")
     cmake = (ROOT / "CMakeLists.txt").read_text()
     require("pico_cyw43_arch_lwip_sys_freertos" not in cmake,
             "BLE-only node targets must not reintroduce the unused lwIP stack")
@@ -109,6 +114,10 @@ def binary_contracts(elf, nm, objdump):
         require(name not in entries, f"{elf.name}: unused networking/default stack linked: {name}")
     require("s_worker_stack" in entries and "s_context" in entries,
             f"{elf.name}: supplied FreeRTOS radio worker is missing")
+    require("Mpu9250_Init" not in entries,
+            f"{elf.name}: synchronous IMU initialization remains linked into perception")
+    require("Mpu9250_RunInitStep" in entries and "Mpu9250_SetSleepTimed" in entries,
+            f"{elf.name}: staged/timed IMU driver paths are missing")
     if "hal_uart_rx_dma_isr" in entries:
         require(entries["hal_uart_rx_dma_isr"][1] == "t", "DMA ISR must be a private text symbol")
         assembly = subprocess.check_output(

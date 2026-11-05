@@ -224,6 +224,22 @@ removed from `FreeRTOSConfig.h`. No application DMA ISR calls a FreeRTOS API.
 
 ## Watchdog and diagnostics
 
+`ImuSupervisor_Init()` is software-only. The Core 0 perception task advances the MPU
+identity/reset/wake/filter/range sequence one register action per call; a reset wait
+performs no I/O for at least 50 ms after the reset write completes. Completion timestamps
+come from the same Pico boot-time epoch as the task. Configuration then requires 100 ms
+settling and three valid samples before reporting ready; failures retain the fault and
+defer a bus-clear/retry for one second. Timed verified wake also anchors settling after
+the I/O, and does not reinitialize calibration. Required sensor waits are not removed.
+
+The synchronous MPU init wrapper remains for standalone callers but is not linked into
+either wearable image. Tests cover phase failures, per-call action budgets, completion
+latency, timer wrap, sleep-request pauses and alarm/regrip handling during reset wait.
+The supervisor packs its health counters/phase while keeping 32-bit clocks. Spreading
+configuration across calls can lengthen total bring-up time; it removes the 50 ms task
+suspension, not sensor downtime or individual I2C timeout costs. Physical timing and
+fault recovery remain unvalidated.
+
 The hardware watchdog has an 8 s bounded startup window for radio initialization and
 a 2 s operational window. It switches to the latter only after both Core 0 perception
 and the ready BTstack worker have progressed. A radio task merely polling/scheduling

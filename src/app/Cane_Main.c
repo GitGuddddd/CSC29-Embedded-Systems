@@ -359,7 +359,8 @@ static void vTask_SafetyPerception(void *pvParameters)
         cane_status.fall_latched = mode_out.fall_latched ? 1U : 0U;
         IncidentRetention_Store(mode_out.fall_latched, BleComm_GetSessionId(),
                                 (uint8_t)cane_status.fall_seq);
-        cane_status.imu_healthy = imu.fault ? 0U : 1U;
+        cane_status.imu_healthy = ((imu.state == IMU_SUPERVISOR_RUNNING) ||
+                                  (imu.state == IMU_SUPERVISOR_ASLEEP)) ? 1U : 0U;
         if (mode_out.reset_fall_detection)
         {
             FallDetection_Reset();

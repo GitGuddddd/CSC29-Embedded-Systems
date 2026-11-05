@@ -255,6 +255,15 @@ without giving the phone authority to disable local alerts.
 
 ## Evidence needed for a stronger claim
 
+IMU startup/recovery now advances in the Core 0 task without calling the synchronous
+MPU initializer. Reset/settling waits remain intact as completion-anchored elapsed-time
+gates, so grip, radio receipt and alarm rendering can run between register actions.
+Three valid samples still qualify readiness; a retained alarm is not cleared by setup
+or a sensor fault. Host tests exercise these interleavings and binary audits exclude
+the synchronous initializer. Total sensor bring-up may span more cycles; on-device
+measurement must verify I2C costs, task periods and fault-recovery behavior. This does
+not yet stage the cane's separate ToF initializer.
+
 Measure confirmed-event-to-alarm-command latency separately from physical-fall-to-detection
 latency. Record median/tail/observed maximum, deadline misses, longest loss burst, retry
 counts, queue drops and current consumption, with sample sizes and test conditions.

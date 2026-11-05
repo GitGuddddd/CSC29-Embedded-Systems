@@ -227,6 +227,8 @@ endif()
 # naming/format rules on imported SDK and FreeRTOS implementations.
 set_source_files_properties(
     src/app/ThreatAssessment/ThreatAssessment.c
+    src/drivers/Mpu9250/Mpu9250.c
+    src/services/ImuSupervisor/ImuSupervisor.c
     src/services/BleComm/BleComm.c
     src/services/BleComm/BleComm_Policy.c
     src/drivers/BleRadio/BleRadio.c

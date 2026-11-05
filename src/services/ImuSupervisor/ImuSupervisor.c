@@ -5,12 +5,17 @@
 #include <stddef.h>
 #include <string.h>
 
+_Static_assert(IMUSUPERVISOR_FAILURE_COUNT <= 3U, "Failure counter needs more bits");
+_Static_assert(IMUSUPERVISOR_RECOVERY_COUNT <= 3U, "Recovery counter needs more bits");
+_Static_assert(MPU9250_INIT_DONE <= 7U, "Initialization phase needs more bits");
+
 static void Enter_Fault(ImuSupervisor_t * const p_s, uint32_t now_ms)
 {
     p_s->state = IMU_SUPERVISOR_FAULT;
     p_s->fault = true;
     p_s->sample_valid = false;
     p_s->successes = 0U;
+    p_s->init_step = MPU9250_INIT_DONE;
     p_s->transition_ms = now_ms;
 }
 
@@ -21,6 +26,7 @@ static void Start_Settling(ImuSupervisor_t * const p_s, uint32_t now_ms)
     p_s->failures = 0U;
     p_s->successes = 0U;
     p_s->sample_valid = false;
+    p_s->init_step = MPU9250_INIT_DONE;
 }
 
 void ImuSupervisor_Init(ImuSupervisor_t * const p_s, const Mpu9250_Config_t * const p_cfg,
@@ -34,9 +40,14 @@ void ImuSupervisor_Init(ImuSupervisor_t * const p_s, const Mpu9250_Config_t * co
     p_s->p_cfg = p_cfg;
     p_s->sda_pin = sda_pin;
     p_s->scl_pin = scl_pin;
-    if ((p_cfg != NULL) && Mpu9250_Init(p_cfg))
+    if (p_cfg != NULL)
     {
-        Start_Settling(p_s, now_ms);
+        /* Software-only startup: the first cyclic calls perform the register
+         * sequence, allowing retained alarms/BLE/touch to run immediately.
+         */
+        p_s->state = IMU_SUPERVISOR_STARTING;
+        p_s->init_step = MPU9250_INIT_IDENTITY;
+        p_s->transition_ms = now_ms;
     }
     else
     {
@@ -51,6 +62,27 @@ void ImuSupervisor_Step(ImuSupervisor_t * const p_s, bool sleep_requested, uint3
         return;
     }
     p_s->sample_valid = false;
+    if (p_s->init_step != MPU9250_INIT_DONE)
+    {
+        if (sleep_requested || ((p_s->init_step == MPU9250_INIT_WAKE) &&
+            ((uint32_t)(now_ms - p_s->transition_ms) < MPU9250_INIT_RESET_WAIT_MS)))
+        {
+            return;
+        }
+        Mpu9250_InitStep_t step = (Mpu9250_InitStep_t)p_s->init_step;
+        uint32_t completed_ms = now_ms;
+        if (!Mpu9250_RunInitStep(p_s->p_cfg, step, now_ms, &completed_ms))
+        {
+            Enter_Fault(p_s, completed_ms);
+        }
+        else
+        {
+            p_s->init_step = (uint8_t)((p_s->init_step + 1U) & 0x07U);
+            if (step == MPU9250_INIT_RESET) p_s->transition_ms = completed_ms;
+            if (p_s->init_step == MPU9250_INIT_DONE) Start_Settling(p_s, completed_ms);
+        }
+        return; /* Never read samples or perform a second action this cycle. */
+    }
     if (p_s->state == IMU_SUPERVISOR_FAULT)
     {
         if (!sleep_requested &&
@@ -61,14 +93,9 @@ void ImuSupervisor_Step(ImuSupervisor_t * const p_s, bool sleep_requested, uint3
              */
             Hal_I2c_BusReset(p_s->sda_pin, p_s->scl_pin);
             Hal_I2c_Init(p_s->p_cfg->i2c_port, p_s->sda_pin, p_s->scl_pin, IMUSUPERVISOR_I2C_HZ);
-            if (Mpu9250_Init(p_s->p_cfg))
-            {
-                Start_Settling(p_s, now_ms);
-            }
-            else
-            {
-                Enter_Fault(p_s, now_ms);
-            }
+            p_s->init_step = MPU9250_INIT_IDENTITY;
+            p_s->failures = 0U;
+            p_s->successes = 0U;
         }
         return;
     }
@@ -76,26 +103,28 @@ void ImuSupervisor_Step(ImuSupervisor_t * const p_s, bool sleep_requested, uint3
     {
         if (p_s->state != IMU_SUPERVISOR_ASLEEP)
         {
-            if (Mpu9250_SetSleep(p_s->p_cfg, true))
+            uint32_t completed_ms = now_ms;
+            if (Mpu9250_SetSleepTimed(p_s->p_cfg, true, now_ms, &completed_ms))
             {
                 p_s->state = IMU_SUPERVISOR_ASLEEP;
             }
             else
             {
-                Enter_Fault(p_s, now_ms);
+                Enter_Fault(p_s, completed_ms);
             }
         }
         return;
     }
     if (p_s->state == IMU_SUPERVISOR_ASLEEP)
     {
-        if (Mpu9250_SetSleep(p_s->p_cfg, false))
+        uint32_t completed_ms = now_ms;
+        if (Mpu9250_SetSleepTimed(p_s->p_cfg, false, now_ms, &completed_ms))
         {
-            Start_Settling(p_s, now_ms);
+            Start_Settling(p_s, completed_ms);
         }
         else
         {
-            Enter_Fault(p_s, now_ms);
+            Enter_Fault(p_s, completed_ms);
         }
         return;
     }

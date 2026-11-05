@@ -20,6 +20,7 @@ extern const Buzzer_Config_t Buzzer_Config_Glasses;
 
 void Buzzer_Init(const Buzzer_Config_t * const p_cfg);
 void Buzzer_PlayTone(uint16_t freq_hz);
+void Buzzer_PlayToneAtDuty(uint16_t freq_hz, uint8_t duty_percent);
 void Buzzer_Silence(void);
 
 #endif /* BUZZER_H */

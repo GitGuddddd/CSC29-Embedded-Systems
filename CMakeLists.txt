@@ -42,6 +42,13 @@ if (NOT BUILD_TESTS AND PICO_SDK_PATH AND EXISTS "${PICO_SDK_PATH}/pico_sdk_init
         GIT_TAG        81c623212a8746c4b5ebc29891b91228591040cc
     )
     FetchContent_MakeAvailable(FreeRTOS_Kernel)
+    # The upstream repository root also declares a generic, port-less FreeRTOS
+    # archive. Firmware links the RP2040 interface target below; keep the unused
+    # generic archive out of the aggregate `all` target because it has no
+    # portmacro.h include path by design.
+    if (TARGET FreeRTOS)
+        set_target_properties(FreeRTOS PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    endif()
 
     pico_sdk_init()
     add_subdirectory(${freertos_kernel_SOURCE_DIR}/portable/ThirdParty/GCC/RP2040 ${CMAKE_BINARY_DIR}/freertos_rp2040)
@@ -105,6 +112,7 @@ if (BUILD_FOR_PICO_TARGET)
         src/services/Watchdog/Watchdog.c
         src/services/Watchdog/Watchdog_Lcfg.c
         src/services/ImuSupervisor/ImuSupervisor.c
+        src/services/SafetyDelivery/SafetyDelivery.c
         src/hal/Hal_I2c.c
         src/hal/Hal_Gpio.c
         src/hal/Hal_Pwm.c
@@ -121,6 +129,7 @@ if (BUILD_FOR_PICO_TARGET)
         pico_cyw43_arch_lwip_sys_freertos
         pico_btstack_cyw43
         pico_btstack_ble
+        pico_rand
         hardware_i2c
         hardware_pwm
         hardware_gpio
@@ -166,6 +175,7 @@ if (BUILD_FOR_PICO_TARGET)
         src/services/Watchdog/Watchdog.c
         src/services/Watchdog/Watchdog_Lcfg.c
         src/services/ImuSupervisor/ImuSupervisor.c
+        src/services/SafetyDelivery/SafetyDelivery.c
         src/hal/Hal_I2c.c
         src/hal/Hal_Uart.c
         src/hal/Hal_Gpio.c
@@ -183,6 +193,7 @@ if (BUILD_FOR_PICO_TARGET)
         pico_cyw43_arch_lwip_sys_freertos
         pico_btstack_cyw43
         pico_btstack_ble
+        pico_rand
         hardware_i2c
         hardware_uart
         hardware_dma
@@ -214,6 +225,7 @@ set_source_files_properties(
     src/drivers/BleRadio/BleRadio.c
     src/services/Diagnostics/Diagnostics.c
     src/services/Watchdog/Watchdog.c
+    src/services/SafetyDelivery/SafetyDelivery.c
     src/hal/Hal_Uart.c
     src/hal/Hal_I2c.c
     src/drivers/Ld2450/Ld2450.c
@@ -317,6 +329,13 @@ add_executable(test_AlertManager
 )
 target_link_libraries(test_AlertManager PRIVATE unity)
 add_test(NAME Unit_AlertManager COMMAND test_AlertManager)
+
+add_executable(test_SafetyDelivery
+    tests/unit/test_SafetyDelivery.c
+    src/services/SafetyDelivery/SafetyDelivery.c
+)
+target_link_libraries(test_SafetyDelivery PRIVATE unity)
+add_test(NAME Unit_SafetyDelivery COMMAND test_SafetyDelivery)
 
 # 5. Ld2450 Parser Unit Test
 add_executable(test_Ld2450_Parser

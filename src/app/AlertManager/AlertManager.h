@@ -14,6 +14,7 @@ typedef struct
 {
     Alert_Type_t active_alert;
     uint16_t generated_freq_hz;
+    uint8_t generated_duty_percent;
     bool buzzer_active;
     bool haptic_active;
     bool fall_latched;

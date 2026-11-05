@@ -9,7 +9,26 @@ run in tasks; hardware interrupts perform only the work that cannot be deferred.
 Intervals below are **configured base advertising intervals**, not measured packet
 arrival times. BLE adds 0–10 ms advertising delay and RF collisions can lose packets.
 Scanning is passive; advertising is scannable/non-connectable (`ADV_SCAN_IND`) so a
-phone may retrieve the full device name without creating a GATT connection.
+phone may retrieve the full device name from the scan response without creating a
+GATT connection. The primary advertisement contains flags and one atomic 24-byte
+manufacturer frame; together with AD headers this consumes the 31-byte legacy
+advertising budget, so the redundant short-name AD was removed.
+
+| Frame bytes | Content |
+| --- | --- |
+| 0–5 | Backward-compatible compact status |
+| 6 | Extension marker/version `0xE1` |
+| 7–10 | Origin's random 32-bit boot session, little-endian |
+| 11–14 | Origin's 32-bit local event counter, little-endian |
+| 15–18 | Session ID of the peer event being receipted, little-endian |
+| 19–22 | Event ID being receipted, little-endian |
+| 23 | Safety flags; bit 0 marks the peer receipt fields valid |
+
+The receiver accepts either exactly six legacy bytes or the complete 24-byte versioned
+frame; a truncated extension is not silently interpreted as legacy. The cane emits a
+receipt only after its mode manager latches the matching glasses event and the alert
+path issues its alarm request. This is application acceptance, not user acknowledgement,
+incident clearance, authentication or proof of physical actuator output.
 
 | `Sys_State_t` | Base advertising | Payload refresh | Scan window / interval | Reason |
 | --- | ---: | ---: | ---: | --- |
@@ -51,6 +70,17 @@ cannot provide indefinite ordering: after a 250 ms reception gap, nonduplicate
 sequences may establish a new baseline instead of rejecting a live peer indefinitely.
 Changed incident/status fields survive a same-sequence wrap. This is duplicate/order
 handling, not authenticated replay protection.
+
+Within one boot session, the full event counter must advance in the forward half of
+the modulo-32-bit space. Duplicate identities and delayed older identities do not
+re-latch a peer incident; `UINT32_MAX` to zero is accepted as forward wrap. A changed
+random boot session establishes a new event epoch. The random value reduces accidental
+reboot aliasing but is neither provisioned identity nor cryptographic authentication.
+
+For a glasses-originated head fall, 750 ms is the software confirmation deadline. It
+allows several FAST-profile advertising/scan opportunities in both directions, but is
+not an RF delivery guarantee. Missing confirmation starts the sparse local glasses cue;
+confirmation suppresses that cue only while fresh cane packets continue arriving.
 
 RX records carry the transport-callback timestamp, using the same monotonic boot-time
 epoch as the application. Draining an old queue does not turn old data into a new

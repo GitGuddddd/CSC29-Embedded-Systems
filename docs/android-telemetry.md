@@ -1,7 +1,8 @@
 # Android telemetry synchronization
 
-The Android companion consumes the firmware's compact six-byte manufacturer packet
-and retains support for the five-byte legacy and 10/11-byte advanced formats. It
+The Android companion consumes the firmware's compact six-byte status and optional
+18-byte safety extension in one manufacturer frame. It retains support for the
+five-byte legacy and 10/11-byte advanced formats. It
 observes broadcasts; selecting a node does not create a GATT connection or a Bluetooth
 bond, and the phone does not send an alarm-clear or wake command.
 
@@ -22,6 +23,13 @@ cane IMU is asleep. A standby fault flag remains visible as secondary informatio
 The app does not infer the full `Sys_State_t`, radio interval or a remaining pause
 countdown: those values are not transmitted in the packet.
 
+For a current glasses fall, Android compares the glasses `(session ID, event ID)` with
+the cane's application-receipt identity. It reports confirmed only while both node
+heartbeats are fresh and the identities match exactly. A receipt means the cane
+application latched that event and issued its alarm request; it is not proof of sound
+pressure, a user acknowledgement or incident clearance. Legacy six-byte compact
+packets remain readable but cannot provide this confirmation.
+
 Modern cane data uses the firmware's hazard flag rather than assuming every ground
 distance over 1500 mm is a cliff. A parked/released cane's unavailable range is not
 a drop-off. Modern glasses data likewise respects the firmware's threat filtering.
@@ -39,7 +47,8 @@ lifetime incident totals.
   the matching pair ID. Each role binds one address for the selection's lifetime.
   Other pairs and competing same-role addresses cannot overwrite live cards.
 - Legacy data has no pair ID and is scoped to the selected address.
-- Each node owns its heartbeat sequence, capture timestamp and link state. A healthy
+- Each node owns a random 32-bit boot session, full 32-bit event counter, heartbeat sequence,
+  capture timestamp and link state. A healthy
   cane update cannot clear a glasses alarm or conceal a stale glasses heartbeat.
 - Selection starts in WAITING, not ACTIVE. A fresh accepted packet establishes the
   link; stale reports remain explicitly labeled as historical.
@@ -90,8 +99,8 @@ JDK paths are not stored in `gradle.properties`.
 
 The JVM tests cover firmware flag vectors, sentinels, legacy compatibility, malformed
 AD structures, calibrated hazard interpretation, pair/address isolation, independent
-heartbeat deadlines, counter wrap/rebase, scan restart, stale latched incidents and
-phone haptic deduplication/pause/re-alarm.
+heartbeat deadlines, counter wrap/rebase, scan restart, stale latched incidents,
+phone haptic deduplication/pause/re-alarm and exact boot-scoped cane receipts.
 
 Compose instrumentation cases cover paused incidents, held-grip parking, independent
 head falls, generic faults and large-text scrolling. They use decoded firmware packet

@@ -32,6 +32,9 @@ typedef struct
 {
     bool initialized;
     bool active;
+    bool extended;
+    uint32_t session_id;
+    uint32_t event_id;
     uint8_t fall_seq;
 } BleComm_PeerFall_t;
 
@@ -42,7 +45,13 @@ bool BleComm_TrackPeerFall(BleComm_PeerFall_t * const p_tracker,
 void BleComm_Init(const BleComm_Config_t * const p_cfg);
 void BleComm_Encode(const Ble_AdvancedThreatPacket_t * const p_in, Ble_RawPacket_t * const p_out);
 bool BleComm_Decode(const Ble_RawPacket_t * const p_in, uint8_t expected_pair_id, Ble_AdvancedThreatPacket_t * const p_out);
+void BleComm_EncodeFrame(const Ble_AdvancedThreatPacket_t * const p_in,
+                         Ble_RawFrame_t * const p_out);
+bool BleComm_DecodeFrame(const Ble_RawFrame_t * const p_in, uint8_t expected_pair_id,
+                         Ble_AdvancedThreatPacket_t * const p_out);
+uint32_t BleComm_GetSessionId(void);
 bool BleComm_CheckNewFall(uint8_t rx_fall_seq, uint8_t last_fall_seq);
+bool BleComm_CheckNewEvent(uint32_t rx_event_id, uint32_t last_event_id);
 
 bool BleComm_SendPacket(const Ble_AdvancedThreatPacket_t * const p_pkt);
 /* Enqueue payload and state together. False means retry; never wait for queue space. */

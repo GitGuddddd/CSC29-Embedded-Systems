@@ -122,9 +122,18 @@ static void vTask_SafetyPerception(void *pvParameters)
     BleComm_PeerFall_t peer_fall = {0};
     bool prev_link_lost = false;
     uint8_t last_sent_flags = 0xFFU;
+    uint32_t last_sent_event_id = UINT32_MAX;
     Sys_State_t last_sent_state = SYS_STATE_COUNT;
     BleComm_ProfileId_t last_sent_profile = BLECOMM_PROFILE_FAST;
     uint16_t buzzer_freq_hz = 0U;
+    uint8_t buzzer_duty_percent = 0U;
+    uint32_t cane_event_id = 0U;
+    bool peer_ack_valid = false;
+    uint32_t peer_ack_session_id = 0U;
+    uint32_t peer_ack_event_id = 0U;
+    bool last_sent_peer_ack_valid = false;
+    uint32_t last_sent_peer_ack_session_id = 0U;
+    uint32_t last_sent_peer_ack_event_id = 0U;
 
     Cane_CompactStatus_t cane_status = {
         .grip_state     = (uint16_t)GRIP_STATE_RELEASED,
@@ -164,6 +173,9 @@ static void vTask_SafetyPerception(void *pvParameters)
         }
 
         bool remote_fall = false;
+        bool peer_event_identity_valid = false;
+        uint32_t peer_event_session_id = 0U;
+        uint32_t peer_event_id = 0U;
         Ble_AdvancedThreatPacket_t rx_pkt;
         uint32_t received_ms;
         for (uint32_t i = 0U; i < BLECOMM_CFG_RX_QUEUE_SIZE; ++i)
@@ -179,6 +191,13 @@ static void vTask_SafetyPerception(void *pvParameters)
                 if (BleComm_TrackPeerFall(&peer_fall, &rx_pkt))
                 {
                     remote_fall = true;
+                    if ((rx_pkt.protocol_version == BLE_PROTOCOL_VERSION) &&
+                        (rx_pkt.session_id != 0U))
+                    {
+                        peer_event_identity_valid = true;
+                        peer_event_session_id = rx_pkt.session_id;
+                        peer_event_id = rx_pkt.event_id;
+                    }
                 }
             }
         }
@@ -202,7 +221,8 @@ static void vTask_SafetyPerception(void *pvParameters)
         }
         if (local_fall)
         {
-            cane_status.fall_seq = (uint16_t)((cane_status.fall_seq + 1U) & 0x0FU);
+            cane_event_id++;
+            cane_status.fall_seq = (uint16_t)(cane_event_id & 0x0FU);
         }
 
         bool ground_enabled = mode_out.ground_enabled &&
@@ -342,10 +362,22 @@ static void vTask_SafetyPerception(void *pvParameters)
         AlertManager_Arbitrate(technical_audio ? ALERT_SENSOR_FAULT : ALERT_NONE,
                                0U, now_ms, &alert_out);
         uint16_t next_freq_hz = alert_out.buzzer_active ? alert_out.generated_freq_hz : 0U;
-        if (next_freq_hz != buzzer_freq_hz)
+        uint8_t next_duty_percent = alert_out.buzzer_active ?
+                                    alert_out.generated_duty_percent : 0U;
+        if ((next_freq_hz != buzzer_freq_hz) || (next_duty_percent != buzzer_duty_percent))
         {
-            Buzzer_PlayTone(next_freq_hz);
+            Buzzer_PlayToneAtDuty(next_freq_hz, next_duty_percent);
             buzzer_freq_hz = next_freq_hz;
+            buzzer_duty_percent = next_duty_percent;
+        }
+        if (remote_fall && peer_event_identity_valid && mode_out.fall_latched)
+        {
+            /* Receipt is emitted only after the mode manager latched the incident
+             * and the alarm request was rendered by the application path above.
+             */
+            peer_ack_valid = true;
+            peer_ack_session_id = peer_event_session_id;
+            peer_ack_event_id = peer_event_id;
         }
         if (s_sys_mode != prev_printed_mode)
         {
@@ -388,7 +420,12 @@ static void vTask_SafetyPerception(void *pvParameters)
         BleComm_ProfileId_t profile = BleComm_SelectProfile(s_sys_mode, flags, is_link_lost);
         uint32_t telemetry_period_ms = BleComm_GetProfile(profile)->payload_period_ms;
         if ((flags != last_sent_flags) || (s_sys_mode != last_sent_state) ||
-            (profile != last_sent_profile) || ((now_ms - last_telemetry_ms) >= telemetry_period_ms))
+            (cane_event_id != last_sent_event_id) ||
+            (profile != last_sent_profile) ||
+            (peer_ack_valid != last_sent_peer_ack_valid) ||
+            (peer_ack_session_id != last_sent_peer_ack_session_id) ||
+            (peer_ack_event_id != last_sent_peer_ack_event_id) ||
+            ((now_ms - last_telemetry_ms) >= telemetry_period_ms))
         {
             Ble_AdvancedThreatPacket_t cane_pkt = {
                 .preamble = 0xAAU,
@@ -397,19 +434,27 @@ static void vTask_SafetyPerception(void *pvParameters)
                 .node_type = BLE_NODE_TYPE_CANE,
                 .heartbeat_seq = (uint8_t)cane_status.tx_seq,
                 .rolling_fall_seq = (uint8_t)cane_status.fall_seq,
+                .event_id = cane_event_id,
                 .seq_num = (uint16_t)cane_status.tx_seq,
                 .state_flags = flags,
                 .nearest_dist_mm = mode_out.ground_enabled ? last_dist_mm : 0xFFFFU,
                 .closing_speed_cms = 0,
-                .ttc_ms = 0xFFFFU
+                .ttc_ms = 0xFFFFU,
+                .peer_ack_valid = peer_ack_valid,
+                .peer_ack_session_id = peer_ack_session_id,
+                .peer_ack_event_id = peer_ack_event_id
             };
             if (BleComm_Publish(&cane_pkt, s_sys_mode, is_link_lost))
             {
                 cane_status.tx_seq = (uint16_t)((cane_status.tx_seq + 1U) & 0x07U);
                 last_telemetry_ms = now_ms;
                 last_sent_flags = flags;
+                last_sent_event_id = cane_event_id;
                 last_sent_state = s_sys_mode;
                 last_sent_profile = profile;
+                last_sent_peer_ack_valid = peer_ack_valid;
+                last_sent_peer_ack_session_id = peer_ack_session_id;
+                last_sent_peer_ack_event_id = peer_ack_event_id;
             }
         }
 

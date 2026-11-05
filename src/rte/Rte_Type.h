@@ -64,6 +64,7 @@ typedef enum
     ALERT_CLIFF_STEP_UP,
     ALERT_FALL_ALARM,
     ALERT_FALL_MUTED,
+    ALERT_FALL_DELIVERY_FAULT,
     ALERT_SENSOR_FAULT,
     ALERT_LINK_LOSS,
     ALERT_CALIBRATE_PROMPT,
@@ -93,6 +94,9 @@ typedef struct
 
 #define BLE_PACKET_SYNC_NIBBLE       (0xAU)
 #define BLE_DEFAULT_PAIR_ID          (0x1U)
+#define BLE_PROTOCOL_VERSION         (0x1U)
+#define BLE_SAFETY_EXTENSION_MARKER  (0xE0U | BLE_PROTOCOL_VERSION)
+#define BLE_SAFETY_FLAG_PEER_ACK     (0x01U)
 
 #define BLE_FLAG_FALL_ALERT          (0x01U)
 #define BLE_FLAG_SENSOR_FAULT        (0x02U)
@@ -112,7 +116,8 @@ typedef enum
 } Ble_NodeType_t;
 
 /*
- * 6-byte Compact Unified Packet schema (FR14, NFR13, Barr-C compliant):
+ * 6-byte Compact Unified Status schema (FR14, NFR13, Barr-C compliant).
+ * Ble_RawFrame_t appends the versioned 18-byte safety extension below.
  * Byte 0: [Preamble Sync (4b: 0xA) | Pair ID (4b: 0x0-0xF)]
  * Byte 1: [Node Type (1b) | Heartbeat Seq (3b: 0-7) | Rolling Fall Seq (4b: 0-15)]
  * Byte 2: [State Flags (8b)]
@@ -130,6 +135,27 @@ typedef struct
     uint8_t ttc_high;
 } __attribute__((packed)) Ble_RawPacket_t;
 
+/*
+ * Optional versioned safety extension appended to the compact status packet.
+ * A receipt identifies the peer-originated event that this application accepted;
+ * it is not a user acknowledgement and does not clear either incident latch.
+ */
+typedef struct
+{
+    uint8_t marker_version;
+    uint8_t session_id[4];
+    uint8_t event_id[4];
+    uint8_t peer_ack_session_id[4];
+    uint8_t peer_ack_event_id[4];
+    uint8_t safety_flags;
+} __attribute__((packed)) Ble_SafetyExtension_t;
+
+typedef struct
+{
+    Ble_RawPacket_t status;
+    Ble_SafetyExtension_t safety;
+} __attribute__((packed)) Ble_RawFrame_t;
+
 /* Decoded packet structure for internal SWC consumption */
 typedef struct
 {
@@ -144,6 +170,12 @@ typedef struct
     uint16_t nearest_dist_mm;     /* 0 - 8190 mm, or 0xFFFF if invalid / no target */
     int16_t closing_speed_cms;
     uint16_t ttc_ms;              /* 0 - 81900 ms, or 0xFFFF if no threat */
+    uint8_t protocol_version;     /* 0 for the legacy six-byte compact packet */
+    uint32_t session_id;          /* Random nonzero identity for this boot */
+    uint32_t event_id;            /* Full local fall-event counter */
+    bool peer_ack_valid;          /* Peer application accepted the referenced event */
+    uint32_t peer_ack_session_id;
+    uint32_t peer_ack_event_id;
 } Ble_AdvancedThreatPacket_t;
 
 #endif /* RTE_TYPE_H */

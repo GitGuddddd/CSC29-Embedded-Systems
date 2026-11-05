@@ -1,6 +1,7 @@
 # Phone-independent safety: architecture rationale and robustness assessment
 
-Assessment of firmware and Android revision `67c4148`.
+Baseline assessment of firmware and Android revision `67c4148`, updated for the
+versioned critical-event receipt and glasses fallback implementation.
 
 ## Recommendation
 
@@ -27,9 +28,11 @@ reasonable, but its availability and failure behavior must be justified accordin
 
 - **Glasses:** local IMU fall detection and radar threat assessment; local obstacle
   audio; broadcast head-fall/status events. Lost cane telemetry becomes UNKNOWN grip,
-  which retains obstacle alerts rather than suppressing them.
+  which retains obstacle alerts rather than suppressing them. A missing or expired
+  cane application receipt starts a sparse low-duty local head-fall cue.
 - **Cane:** local ground/local-fall processing and haptics; receives head-fall events
-  and drives the larger fall alarm.
+  and drives the larger fall alarm. It echoes the exact head-fall identity only after
+  its application latches the incident and issues the alarm request.
 - **Android:** observes both nodes, presents pair-scoped status and supplies additional
   phone haptics. It currently sends no device wake/reset/relay command.
 
@@ -81,18 +84,21 @@ intervals, immediate escalation, a 1 s downshift hold, bounded queues, task-owne
 BTstack operations, timestamped RX, duplicate handling and worker-aware watchdogs.
 The 500 ms deadman detects missing fresh peer telemetry. These are useful mechanisms.
 
-However, a fresh heartbeat is not proof that a particular fall event reached the peer
-application or caused an alarm command. Repeated advertising improves the opportunity
-for delivery but provides no application receipt in the current six-byte schema.
+The six-byte status is now followed by a versioned 18-byte safety extension. It carries
+a random 32-bit boot session, 32-bit local event counter and exact peer application
+receipt. A fresh heartbeat alone still is not treated as delivery proof. The glasses
+fall back locally if the matching receipt is absent for 750 ms or cane freshness later
+expires. The event remains in coalesced status while its incident latch is active, and
+an unsuccessful queue publication is retried by the next application cycle.
 
 Concrete findings:
 
 | Finding | Evidence | Consequence |
 | --- | --- | --- |
-| No event-receipt field or exchange | `Rte_Type.h`, `BleComm.c`, both main loops | Glasses cannot confirm cane acceptance of their current head-fall event |
-| Head-fall audio on glasses is intentionally suppressed | `Glasses_Main.c`, `head_fall_latched` audio guard | If cane delivery/actuation fails, local feedback is the status LED and any available phone; this is inadequate as the sole wearable fallback for a visually impaired user |
+| Application receipt is not actuator feedback | Exact receipt in `Rte_Type.h`, `BleComm.c` and both main loops | Confirms cane application acceptance/alarm request, not physical sound output or sound pressure |
+| Glasses fallback is implemented but not acoustically validated | `SafetyDelivery.c`, `Glasses_Main.c`, low-duty `AlertManager` cue | Software enters a defined degraded mode; enclosure SPL and user suitability still require bench/usability evidence |
 | Latches initialize clear | `CaneMode_Init()` and `head_fall_latched = false` | A locally originated incident can disappear after a reset; a still-latched remote peer might reassert its event, but local retention is not guaranteed |
-| Small unauthenticated identity/counters | Four-bit pair ID, three-bit heartbeat, four-bit fall counter; default pair ID 1 | Pair collisions and reboot/wrap ambiguity; these fields do not authenticate a peer or prevent deliberate replay |
+| Event identity is stronger but unauthenticated | 32-bit random boot session and event counter; four-bit pair ID remains default 1 | Removes practical heartbeat/fall-counter ambiguity, but does not authenticate a peer or prevent deliberate spoofing/replay |
 | Firmware transport discards advertiser identity/RSSI | `BleRadio_RxCallback_t` carries data/length/time only | Firmware has no address binding or link-quality history comparable to Android's role/address scope |
 | Reset recovery affects both cores | Shared MCU hardware watchdog | Core affinity does not isolate power, memory or whole-chip reset; recovery introduces a monitoring interruption |
 
@@ -102,41 +108,42 @@ infer reliability by assuming independent packet loss without measurements.
 
 ## Highest-value enhancements
 
-### Critical-event receipt and retention
+### Critical-event receipt and retention — implemented in software
 
-Use an event identity such as `(origin node, boot/session ID, event counter)`.
-Retain unacknowledged critical events separately from coalescible status telemetry.
+The protocol now uses `(origin node, boot/session ID, event counter)`. The active latch
+retains the identity independently of heartbeat wrap and coalescible range telemetry.
 The cane returns a receipt only after its application has latched the event and issued
-the alarm request. Retry within a bounded delivery policy, then enter a defined degraded
-fallback if confirmation is absent. An actuator command is not proof that sound was
-physically produced; that requires hardware feedback or a verified output path.
+the alarm request. The glasses wait a bounded 750 ms before degraded fallback and
+re-enter fallback if cane freshness expires. An actuator command is not proof that sound
+was physically produced; that requires hardware feedback or a verified output path.
 
 Keep **transport receipt**, **user audio pause** and **incident clearance** distinct.
 Each acknowledgement/reset references the relevant event, so a delayed message cannot
 clear a newer fall. Relay messages retain their original event identity to prevent loops.
 
-### Glasses fallback and reset survival
+### Glasses fallback implemented; reset survival remains
 
-Define a locally perceptible response when the cane is unavailable or fails to confirm
-delivery. Preserve the ear-safety constraint: this calls for a validated low-intensity
-cue or a haptic mechanism, not simply playing the cane siren next to the ear.
+The glasses now use a 100 ms pulse every 2 s at 10% PWM duty when the cane is unavailable
+or fails to confirm delivery. This intentionally is not the cane siren. PWM duty is not
+an acoustic exposure measurement; frequency, enclosure SPL and user suitability still
+require validation before calling the response ear-safe.
 
 Preserve critical latch/event state across watchdog resets. A retained record can cover
 watchdog recovery; surviving power loss additionally needs an appropriate nonvolatile
 journal. Write only meaningful event transitions, with integrity/atomic-update handling,
 rather than logging every heartbeat to flash. Flash operations remain outside ISRs.
 
-### Identity, authentication and versioning
+### Versioning implemented; provisioning/authentication remain
 
-Provision a stronger device/group identity, handle reboot epochs explicitly and
-authenticate safety-relevant control/event messages. Radio CRC handles transmission
-corruption; it does not authenticate the sender. Address filtering is useful for
-accidental cross-talk, but is not cryptographic authentication either.
+The 24-byte manufacturer frame is versioned and handles reboot epochs explicitly with
+a random 32-bit session. Provision a stronger device/group identity and authenticate
+safety-relevant control/event messages. Radio CRC handles transmission corruption; it
+does not authenticate the sender. Address filtering is useful for accidental cross-talk,
+but is not cryptographic authentication either.
 
-If the six-byte status format is a fixed assessment constraint, keep it and define a
-separate versioned event/control PDU. Otherwise budget a versioned richer frame. The
-existing full name already has a scan-response path, so removing the repeated short
-name from the primary advertisement can make room for meaningful protocol metadata.
+The original six-byte status remains the frame prefix. Removing the repeated short name
+from the primary advertisement made room for the 18-byte extension; the full name stays
+in the scan response. Flags and AD headers bring the legacy advertisement to 31 bytes.
 
 ## Transport and energy choices to benchmark
 

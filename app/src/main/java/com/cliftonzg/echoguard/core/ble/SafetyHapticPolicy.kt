@@ -4,6 +4,7 @@ import com.cliftonzg.echoguard.core.ble.model.LinkState
 import com.cliftonzg.echoguard.core.ble.model.MonitoringState
 import com.cliftonzg.echoguard.core.ble.model.NodeTelemetry
 import com.cliftonzg.echoguard.core.ble.model.NodeType
+import com.cliftonzg.echoguard.core.ble.model.SystemPacket
 import com.cliftonzg.echoguard.core.ble.model.TelemetryStatus
 
 enum class HapticCue(val priority: Int, val durationMs: Long, val reminderMs: Long) {
@@ -17,7 +18,12 @@ enum class HapticCue(val priority: Int, val durationMs: Long, val reminderMs: Lo
 
 /** Single phone-vibrator owner. Heartbeat updates do not restart an in-progress waveform. */
 class SafetyHapticPolicy {
-    private data class Signal(val cue: HapticCue, val incidentSeq: Int = 0)
+    private data class Signal(
+        val cue: HapticCue,
+        val incidentOrigin: NodeType? = null,
+        val incidentSession: Long = 0L,
+        val incidentEvent: Long = 0L,
+    )
 
     private var selection: Pair<String, Int?>? = null
     private var previous = emptyMap<NodeType, Signal>()
@@ -34,9 +40,15 @@ class SafetyHapticPolicy {
             previous = emptyMap()
             return stop()
         }
-        val signals = state.nodes.associate { it.type to signal(it) }
+        val signals = state.nodes.associate { it.type to signal(it, state) }
         val winner = signals.values.maxByOrNull { it.cue.priority }?.cue ?: HapticCue.STOP
-        val newIncident = signals.any { (node, signal) -> signal.cue == winner && previous[node] != signal }
+        val newIncident = signals.any { (node, signal) ->
+            signal.cue == winner && if (winner == HapticCue.FALL) {
+                previous.values.none { it == signal }
+            } else {
+                previous[node] != signal
+            }
+        }
         previous = signals
         if (winner == HapticCue.STOP) return stop()
         val elapsed = nowMs - lastEmittedMs
@@ -54,12 +66,33 @@ class SafetyHapticPolicy {
         return HapticCue.STOP
     }
 
-    private fun signal(node: NodeTelemetry): Signal {
+    private fun signal(node: NodeTelemetry, state: MonitoringState): Signal {
         if (node.linkState == LinkState.LINK_LOSS) return Signal(HapticCue.LINK_LOSS)
         val packet = node.packet ?: return Signal(HapticCue.STOP)
         if (!node.isFresh) return Signal(HapticCue.STOP)
         return when (packet.status) {
-            TelemetryStatus.FALL_ALARM -> Signal(HapticCue.FALL, packet.rollingFallSeq)
+            TelemetryStatus.FALL_ALARM -> {
+                val relayed = if (node.type == NodeType.CANE &&
+                    packet.protocolVersion == SystemPacket.PROTOCOL_VERSION &&
+                    packet.peerAckValid
+                ) {
+                    state.node(NodeType.GLASSES)?.takeIf { glasses ->
+                        val event = glasses.packet
+                        glasses.isFresh && event?.status == TelemetryStatus.FALL_ALARM &&
+                            event.protocolVersion == SystemPacket.PROTOCOL_VERSION &&
+                            packet.peerAckSessionId == event.sessionId &&
+                            packet.peerAckEventId == event.eventId
+                    }?.packet
+                } else null
+                Signal(
+                    HapticCue.FALL,
+                    relayed?.nodeType ?: node.type,
+                    relayed?.sessionId ?: if (packet.protocolVersion > 0) packet.sessionId else 0L,
+                    relayed?.eventId ?: if (packet.protocolVersion > 0) {
+                        packet.eventId
+                    } else packet.rollingFallSeq.toLong(),
+                )
+            }
             TelemetryStatus.GROUND_HAZARD, TelemetryStatus.OBSTACLE_CRITICAL -> Signal(HapticCue.CRITICAL)
             TelemetryStatus.OBSTACLE_WARNING -> Signal(HapticCue.WARNING)
             TelemetryStatus.SENSOR_FAULT -> Signal(HapticCue.SENSOR_FAULT)

@@ -16,9 +16,15 @@ void Buzzer_Init(const Buzzer_Config_t * const p_cfg)
 
 void Buzzer_PlayTone(uint16_t freq_hz)
 {
+    Buzzer_PlayToneAtDuty(freq_hz, BUZZER_CFG_DUTY_PCT);
+}
+
+void Buzzer_PlayToneAtDuty(uint16_t freq_hz, uint8_t duty_percent)
+{
     if (freq_hz > 0U)
     {
-        Hal_Pwm_SetFrequency(s_buzzer_pin, freq_hz, BUZZER_CFG_DUTY_PCT);
+        uint8_t bounded_duty = (duty_percent <= 100U) ? duty_percent : 100U;
+        Hal_Pwm_SetFrequency(s_buzzer_pin, freq_hz, bounded_duty);
     }
     else
     {

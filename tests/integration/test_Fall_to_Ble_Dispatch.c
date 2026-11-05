@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "app/FallDetection/FallDetection.h"
 #include "services/BleComm/BleComm.h"
+#include <string.h>
 
 void setUp(void)
 {
@@ -130,6 +131,42 @@ void test_BleComm_EncodeDecode_6ByteRawPacket(void)
     TEST_ASSERT_FALSE(reject_ok);
 }
 
+void test_BleComm_ExtendedFrameCarriesBootScopedApplicationReceipt(void)
+{
+    TEST_ASSERT_EQUAL_UINT32(24U, sizeof(Ble_RawFrame_t));
+    Ble_AdvancedThreatPacket_t source = {
+        .pair_id = 5U,
+        .node_type = BLE_NODE_TYPE_CANE,
+        .heartbeat_seq = 6U,
+        .rolling_fall_seq = 0x0EU,
+        .state_flags = BLE_FLAG_FALL_ALERT,
+        .nearest_dist_mm = 0xFFFFU,
+        .ttc_ms = 0xFFFFU,
+        .protocol_version = BLE_PROTOCOL_VERSION,
+        .session_id = 0xA1020304U,
+        .event_id = 0x3E405162U,
+        .peer_ack_valid = true,
+        .peer_ack_session_id = 0xB2030405U,
+        .peer_ack_event_id = 0x7F8091A2U
+    };
+    Ble_RawFrame_t frame;
+    Ble_AdvancedThreatPacket_t decoded;
+    BleComm_EncodeFrame(&source, &frame);
+    TEST_ASSERT_EQUAL_HEX8(BLE_SAFETY_EXTENSION_MARKER, frame.safety.marker_version);
+    TEST_ASSERT_TRUE(BleComm_DecodeFrame(&frame, 5U, &decoded));
+    TEST_ASSERT_EQUAL_UINT32(source.session_id, decoded.session_id);
+    TEST_ASSERT_EQUAL_UINT32(source.event_id, decoded.event_id);
+    TEST_ASSERT_TRUE(decoded.peer_ack_valid);
+    TEST_ASSERT_EQUAL_UINT32(source.peer_ack_session_id, decoded.peer_ack_session_id);
+    TEST_ASSERT_EQUAL_UINT32(source.peer_ack_event_id, decoded.peer_ack_event_id);
+
+    frame.safety.marker_version = 0xE2U;
+    TEST_ASSERT_FALSE(BleComm_DecodeFrame(&frame, 5U, &decoded));
+    frame.safety.marker_version = BLE_SAFETY_EXTENSION_MARKER;
+    (void)memset(frame.safety.session_id, 0, sizeof(frame.safety.session_id));
+    TEST_ASSERT_FALSE(BleComm_DecodeFrame(&frame, 5U, &decoded));
+}
+
 void test_BleComm_WrapSafe_RollingFallCount(void)
 {
     /* Delta = 0: Duplicate, no new fall */
@@ -155,6 +192,15 @@ void test_BleComm_WrapSafe_RollingFallCount(void)
 
     /* Wrap-around stale: 1 -> 14 (delta = (14 - 1) & 15 = 13) -> rejected */
     TEST_ASSERT_FALSE(BleComm_CheckNewFall(14U, 1U));
+}
+
+void test_BleComm_FullEventOrderingRejectsStaleAndAcceptsWrap(void)
+{
+    TEST_ASSERT_FALSE(BleComm_CheckNewEvent(5U, 5U));
+    TEST_ASSERT_TRUE(BleComm_CheckNewEvent(6U, 5U));
+    TEST_ASSERT_FALSE(BleComm_CheckNewEvent(4U, 5U));
+    TEST_ASSERT_TRUE(BleComm_CheckNewEvent(0U, UINT32_MAX));
+    TEST_ASSERT_FALSE(BleComm_CheckNewEvent(UINT32_MAX, 0U));
 }
 
 void test_PeerFall_IsDetectedOnFirstContact_AndNotReplayedAfterAcknowledgement(void)
@@ -183,6 +229,37 @@ void test_PeerFall_IsDetectedOnFirstContact_AndNotReplayedAfterAcknowledgement(v
     TEST_ASSERT_TRUE(BleComm_TrackPeerFall(&tracker, &packet));
 }
 
+void test_PeerFall_ExtendedIdentityDistinguishesPeerRebootAndFullEventCounter(void)
+{
+    BleComm_PeerFall_t tracker = {0};
+    Ble_AdvancedThreatPacket_t packet = {
+        .rolling_fall_seq = 1U,
+        .state_flags = BLE_FLAG_FALL_ALERT,
+        .protocol_version = BLE_PROTOCOL_VERSION,
+        .session_id = 0x10010001U,
+        .event_id = 1U
+    };
+    TEST_ASSERT_TRUE(BleComm_TrackPeerFall(&tracker, &packet));
+    TEST_ASSERT_FALSE(BleComm_TrackPeerFall(&tracker, &packet));
+    packet.event_id = 17U; /* Same low nibble, distinct full event identity. */
+    TEST_ASSERT_TRUE(BleComm_TrackPeerFall(&tracker, &packet));
+    packet.session_id = 0x10020002U; /* Reboot epoch, even if event counter restarts. */
+    packet.event_id = 1U;
+    TEST_ASSERT_TRUE(BleComm_TrackPeerFall(&tracker, &packet));
+    packet.state_flags = 0U;
+    TEST_ASSERT_FALSE(BleComm_TrackPeerFall(&tracker, &packet));
+    packet.state_flags = BLE_FLAG_FALL_ALERT;
+    TEST_ASSERT_FALSE(BleComm_TrackPeerFall(&tracker, &packet)); /* Same identity replay. */
+    packet.event_id = 0U; /* Delayed older event from this boot session. */
+    TEST_ASSERT_FALSE(BleComm_TrackPeerFall(&tracker, &packet));
+
+    BleComm_PeerFall_t wrap_tracker = {0};
+    packet.event_id = UINT32_MAX;
+    TEST_ASSERT_TRUE(BleComm_TrackPeerFall(&wrap_tracker, &packet));
+    packet.event_id = 0U; /* Full-width counter wrap remains a distinct identity. */
+    TEST_ASSERT_TRUE(BleComm_TrackPeerFall(&wrap_tracker, &packet));
+}
+
 void test_PausedAndParkedStatus_RoundTripsWithoutChangingPacketSize(void)
 {
     Ble_AdvancedThreatPacket_t packet = {
@@ -209,8 +286,11 @@ int main(void)
     UNITY_BEGIN();
     RUN_TEST(test_Integration_FallToBleDispatch);
     RUN_TEST(test_BleComm_EncodeDecode_6ByteRawPacket);
+    RUN_TEST(test_BleComm_ExtendedFrameCarriesBootScopedApplicationReceipt);
     RUN_TEST(test_BleComm_WrapSafe_RollingFallCount);
+    RUN_TEST(test_BleComm_FullEventOrderingRejectsStaleAndAcceptsWrap);
     RUN_TEST(test_PeerFall_IsDetectedOnFirstContact_AndNotReplayedAfterAcknowledgement);
+    RUN_TEST(test_PeerFall_ExtendedIdentityDistinguishesPeerRebootAndFullEventCounter);
     RUN_TEST(test_PausedAndParkedStatus_RoundTripsWithoutChangingPacketSize);
     return UNITY_END();
 }

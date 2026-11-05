@@ -69,9 +69,18 @@ fun MonitoringState.presentation(): TelemetryPresentation {
     )
     val fresh = nodes.filter { it.isFresh }
     val activeFalls = fresh.filter { it.packet?.status == TelemetryStatus.FALL_ALARM }
-    if (activeFalls.isNotEmpty()) return TelemetryPresentation(
-        "Fall alarm", "Reported by ${activeFalls.labels()}. Incident remains latched.", StatusTone.ALERT,
-    )
+    if (activeFalls.isNotEmpty()) {
+        val receipt = when (glassesFallReceiptState) {
+            PeerReceiptState.CONFIRMED -> " Cane application receipt confirmed."
+            PeerReceiptState.WAITING -> " Awaiting cane application receipt; glasses fallback is armed."
+            PeerReceiptState.CANE_UNAVAILABLE -> " Cane telemetry unavailable; glasses fallback should be active."
+            PeerReceiptState.LEGACY_UNAVAILABLE -> " This legacy packet cannot confirm cane receipt."
+            PeerReceiptState.NOT_APPLICABLE -> ""
+        }
+        return TelemetryPresentation(
+            "Fall alarm", "Reported by ${activeFalls.labels()}. Incident remains latched.$receipt", StatusTone.ALERT,
+        )
+    }
     val staleFalls = nodes.filter { !it.isFresh && it.packet?.hasLatchedFall == true }
     if (staleFalls.isNotEmpty()) return TelemetryPresentation(
         "Fall report · link lost", "${staleFalls.labels()}: last incident is unresolved; current status is unavailable.",

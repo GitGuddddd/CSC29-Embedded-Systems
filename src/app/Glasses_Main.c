@@ -17,6 +17,7 @@
 #include "services/Diagnostics/Diagnostics.h"
 #include "services/Watchdog/Watchdog.h"
 #include "services/Watchdog/Watchdog_Cfg.h"
+#include "services/SafetyDelivery/SafetyDelivery.h"
 #include "app/FallDetection/FallDetection.h"
 #include "app/ThreatAssessment/ThreatAssessment.h"
 #include "app/AlertManager/AlertManager.h"
@@ -73,14 +74,19 @@ static void vTask_GlassesPerception(void *pvParameters)
     uint32_t last_btn_ms = 0U;
     uint32_t last_telemetry_ms = 0U;
     uint8_t last_sent_flags = 0xFFU;
+    uint32_t last_sent_event_id = UINT32_MAX;
     Sys_State_t last_sent_state = SYS_STATE_COUNT;
     BleComm_ProfileId_t last_sent_profile = BLECOMM_PROFILE_FAST;
     uint16_t buzzer_freq_hz = 0U;
+    uint8_t buzzer_duty_percent = 0U;
     bool ack_was_pressed = !Hal_Gpio_Read(GLASSES_PIN_ACK_BTN);
 
     bool head_fall_latched = false;
-    uint8_t glasses_fall_count = 0U;
+    uint32_t glasses_fall_count = 0U;
     uint8_t glasses_tx_seq = 0U;
+    SafetyDelivery_t fall_delivery;
+    SafetyDelivery_Init(&fall_delivery, BleComm_GetSessionId());
+    bool previous_delivery_fallback = false;
     Threat_Result_t current_threat = {0};
     uint32_t last_valid_radar_frame_ms = 0U;
 
@@ -123,6 +129,7 @@ static void vTask_GlassesPerception(void *pvParameters)
             if ((rx_pkt.device_id == 0x01U) &&
                 ((uint32_t)(now_ms - received_ms) < WATCHDOG_CFG_DEADMAN_TIMEOUT_MS))
             {
+                SafetyDelivery_ObservePeer(&fall_delivery, &rx_pkt, received_ms);
                 last_cane_pkt_ms = received_ms;
                 cane_seen = true;
                 cane_standby = ((rx_pkt.state_flags & BLE_FLAG_STANDBY) != 0U);
@@ -180,10 +187,11 @@ static void vTask_GlassesPerception(void *pvParameters)
             }
             if (!head_fall_latched && FallDetection_Step(&imu.sample, now_ms))
             {
-                printf("[GLASSES ALERT] Head fall latched; offloading audio to cane.\n");
+                printf("[GLASSES ALERT] Head fall latched; awaiting cane application receipt.\n");
                 head_fall_latched = true;
                 new_head_fall = true;
-                glasses_fall_count = (uint8_t)((glasses_fall_count + 1U) & 0x0FU);
+                glasses_fall_count++;
+                SafetyDelivery_Start(&fall_delivery, glasses_fall_count, now_ms);
                 sleep_requested = false;
             }
         }
@@ -234,6 +242,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                 last_movement_ms = now_ms;
                 FallDetection_Reset();
                 AlertManager_AcknowledgeReset();
+                SafetyDelivery_Clear(&fall_delivery);
             }
             ack_was_pressed = ack_pressed;
 
@@ -243,7 +252,8 @@ static void vTask_GlassesPerception(void *pvParameters)
                 printf("[TEST TRIGGER] Simulating Confirmed Head Fall on Glasses!\n");
                 sleep_requested = false;
                 head_fall_latched = true;
-                glasses_fall_count = (uint8_t)((glasses_fall_count + 1U) & 0x0FU);
+                glasses_fall_count++;
+                SafetyDelivery_Start(&fall_delivery, glasses_fall_count, now_ms);
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
             }
             else if ((ch == (int)'c') || (ch == (int)'C'))
@@ -255,6 +265,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                 FallDetection_Reset();
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
                 AlertManager_AcknowledgeReset();
+                SafetyDelivery_Clear(&fall_delivery);
             }
         }
 
@@ -287,7 +298,13 @@ static void vTask_GlassesPerception(void *pvParameters)
                        (imu.fault && ((now_ms % 1000U) < 500U)));
 
         Alert_Type_t request = ALERT_NONE;
-        if (!head_fall_latched && !standby)
+        bool delivery_fallback = head_fall_latched &&
+                                 SafetyDelivery_NeedsFallback(&fall_delivery, now_ms);
+        if (delivery_fallback)
+        {
+            request = ALERT_FALL_DELIVERY_FAULT;
+        }
+        else if (!head_fall_latched && !standby)
         {
             if (obstacle)
             {
@@ -301,10 +318,23 @@ static void vTask_GlassesPerception(void *pvParameters)
         Alert_Output_t alert_out;
         AlertManager_Arbitrate(request, current_threat.nearest_distance_mm, now_ms, &alert_out);
         uint16_t next_freq_hz = alert_out.buzzer_active ? alert_out.generated_freq_hz : 0U;
-        if (next_freq_hz != buzzer_freq_hz)
+        uint8_t next_duty_percent = alert_out.buzzer_active ?
+                                    alert_out.generated_duty_percent : 0U;
+        if ((next_freq_hz != buzzer_freq_hz) || (next_duty_percent != buzzer_duty_percent))
         {
-            Buzzer_PlayTone(next_freq_hz);
+            Buzzer_PlayToneAtDuty(next_freq_hz, next_duty_percent);
             buzzer_freq_hz = next_freq_hz;
+            buzzer_duty_percent = next_duty_percent;
+        }
+        if (delivery_fallback != previous_delivery_fallback)
+        {
+            printf("[HEAD FALL DELIVERY] %s (receipt=%u cane_fresh=%u)\n",
+                   delivery_fallback ? "LOCAL LOW-DUTY FALLBACK" : "cane receipt path active",
+                   (unsigned)SafetyDelivery_IsConfirmed(&fall_delivery),
+                   (unsigned)(cane_seen &&
+                              ((uint32_t)(now_ms - last_cane_pkt_ms) <
+                               WATCHDOG_CFG_DEADMAN_TIMEOUT_MS)));
+            previous_delivery_fallback = delivery_fallback;
         }
 
         uint8_t flags = 0U;
@@ -328,6 +358,7 @@ static void vTask_GlassesPerception(void *pvParameters)
         BleComm_ProfileId_t profile = BleComm_SelectProfile(s_glasses_mode, flags, link_lost);
         uint32_t telemetry_period_ms = BleComm_GetProfile(profile)->payload_period_ms;
         if ((flags != last_sent_flags) || (s_glasses_mode != last_sent_state) ||
+            (glasses_fall_count != last_sent_event_id) ||
             (profile != last_sent_profile) || ((now_ms - last_telemetry_ms) >= telemetry_period_ms))
         {
             uint16_t ttc = (radar_timeout || standby || (current_threat.time_to_collision_ms == UINT16_MAX)) ?
@@ -340,6 +371,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                 .node_type = BLE_NODE_TYPE_GLASSES,
                 .heartbeat_seq = (uint8_t)(glasses_tx_seq & 0x07U),
                 .rolling_fall_seq = (uint8_t)(glasses_fall_count & 0x0FU),
+                .event_id = glasses_fall_count,
                 .seq_num = glasses_tx_seq,
                 .state_flags = flags,
                 .nearest_dist_mm = (radar_timeout || standby) ? 0xFFFFU : current_threat.nearest_distance_mm,
@@ -351,6 +383,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                 glasses_tx_seq++;
                 last_telemetry_ms = now_ms;
                 last_sent_flags = flags;
+                last_sent_event_id = glasses_fall_count;
                 last_sent_state = s_glasses_mode;
                 last_sent_profile = profile;
             }

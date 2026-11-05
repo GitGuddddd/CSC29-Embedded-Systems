@@ -30,7 +30,7 @@ enum class TelemetryStatus {
 /**
  * Represents a packet received over BLE from the EchoGuard system.
  * Supports 5-byte basic packet schema, 10-11 byte AdvancedThreatPacket schema,
- * and the compact 6-byte packed schema (minimum-bit curveball response).
+ * and the compact 6-byte status with an optional 18-byte safety extension.
  */
 data class SystemPacket(
     val magic: Int,
@@ -45,6 +45,12 @@ data class SystemPacket(
     val compactFormat: Boolean = false,
     val rollingFallSeq: Int = 0,
     val pairId: Int = 0,
+    val protocolVersion: Int = 0,
+    val sessionId: Long = 0L,
+    val eventId: Long = 0L,
+    val peerAckValid: Boolean = false,
+    val peerAckSessionId: Long = 0L,
+    val peerAckEventId: Long = 0L,
     // Monotonic capture time: ScanResult.timestampNanos / 1_000_000, not wall-clock time.
     val receivedAt: Long = 0L,
 ) {
@@ -135,7 +141,8 @@ data class SystemPacket(
     private fun isCompactValid(): Boolean {
         // Compact 6-byte packed schema: deviceId derived from node type (0x01=Cane, 0x02=Glasses)
         return magic == 0xAA && (deviceId == 0x01 || deviceId == 0x02) &&
-            pairId in 0 until 16 && seqNum in 0 until 8 && rollingFallSeq in 0 until 16
+            pairId in 0 until 16 && seqNum in 0 until 8 && rollingFallSeq in 0 until 16 &&
+            (protocolVersion == 0 || (protocolVersion == PROTOCOL_VERSION && sessionId != 0L))
     }
 
     /**
@@ -161,7 +168,10 @@ data class SystemPacket(
         if (compactFormat != previous.compactFormat || isAdvanced != previous.isAdvanced) return true
         if (!compactFormat) return isNewerThan(previous.seqNum)
         val delta = (seqNum - previous.seqNum) and 0x07
-        val statusChanged = stateFlags != previous.stateFlags || rollingFallSeq != previous.rollingFallSeq
+        val statusChanged = stateFlags != previous.stateFlags ||
+            rollingFallSeq != previous.rollingFallSeq || sessionId != previous.sessionId ||
+            eventId != previous.eventId || peerAckValid != previous.peerAckValid ||
+            peerAckSessionId != previous.peerAckSessionId || peerAckEventId != previous.peerAckEventId
         if (delta == 0) return statusChanged
         return delta <= 4 || receivedAt - previous.receivedAt >= SEQUENCE_REBASE_MS
     }
@@ -177,6 +187,15 @@ data class SystemPacket(
         const val FLAG_PARKED_BY_USER = 0x40
         const val LINK_TIMEOUT_MS = 500L
         const val SEQUENCE_REBASE_MS = 250L
+        const val PROTOCOL_VERSION = 1
+        const val SAFETY_EXTENSION_MARKER = 0xE1
+        const val SAFETY_FLAG_PEER_ACK = 0x01
+
+        private fun readU32Le(data: ByteArray, offset: Int): Long =
+            (data[offset].toLong() and 0xFFL) or
+                ((data[offset + 1].toLong() and 0xFFL) shl 8) or
+                ((data[offset + 2].toLong() and 0xFFL) shl 16) or
+                ((data[offset + 3].toLong() and 0xFFL) shl 24)
 
         fun parse(data: ByteArray, timestamp: Long = 0L): SystemPacket? {
             return when {
@@ -207,8 +226,9 @@ data class SystemPacket(
                     )
                     packet.takeIf { it.isValid() }
                 }
-                data.size == 6 -> {
-                    // Compact 6-byte Packed Schema (minimum-bit curveball response):
+                data.size == 6 || data.size == 24 -> {
+                    // Compact 6-byte status, optionally followed by an 18-byte
+                    // boot-scoped event/application-receipt extension.
                     // Byte 0: [Sync Nibble 0xA (4b) | Pair ID (4b)]
                     // Byte 1: [Node Type (1b) | Heartbeat Seq (3b) | Rolling Fall Seq (4b)]
                     // Byte 2: [State Flags (8b)]
@@ -243,6 +263,15 @@ data class SystemPacket(
 
                     val deviceId = if (nodeType == 1) 0x01 else 0x02
 
+                    val extended = data.size == 24
+                    if (extended && (data[6].toInt() and 0xFF) != SAFETY_EXTENSION_MARKER) return null
+                    val protocolVersion = if (extended) data[6].toInt() and 0x0F else 0
+                    val sessionId = if (extended) readU32Le(data, 7) else 0L
+                    val eventId = if (extended) readU32Le(data, 11) else rollingFallSeq.toLong()
+                    val peerAckSessionId = if (extended) readU32Le(data, 15) else 0L
+                    val peerAckEventId = if (extended) readU32Le(data, 19) else 0L
+                    val safetyFlags = if (extended) data[23].toInt() and 0xFF else 0
+
                     val packet = SystemPacket(
                         magic = 0xAA, // Synthetic preamble for UI compatibility
                         seqNum = heartbeatSeq,
@@ -256,6 +285,12 @@ data class SystemPacket(
                         compactFormat = true,
                         rollingFallSeq = rollingFallSeq,
                         pairId = pairId,
+                        protocolVersion = protocolVersion,
+                        sessionId = sessionId,
+                        eventId = eventId,
+                        peerAckValid = (safetyFlags and SAFETY_FLAG_PEER_ACK) != 0,
+                        peerAckSessionId = peerAckSessionId,
+                        peerAckEventId = peerAckEventId,
                         receivedAt = timestamp,
                     )
                     packet.takeIf { it.isValid() }

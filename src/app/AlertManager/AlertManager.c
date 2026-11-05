@@ -131,12 +131,27 @@ void AlertManager_Arbitrate(Alert_Type_t requested_alert,
             p_out->active_alert = ALERT_FALL_ALARM;
             p_out->buzzer_active = Fall_PulseOn((uint32_t)(now_ms - s_fall_start_time_ms));
             p_out->generated_freq_hz = ALERT_FALL_FREQ_A_HZ;
+            p_out->generated_duty_percent = ALERT_STANDARD_DUTY_PERCENT;
             p_out->haptic_active = false; /* FR4: Inhibit haptics */
         }
         return;
     }
 
-    /* Priority 2: Cliff Warning (Cane Haptic only) */
+    /* Priority 2: Head-fall delivery fallback on the glasses. This deliberately
+     * uses a sparse, low-duty cue rather than the cane's emergency siren. Bench
+     * sound-pressure validation is still required for the final enclosure.
+     */
+    if (requested_alert == ALERT_FALL_DELIVERY_FAULT)
+    {
+        p_out->active_alert = ALERT_FALL_DELIVERY_FAULT;
+        p_out->buzzer_active = ((uint32_t)(now_ms - s_request_start_ms) %
+                                ALERT_DELIVERY_PERIOD_MS) < ALERT_DELIVERY_PULSE_MS;
+        p_out->generated_freq_hz = ALERT_DELIVERY_FREQ_HZ;
+        p_out->generated_duty_percent = ALERT_DELIVERY_DUTY_PERCENT;
+        return;
+    }
+
+    /* Priority 3: Cliff Warning (Cane Haptic only) */
     if (requested_alert == ALERT_CLIFF_WARNING)
     {
         p_out->active_alert = ALERT_CLIFF_WARNING;
@@ -145,16 +160,17 @@ void AlertManager_Arbitrate(Alert_Type_t requested_alert,
         return;
     }
 
-    /* Priority 3: Obstacle Proximity (Glasses Buzzer) */
+    /* Priority 4: Obstacle Proximity (Glasses Buzzer) */
     if (requested_alert == ALERT_OBSTACLE_PROXIMITY)
     {
         p_out->active_alert = ALERT_OBSTACLE_PROXIMITY;
         p_out->buzzer_active = true;
         p_out->generated_freq_hz = AlertManager_MapDistanceToPitch(param);
+        p_out->generated_duty_percent = ALERT_STANDARD_DUTY_PERCENT;
         return;
     }
 
-    /* Priority 4: Sensor Fault Tone */
+    /* Priority 5: Sensor Fault Tone */
     if (requested_alert == ALERT_SENSOR_FAULT)
     {
         p_out->active_alert = ALERT_SENSOR_FAULT;
@@ -163,10 +179,11 @@ void AlertManager_Arbitrate(Alert_Type_t requested_alert,
                               ((t >= (ALERT_FAULT_PULSE_MS + ALERT_FAULT_GAP_MS)) &&
                                (t < ((2U * ALERT_FAULT_PULSE_MS) + ALERT_FAULT_GAP_MS)));
         p_out->generated_freq_hz = ALERT_FAULT_FREQ_HZ;
+        p_out->generated_duty_percent = ALERT_STANDARD_DUTY_PERCENT;
         return;
     }
 
-    /* Priority 5: Link Loss Haptic Warning (FR16: degraded mode) */
+    /* Priority 6: Link Loss Haptic Warning (FR16: degraded mode) */
     if (requested_alert == ALERT_LINK_LOSS)
     {
         p_out->active_alert = ALERT_LINK_LOSS;

@@ -117,6 +117,22 @@ void test_AlertManager_TechnicalFaultHasTwoPulses(void)
     TEST_ASSERT_TRUE(out.buzzer_active);
 }
 
+void test_AlertManager_DeliveryFallbackIsSparseAndLowDuty(void)
+{
+    Alert_Output_t out;
+    AlertManager_Arbitrate(ALERT_FALL_DELIVERY_FAULT, 0U, 1000U, &out);
+    TEST_ASSERT_EQUAL(ALERT_FALL_DELIVERY_FAULT, out.active_alert);
+    TEST_ASSERT_TRUE(out.buzzer_active);
+    TEST_ASSERT_EQUAL_UINT16(ALERT_DELIVERY_FREQ_HZ, out.generated_freq_hz);
+    TEST_ASSERT_EQUAL_UINT8(ALERT_DELIVERY_DUTY_PERCENT, out.generated_duty_percent);
+    AlertManager_Arbitrate(ALERT_FALL_DELIVERY_FAULT, 0U,
+                           1000U + ALERT_DELIVERY_PULSE_MS, &out);
+    TEST_ASSERT_FALSE(out.buzzer_active);
+    AlertManager_Arbitrate(ALERT_FALL_DELIVERY_FAULT, 0U,
+                           1000U + ALERT_DELIVERY_PERIOD_MS, &out);
+    TEST_ASSERT_TRUE(out.buzzer_active);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -125,5 +141,6 @@ int main(void)
     RUN_TEST(test_AlertManager_IncidentDoesNotSilentlyExpire_AndPauseDoesNotClear);
     RUN_TEST(test_AlertManager_TenPulses_AndInterBurstSilence);
     RUN_TEST(test_AlertManager_TechnicalFaultHasTwoPulses);
+    RUN_TEST(test_AlertManager_DeliveryFallbackIsSparseAndLowDuty);
     return UNITY_END();
 }

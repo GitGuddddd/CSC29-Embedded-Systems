@@ -52,16 +52,58 @@ class SafetyHapticPolicyTest {
     @Test fun `relay report does not restart a waveform already sounding`() {
         val policy = SafetyHapticPolicy()
         val headFall = packet(NodeType.GLASSES, flags = SystemPacket.FLAG_FALL_ALERT, fallSeq = 9)
-        val relayFall = packet(flags = SystemPacket.FLAG_FALL_ALERT, fallSeq = 0)
+        val relayFall = packet(
+            flags = SystemPacket.FLAG_FALL_ALERT,
+            fallSeq = 0,
+            ackValid = true,
+            ackSession = headFall.sessionId,
+            ackEvent = headFall.eventId,
+        )
         assertEquals(HapticCue.FALL, policy.update(state(node(headFall)), 0L))
-        assertNull(policy.update(state(node(headFall), node(relayFall)), 100L))
+        assertNull(policy.update(state(node(headFall), node(relayFall)), 1000L))
+    }
+
+    @Test fun `independent cane event remains distinct from glasses event`() {
+        val policy = SafetyHapticPolicy()
+        val headFall = packet(NodeType.GLASSES, flags = SystemPacket.FLAG_FALL_ALERT, fallSeq = 9)
+        val caneFall = packet(flags = SystemPacket.FLAG_FALL_ALERT, fallSeq = 1)
+        assertEquals(HapticCue.FALL, policy.update(state(node(headFall)), 0L))
+        assertEquals(HapticCue.FALL, policy.update(state(node(headFall), node(caneFall)), 1000L))
+    }
+
+    @Test fun `same-priority non-fall alerts remain node scoped`() {
+        val policy = SafetyHapticPolicy()
+        val caneHazard = packet(flags = SystemPacket.FLAG_OBSTACLE_ACTIVE)
+        val glassesHazard = packet(
+            NodeType.GLASSES,
+            flags = SystemPacket.FLAG_OBSTACLE_ACTIVE,
+            distance = 500,
+        )
+        assertEquals(HapticCue.CRITICAL, policy.update(state(node(caneHazard)), 0L))
+        assertEquals(
+            HapticCue.CRITICAL,
+            policy.update(state(node(caneHazard), node(glassesHazard)), 1000L),
+        )
     }
 
     @Test fun `new incident counter alerts before normal reminder interval`() {
         val policy = SafetyHapticPolicy()
         val old = packet(flags = SystemPacket.FLAG_FALL_ALERT, fallSeq = 15)
         policy.update(state(node(old)), 0L)
-        assertEquals(HapticCue.FALL, policy.update(state(node(old.copy(rollingFallSeq = 0))), 1000L))
+        assertEquals(
+            HapticCue.FALL,
+            policy.update(state(node(old.copy(rollingFallSeq = 0, eventId = 16L))), 1000L),
+        )
+    }
+
+    @Test fun `new boot session cannot alias an old incident counter`() {
+        val policy = SafetyHapticPolicy()
+        val old = packet(flags = SystemPacket.FLAG_FALL_ALERT, fallSeq = 1, session = 0x1001L)
+        policy.update(state(node(old)), 0L)
+        assertEquals(
+            HapticCue.FALL,
+            policy.update(state(node(old.copy(sessionId = 0x1002L))), 1000L),
+        )
     }
 
     @Test fun `manual stop cancels alerts and link loss uses a distinct bounded cue`() {

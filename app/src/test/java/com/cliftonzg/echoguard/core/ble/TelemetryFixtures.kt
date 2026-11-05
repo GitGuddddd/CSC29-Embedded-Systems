@@ -20,10 +20,18 @@ internal fun packet(
     fallSeq: Int = 0,
     pair: Int = 1,
     distance: Int = 1000,
+    session: Long = 0x1001L,
+    event: Long = fallSeq.toLong(),
+    ackSession: Long = 0L,
+    ackEvent: Long = 0L,
+    ackValid: Boolean = false,
 ) = SystemPacket(
     magic = 0xAA, seqNum = seq, radarDistMm = distance, checksum = 0,
     deviceId = type.deviceId, stateFlags = flags, isAdvanced = true,
-    compactFormat = true, rollingFallSeq = fallSeq, pairId = pair, receivedAt = at,
+    compactFormat = true, rollingFallSeq = fallSeq, pairId = pair,
+    protocolVersion = SystemPacket.PROTOCOL_VERSION, sessionId = session, eventId = event,
+    peerAckValid = ackValid, peerAckSessionId = ackSession, peerAckEventId = ackEvent,
+    receivedAt = at,
 )
 
 internal fun state(vararg nodes: NodeTelemetry, scanning: Boolean = true) =

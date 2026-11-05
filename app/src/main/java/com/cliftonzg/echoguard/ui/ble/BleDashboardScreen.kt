@@ -31,6 +31,7 @@ import com.cliftonzg.echoguard.core.ble.model.LinkState
 import com.cliftonzg.echoguard.core.ble.model.MonitoringState
 import com.cliftonzg.echoguard.core.ble.model.NodeTelemetry
 import com.cliftonzg.echoguard.core.ble.model.NodeType
+import com.cliftonzg.echoguard.core.ble.model.PeerReceiptState
 import com.cliftonzg.echoguard.core.ble.model.StatusTone
 import com.cliftonzg.echoguard.core.ble.model.SystemPacket
 import com.cliftonzg.echoguard.core.ble.model.presentation
@@ -136,7 +137,7 @@ fun BleDashboardContent(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            items(state.nodes, key = { it.type }) { node -> NodeCard(node) }
+            items(state.nodes, key = { it.type }) { node -> NodeCard(node, state) }
             if (scanError != null) {
                 item { Text(scanError, color = MaterialTheme.colorScheme.error) }
             }
@@ -181,7 +182,7 @@ fun BleDashboardContent(
 }
 
 @Composable
-private fun NodeCard(node: NodeTelemetry) {
+private fun NodeCard(node: NodeTelemetry, monitoring: MonitoringState) {
     val presentation = node.presentation()
     Card(colors = CardDefaults.cardColors(containerColor = toneColor(presentation.tone))) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -227,8 +228,27 @@ private fun NodeCard(node: NodeTelemetry) {
                 if (packet.isSensorFault && packet.status != com.cliftonzg.echoguard.core.ble.model.TelemetryStatus.SENSOR_FAULT) {
                     Text("Sensor/data-path fault also reported", color = Color.White, style = MaterialTheme.typography.bodySmall)
                 }
+                if (node.type == NodeType.GLASSES && packet.hasLatchedFall) {
+                    val receipt = when (monitoring.glassesFallReceiptState) {
+                        PeerReceiptState.CONFIRMED -> "Cane receipt: confirmed"
+                        PeerReceiptState.WAITING -> "Cane receipt: waiting"
+                        PeerReceiptState.CANE_UNAVAILABLE -> "Cane receipt: unavailable"
+                        PeerReceiptState.LEGACY_UNAVAILABLE -> "Cane receipt: unsupported by legacy packet"
+                        PeerReceiptState.NOT_APPLICABLE -> null
+                    }
+                    if (receipt != null) {
+                        Text(
+                            receipt,
+                            modifier = Modifier.testTag("glasses_receipt"),
+                            color = Color.White,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
                 Text(
-                    "Heartbeat #${packet.seqNum}" + if (packet.compactFormat) " · Fall seq #${packet.rollingFallSeq}" else "",
+                    "Heartbeat #${packet.seqNum}" + if (packet.compactFormat) {
+                        " · Event #${if (packet.protocolVersion > 0) packet.eventId else packet.rollingFallSeq}"
+                    } else "",
                     color = Color.White.copy(alpha = 0.8f),
                     style = MaterialTheme.typography.labelSmall,
                 )
@@ -251,6 +271,7 @@ private fun DashboardPreview(caneFlags: Int) {
     fun packet(type: NodeType, flags: Int) = SystemPacket(
         magic = 0xAA, seqNum = 3, radarDistMm = -1, checksum = 0, deviceId = type.deviceId,
         stateFlags = flags, compactFormat = true, isAdvanced = true, pairId = 1, rollingFallSeq = 5,
+        protocolVersion = SystemPacket.PROTOCOL_VERSION, sessionId = 0x1001L, eventId = 5L,
     )
     val state = MonitoringState(device, true, listOf(
         NodeTelemetry(NodeType.CANE, device.address, packet(NodeType.CANE, caneFlags), LinkState.ACTIVE),

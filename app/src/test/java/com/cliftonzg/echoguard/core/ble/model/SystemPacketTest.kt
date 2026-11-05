@@ -234,6 +234,36 @@ class SystemPacketTest {
 
     @Test fun `unsupported payload sizes do not fall through to legacy checksum parsing`() {
         val validBasic = byteArrayOf(0xAA.toByte(), 1, 2, 3, (0xAA xor 1 xor 2 xor 3).toByte())
-        for (length in listOf(7, 8, 9, 12, 20)) assertNull(SystemPacket.parse(validBasic.copyOf(length)))
+        for (length in listOf(7, 8, 9, 12, 14, 20, 23, 25)) {
+            assertNull(SystemPacket.parse(validBasic.copyOf(length)))
+        }
+    }
+
+    @Test fun `extended firmware packet carries boot scoped event and application receipt`() {
+        val extended = byteArrayOf(
+            0xA1.toByte(), 0xB5.toByte(), SystemPacket.FLAG_FALL_ALERT.toByte(),
+            0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(),
+            SystemPacket.SAFETY_EXTENSION_MARKER.toByte(),
+            0x78, 0x56, 0x34, 0x12,
+            0xEF.toByte(), 0xCD.toByte(), 0xAB.toByte(), 0x09,
+            0x21, 0x43, 0x65, 0x07,
+            0x98.toByte(), 0xBA.toByte(), 0xDC.toByte(), 0x0F,
+            SystemPacket.SAFETY_FLAG_PEER_ACK.toByte(),
+        )
+        val packet = requireNotNull(SystemPacket.parse(extended, 900L))
+        assertEquals(SystemPacket.PROTOCOL_VERSION, packet.protocolVersion)
+        assertEquals(0x12345678L, packet.sessionId)
+        assertEquals(0x09ABCDEFL, packet.eventId)
+        assertTrue(packet.peerAckValid)
+        assertEquals(0x07654321L, packet.peerAckSessionId)
+        assertEquals(0x0FDCBA98L, packet.peerAckEventId)
+        extended[6] = 0xE2.toByte()
+        assertNull(SystemPacket.parse(extended))
+        extended[6] = SystemPacket.SAFETY_EXTENSION_MARKER.toByte()
+        extended[7] = 0
+        extended[8] = 0
+        extended[9] = 0
+        extended[10] = 0
+        assertNull(SystemPacket.parse(extended))
     }
 }

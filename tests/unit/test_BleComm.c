@@ -120,10 +120,10 @@ void test_FullQueueReportsBackpressure_AndWorkerCoalescesCompleteSnapshots(void)
     MockBleRadio_SetReady(true);
     const MockBleRadio_State_t * const p_radio = MockBleRadio_GetState();
     TEST_ASSERT_EQUAL_UINT32(1U, p_radio->data_count);
-    Ble_RawPacket_t raw;
+    Ble_RawFrame_t raw;
     memcpy(&raw, &p_radio->data[p_radio->data_len - sizeof(raw)], sizeof(raw));
     Ble_AdvancedThreatPacket_t decoded;
-    TEST_ASSERT_TRUE(BleComm_Decode(&raw, BLE_DEFAULT_PAIR_ID, &decoded));
+    TEST_ASSERT_TRUE(BleComm_DecodeFrame(&raw, BLE_DEFAULT_PAIR_ID, &decoded));
     TEST_ASSERT_EQUAL_UINT8(BLECOMM_CFG_TX_QUEUE_SIZE - 2U, decoded.heartbeat_seq);
     TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_ACTIVE, false));
 }
@@ -206,6 +206,35 @@ void test_AdvertisingParserRejectsTruncationWrongPairAndOwnNode(void)
     TEST_ASSERT_EQUAL_UINT32(1234U, time);
 }
 
+void test_AdvertisingParserAcceptsOnlyCompleteVersionedFrame(void)
+{
+    Service(0U);
+    BleComm_Init(&BleComm_Config_Cane);
+    Ble_AdvancedThreatPacket_t peer = {
+        .node_type = BLE_NODE_TYPE_GLASSES,
+        .pair_id = BLE_DEFAULT_PAIR_ID,
+        .session_id = 0x12345678U,
+        .event_id = 0xABCDEF01U,
+        .nearest_dist_mm = 0xFFFFU,
+        .ttc_ms = 0xFFFFU
+    };
+    Ble_RawFrame_t frame;
+    BleComm_EncodeFrame(&peer, &frame);
+    uint8_t ad[28] = {27U, 0xFFU, 0x29U, 0x00U};
+    memcpy(&ad[4], &frame, sizeof(frame));
+    MockBleRadio_SetTime(50U);
+    MockBleRadio_Receive(ad, sizeof(ad));
+    Ble_AdvancedThreatPacket_t received;
+    TEST_ASSERT_TRUE(BleComm_PopReceivedPacket(&received, NULL));
+    TEST_ASSERT_EQUAL_UINT32(peer.session_id, received.session_id);
+    TEST_ASSERT_EQUAL_UINT32(peer.event_id, received.event_id);
+
+    /* A truncated extension must not silently downgrade to legacy status. */
+    ad[0] = 17U;
+    MockBleRadio_Receive(ad, 18U);
+    TEST_ASSERT_FALSE(BleComm_PopReceivedPacket(&received, NULL));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -218,5 +247,6 @@ int main(void)
     RUN_TEST(test_RxQueueFull_DoesNotConsumeSequenceBeforeDelivery);
     RUN_TEST(test_WatchdogRequiresActualWorkerAndPerceptionProgress);
     RUN_TEST(test_AdvertisingParserRejectsTruncationWrongPairAndOwnNode);
+    RUN_TEST(test_AdvertisingParserAcceptsOnlyCompleteVersionedFrame);
     return UNITY_END();
 }

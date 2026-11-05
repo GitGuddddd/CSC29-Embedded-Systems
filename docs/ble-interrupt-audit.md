@@ -249,6 +249,21 @@ command handling are task work, not application ISR work.
 
 ## BARR-C:2018 application and verification
 
+The radar task now copies only the four-byte header for candidates that fail header
+validation; matching headers still copy the remaining 26 bytes and validate the complete
+frame/footer. Both producer snapshots and the in-flight overwrite reserve remain in
+place, including on header rejection. The 1024-byte DMA ring, 512-byte parse budget,
+20 ms task cadence and completion ISR are unchanged.
+
+`tests/benchmark_radar_parser.py` compares the parser against `26e3c45` using native
+Clang `-O2`, 20000 iterations of 512-byte input, and three process-CPU-time samples.
+On the recorded macOS ARM64 run, median noise workload time decreased from 0.191792 s
+to 0.036982 s; valid workload time was comparable (0.017312 s versus 0.016592 s),
+with the same accepted-iteration counts. Glasses ELF text increases by 96 bytes and
+BSS is unchanged. These are synthetic host/build results, not RP2040 worst-case timing,
+interrupt contention, RF or power validation. Run the benchmark with `--temp-dir` to
+keep compiler output outside the checkout; it never edits the baseline source.
+
 The audited application paths use explicit-width data, unsigned elapsed-time
 comparisons, bounded loops/buffers, static storage, input validation, checked task
 creation, private ISR visibility and compiler ISR annotation. The I2C multi-write

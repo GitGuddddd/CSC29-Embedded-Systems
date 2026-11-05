@@ -22,6 +22,8 @@ static bool s_initialized;
 _Static_assert(LD2450_CFG_CIRC_BUF_SIZE == HAL_UART_DMA_RING_BYTES, "Radar/HAL ring mismatch");
 _Static_assert(HAL_UART_DMA_BLOCK_BYTES == LD2450_CFG_FRAME_BYTES, "DMA commit block must match a radar frame");
 _Static_assert(LD2450_CFG_PARSE_BUDGET_BYTES >= LD2450_CFG_FRAME_BYTES, "Parser budget cannot hold a frame");
+_Static_assert(LD2450_CFG_HEADER_BYTES == 4U, "Radar header format changed");
+_Static_assert(LD2450_CFG_HEADER_BYTES < LD2450_CFG_FRAME_BYTES, "Header must fit in a frame");
 #define RX_SAFE_CAPACITY (LD2450_CFG_CIRC_BUF_SIZE - HAL_UART_DMA_BLOCK_BYTES)
 
 bool Ld2450_Init(const Ld2450_Config_t * const p_cfg)
@@ -81,9 +83,21 @@ bool Ld2450_ProcessStream(Radar_Target_t * const p_targets, uint8_t * const p_co
            (examined <= (LD2450_CFG_PARSE_BUDGET_BYTES - LD2450_CFG_FRAME_BYTES)))
     {
         uint8_t frame[LD2450_CFG_FRAME_BYTES];
-        for (uint32_t i = 0U; i < sizeof(frame); ++i)
+        /* Noise candidates need only a four-byte header peek, not a full 30-byte
+         * volatile copy. Keep the second producer snapshot even on rejection.
+         */
+        for (uint32_t i = 0U; i < LD2450_CFG_HEADER_BYTES; ++i)
         {
             frame[i] = s_circ_buf[(s_consumed + i) % LD2450_CFG_CIRC_BUF_SIZE];
+        }
+        bool header = (frame[0] == 0xAAU) && (frame[1] == 0xFFU) &&
+                      (frame[2] == 0x03U) && (frame[3] == 0x00U);
+        if (header)
+        {
+            for (uint32_t i = LD2450_CFG_HEADER_BYTES; i < sizeof(frame); ++i)
+            {
+                frame[i] = s_circ_buf[(s_consumed + i) % LD2450_CFG_CIRC_BUF_SIZE];
+            }
         }
         Hal_Uart_RxSnapshot_t after;
         bool snapshot_ok = Hal_Uart_GetRxSnapshot(&after);
@@ -102,7 +116,7 @@ bool Ld2450_ProcessStream(Radar_Target_t * const p_targets, uint8_t * const p_co
         Radar_Target_t targets[LD2450_CFG_MAX_TARGETS];
         uint8_t count = 0U;
         uint32_t consumed = 1U;
-        if (Ld2450_ParseFrame(frame, sizeof(frame), targets, &count))
+        if (header && Ld2450_ParseFrame(frame, sizeof(frame), targets, &count))
         {
             memcpy(p_targets, targets, (size_t)count * sizeof(targets[0]));
             *p_count = count;

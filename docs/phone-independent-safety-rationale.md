@@ -183,6 +183,13 @@ to six bytes. Codec quantization is performed once and the wire layout is unchan
 All 4096 TTC values, boundary inputs and the shared Android maximum vector are tested.
 These are software correctness/layout results, not physical hazard-detection validation.
 
+Header-first radar parsing subsequently reduces a rejected noise candidate from a
+30-byte volatile copy to four bytes while preserving the producer/overwrite checks.
+Valid headers still undergo full body/footer validation. A reproducible native benchmark
+shows lower synthetic noise CPU cost with comparable valid-input results; the glasses
+image uses 96 more ELF text bytes and no additional BSS. No sensing rate, DMA size,
+scan duty or safety deadline was reduced, and physical timing remains unvalidated.
+
 ### Glasses fallback and watchdog-reset survival implemented; power loss remains
 
 The glasses now use a 100 ms pulse every 2 s at 10% PWM duty when the cane is unavailable

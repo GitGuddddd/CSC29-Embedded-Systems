@@ -186,6 +186,29 @@ void test_DmaFaultAndInvalidConfigurationAreReported(void)
     TEST_ASSERT_TRUE(Ld2450_HasRxFault()); /* Configuration success alone is not a fresh frame. */
 }
 
+void test_PartialHeadersAndBadFooterCannotPublishAnUninitializedBody(void)
+{
+    uint8_t stream[180] = {0};
+    for (uint32_t offset = 0U; offset < 90U; offset += 5U)
+    {
+        stream[offset] = 0xAAU;
+        stream[offset + 1U] = 0xFFU;
+        stream[offset + 2U] = 0x03U;
+        stream[offset + 3U] = 0x01U; /* Almost a header: never read as a frame body. */
+    }
+    MakeFrame(&stream[90], 600U);
+    stream[118] = 0U; /* Valid header with corrupt footer still needs full validation. */
+    MakeFrame(&stream[120], 1300U);
+    Radar_Target_t targets[3];
+    uint8_t count;
+    TEST_ASSERT_TRUE(Hal_Uart_TestInjectRx(stream, sizeof(stream)));
+    TEST_ASSERT_TRUE(Ld2450_ProcessStream(targets, &count, 20U));
+    TEST_ASSERT_EQUAL_UINT8(1U, count);
+    TEST_ASSERT_EQUAL_UINT16(1300U, targets[0].distance_mm);
+    TEST_ASSERT_FALSE(Ld2450_HasRxFault());
+    TEST_ASSERT_EQUAL_UINT32(0U, Ld2450_GetOverrunCount());
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -198,5 +221,6 @@ int main(void)
     RUN_TEST(test_UnalignedFrameWaitsForCommittedDmaTail);
     RUN_TEST(test_LatePollingDoesNotRefreshThreatWithStaleBufferedFrame);
     RUN_TEST(test_DmaFaultAndInvalidConfigurationAreReported);
+    RUN_TEST(test_PartialHeadersAndBadFooterCannotPublishAnUninitializedBody);
     return UNITY_END();
 }

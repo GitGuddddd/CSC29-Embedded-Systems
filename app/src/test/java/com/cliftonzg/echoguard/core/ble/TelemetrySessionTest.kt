@@ -100,4 +100,21 @@ class TelemetrySessionTest {
         assertTrue(session.receive(legacy.address, legacyPacket, 110L))
         assertEquals(1, session.snapshot(110L).nodes.size)
     }
+
+    @Test fun `compact epochs reject retired replays and preserve phone statistics on reselection`() {
+        assertTrue(session.receive(caneDevice.address, packet(), 0L))
+        assertTrue(session.receive(caneDevice.address, packet(seq = 2, fallSeq = 15, at = 100L), 100L))
+        assertTrue(session.receive(caneDevice.address, packet(seq = 0, session = 0x1002L,
+            rollover = true, at = 110L), 110L))
+        assertEquals(16L, session.snapshot(110L).node(NodeType.CANE)?.phoneFallCount)
+        assertFalse(session.receive(caneDevice.address, packet(seq = 3, fallSeq = 15, at = 120L), 120L))
+        session.select(caneDevice, 200L)
+        assertTrue(session.receive(caneDevice.address, packet(seq = 1, session = 0x1002L,
+            rollover = true, fallSeq = 1, at = 210L), 210L))
+        assertEquals(17L, session.snapshot(210L).node(NodeType.CANE)?.phoneFallCount)
+        session.select(caneDevice.copy(address = GLASSES_ADDRESS, nodeType = NodeType.GLASSES), 220L)
+        assertTrue(session.receive(caneDevice.address, packet(seq = 2, session = 0x1002L,
+            rollover = true, fallSeq = 2, at = 230L), 230L))
+        assertEquals(18L, session.snapshot(230L).node(NodeType.CANE)?.phoneFallCount)
+    }
 }

@@ -28,15 +28,19 @@ import org.junit.runner.RunWith
 class BleDashboardTest {
     @get:Rule val compose = createComposeRule()
 
-    private fun render(caneFlags: Int, glassesFlags: Int = 0, fontScale: Float = 1f) {
+    private fun render(caneFlags: Int, glassesFlags: Int = 0, fontScale: Float = 1f,
+                       phoneFalls: Long? = null, historyGaps: Boolean = false) {
         val device = DiscoveredBleDevice("EchoGuard Smart Cane", "AA:00:00:00:00:01", -48, true,
             nodeType = NodeType.CANE, pairId = 1)
         fun decode(cane: Boolean, flags: Int) = requireNotNull(SystemPacket.parse(byteArrayOf(
             0xA1.toByte(), (if (cane) 0xB5 else 0x35).toByte(), flags.toByte(),
             0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(),
+            SystemPacket.SAFETY_EXTENSION_MARKER.toByte(), (if (cane) 1 else 2).toByte(), 0x10,
+            0, 0, 0,
         )))
         val state = MonitoringState(device, true, listOf(
-            NodeTelemetry(NodeType.CANE, device.address, decode(true, caneFlags), LinkState.ACTIVE),
+            NodeTelemetry(NodeType.CANE, device.address, decode(true, caneFlags), LinkState.ACTIVE,
+                phoneFallCount = phoneFalls, phoneHistoryHasGaps = historyGaps),
             NodeTelemetry(NodeType.GLASSES, "AA:00:00:00:00:02", decode(false, glassesFlags), LinkState.ACTIVE),
         ))
         compose.setContent {
@@ -86,5 +90,13 @@ class BleDashboardTest {
         compose.onNodeWithTag("summary_title").assertTextEquals("Sensing degraded")
         capture("android-fault")
         compose.onNodeWithTag("node_CANE_status").performScrollTo().assertTextEquals("Sensing degraded")
+    }
+
+    @Test fun cumulativePhoneHistoryStaysSeparateFromTheFourBitWireSequence() {
+        render(0x10, fontScale = 1.4f, phoneFalls = 20L, historyGaps = true)
+        compose.onNodeWithTag("node_CANE_sequence").performScrollTo()
+            .assertTextEquals("Heartbeat #3 · Fall sequence 5 (0–15)")
+        compose.onNodeWithTag("node_CANE_fall_history").performScrollTo()
+            .assertTextEquals("Phone-recorded falls: 20 · incomplete history")
     }
 }

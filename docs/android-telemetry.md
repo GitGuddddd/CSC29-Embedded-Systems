@@ -1,8 +1,8 @@
 # Android telemetry synchronization
 
-The Android companion consumes the firmware's compact six-byte status and optional
-18-byte safety extension in one manufacturer frame. It retains support for the
-five-byte legacy and 10/11-byte advanced formats. It
+The Android companion consumes the firmware's six-byte status plus six-byte v2 receipt
+extension in one 12-byte manufacturer frame. It retains telemetry-only support for the
+former 24-byte v1 frame, six-byte status, five-byte legacy and 10/11-byte advanced formats. It
 observes broadcasts; selecting a node does not create a GATT connection or a Bluetooth
 bond, and the phone does not send an alarm-clear or wake command.
 
@@ -23,12 +23,12 @@ cane IMU is asleep. A standby fault flag remains visible as secondary informatio
 The app does not infer the full `Sys_State_t`, radio interval or a remaining pause
 countdown: those values are not transmitted in the packet.
 
-For a current glasses fall, Android compares the glasses `(session ID, event ID)` with
+For a current v2 glasses fall, Android compares the glasses `(16-bit epoch, four-bit sequence)` with
 the cane's application-receipt identity. It reports confirmed only while both node
 heartbeats are fresh and the identities match exactly. A receipt means the cane
 application latched that event and issued its alarm request; it is not proof of sound
 pressure, a user acknowledgement or incident clearance. Legacy six-byte compact
-packets remain readable but cannot provide this confirmation.
+packets and former v1 frames remain readable but cannot confirm the v2 receipt contract.
 
 Modern cane data uses the firmware's hazard flag rather than assuming every ground
 distance over 1500 mm is a cliff. A parked/released cane's unavailable range is not
@@ -40,6 +40,31 @@ contain closing speed, so the UI does not display the decoder's synthetic zero a
 a measured 0 cm/s. Rolling fall sequence numbers are labeled as sequences, not
 lifetime incident totals.
 
+## Phone-owned cumulative history
+
+Tribunal 1 explicitly keeps the wearable fall count small and offloads accumulation to
+the smartphone. `PhoneFallHistory` stores accepted local counter increments per selected
+pair/address/role. It keeps a `Long` total on the phone; the firmware keeps only its
+four-bit rolling count. The first packet establishes a baseline rather than claiming
+all past falls. Heartbeats, pauses and a cane relay with an unchanged local count do not
+add events. An independent cane fall increments its own history separately.
+
+A known next epoch with the rollover bit set accounts for 15 → 0 without resetting the
+phone total. A reboot, multiple missed epochs or backward/uninterpretable data keeps
+the recorded total but marks history incomplete; the app cannot reconstruct arbitrary
+offline loss from a four-bit counter. Future observed increments can still accumulate.
+This is a phone-recorded count, never an unconditional lifetime medical statistic.
+
+`PreferencesFallHistoryStore` persists one validated record on counter/epoch changes,
+not every heartbeat. Clearing monitoring selection does not erase history; reselection
+and process recreation can resume the saved baseline. Selecting the other node of the
+same pair does not create a second history for the same address/role. Replacing a device
+or changing its address starts a separate record; pair/address scope is not provisioned
+user identity. Preferences are written
+asynchronously, so sudden process/device failure may lose the latest unsaved transition.
+Statistics never acknowledge, clear, relay or inhibit a wearable alarm. Phone-off
+operation preserves the wearable delivery/fallback path, even though history may have gaps.
+
 ## Pair scope and freshness
 
 - Discovery remains separate from monitoring until the user selects a node.
@@ -47,8 +72,9 @@ lifetime incident totals.
   the matching pair ID. Each role binds one address for the selection's lifetime.
   Other pairs and competing same-role addresses cannot overwrite live cards.
 - Legacy data has no pair ID and is scoped to the selected address.
-- Each node owns a random 32-bit boot session, full 32-bit event counter, heartbeat sequence,
-  capture timestamp and link state. A healthy
+- Each node owns a 16-bit transport epoch, four-bit rolling fall count, heartbeat sequence,
+  capture timestamp and link state. Epochs renew before counter reuse; boot and normal
+  rollover are distinguished, and the immediately retired epoch cannot reassert. A healthy
   cane update cannot clear a glasses alarm or conceal a stale glasses heartbeat.
 - Selection starts in WAITING, not ACTIVE. A fresh accepted packet establishes the
   link; stale reports remain explicitly labeled as historical.
@@ -100,10 +126,12 @@ JDK paths are not stored in `gradle.properties`.
 The JVM tests cover firmware flag vectors, sentinels, legacy compatibility, malformed
 AD structures, calibrated hazard interpretation, pair/address isolation, independent
 heartbeat deadlines, counter wrap/rebase, scan restart, stale latched incidents,
-phone haptic deduplication/pause/re-alarm and exact boot-scoped cane receipts.
+phone haptic deduplication/pause/re-alarm, exact compact cane receipts, the shared firmware
+golden vector, cumulative history above 15, persisted baselines and incomplete-history handling.
 
 Compose instrumentation cases cover paused incidents, held-grip parking, independent
-head falls, generic faults and large-text scrolling. They use decoded firmware packet
+head falls, generic faults, compact sequence versus cumulative history, and large-text scrolling.
+They use decoded firmware packet
 fixtures and do not simulate real Bluetooth reception. The test APK compiles; running
 these cases still requires a usable emulator/device. The local emulator attempt was
 blocked by available disk space.

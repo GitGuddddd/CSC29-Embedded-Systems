@@ -1,7 +1,7 @@
 # Phone-independent safety: architecture rationale and robustness assessment
 
 Baseline assessment of firmware and Android revision `67c4148`, updated for the
-versioned critical-event receipt, glasses fallback and watchdog-reset retention.
+compact v2 receipts, minimum-bit/phone-history split, glasses fallback and watchdog retention.
 
 ## Recommendation
 
@@ -84,9 +84,9 @@ intervals, immediate escalation, a 1 s downshift hold, bounded queues, task-owne
 BTstack operations, timestamped RX, duplicate handling and worker-aware watchdogs.
 The 500 ms deadman detects missing fresh peer telemetry. These are useful mechanisms.
 
-The six-byte status is now followed by a versioned 18-byte safety extension. It carries
-a random 32-bit boot session, 32-bit local event counter and exact peer application
-receipt. A fresh heartbeat alone still is not treated as delivery proof. The glasses
+The six-byte status is now followed by a six-byte v2 receipt extension. It carries
+16-bit transport epochs and a packed four-bit receipt sequence; the local count already
+occupies the status prefix. A fresh heartbeat alone is not delivery proof. The glasses
 fall back locally if the matching receipt is absent for 750 ms or cane freshness later
 expires. The event remains in coalesced status while its incident latch is active, and
 an unsuccessful queue publication is retried by the next application cycle.
@@ -98,7 +98,7 @@ Concrete findings:
 | Application receipt is not actuator feedback | Exact receipt in `Rte_Type.h`, `BleComm.c` and both main loops | Confirms cane application acceptance/alarm request, not physical sound output or sound pressure |
 | Glasses fallback is implemented but not acoustically validated | `SafetyDelivery.c`, `Glasses_Main.c`, low-duty `AlertManager` cue | Software enters a defined degraded mode; enclosure SPL and user suitability still require bench/usability evidence |
 | Watchdog retention is volatile and reset-cause scoped | `IncidentRetention.c` uses RP2040 watchdog scratch 0–3 and `watchdog_enable_caused_reboot()` | Timeout resets restore unresolved incidents; power loss, run-pin reset, firmware-loading reboot and invalid role markers intentionally do not |
-| Event identity is stronger but unauthenticated | 32-bit random boot session and event counter; four-bit pair ID remains default 1 | Removes practical heartbeat/fall-counter ambiguity, but does not authenticate a peer or prevent deliberate spoofing/replay |
+| Compact transport identity is finite and unauthenticated | Four-bit event sequence, nonzero 16-bit epoch renewed before sequence reuse; pair ID remains default 1 | Distinguishes ordinary wraps and reboots within the stated model, not arbitrary historical replay or every random boot collision |
 | Firmware transport discards advertiser identity/RSSI | `BleRadio_RxCallback_t` carries data/length/time only | Firmware has no address binding or link-quality history comparable to Android's role/address scope |
 | Reset recovery affects both cores | Shared MCU hardware watchdog | Core affinity does not isolate power, memory or whole-chip reset; recovery introduces a monitoring interruption |
 
@@ -110,7 +110,7 @@ infer reliability by assuming independent packet loss without measurements.
 
 ### Critical-event receipt and retention — implemented in software
 
-The protocol now uses `(origin node, boot/session ID, event counter)`. The active latch
+The protocol now uses `(origin node, 16-bit transport epoch, four-bit event sequence)`. The active latch
 retains the identity independently of heartbeat wrap and coalescible range telemetry.
 The cane returns a receipt only after its application has latched the event and issued
 the alarm request. The glasses wait a bounded 750 ms before degraded fallback and
@@ -118,8 +118,54 @@ re-enter fallback if cane freshness expires. An actuator command is not proof th
 was physically produced; that requires hardware feedback or a verified output path.
 
 Keep **transport receipt**, **user audio pause** and **incident clearance** distinct.
-Each acknowledgement/reset references the relevant event, so a delayed message cannot
-clear a newer fall. Relay messages retain their original event identity to prevent loops.
+Receipts reference the relevant origin epoch/sequence and never clear a fall. User
+pause/recovery remains local; Android has no remote alarm-clear authority.
+
+### Tribunal 1 minimum-bit constraint and smartphone offload
+
+Tribunal 1's injected constraint requires each application field to use only the bits
+its valid range needs. The Brian/Clifton negotiation reduces the fall count from eight
+bits to three/four bits and moves cumulative statistics to the phone (meeting 29:05–30:40).
+The later E2 clarification keeps a four-bit rolling sequence in every packet, rather
+than resetting it merely because a connectionless transmission was attempted.
+
+The v2 implementation follows that split. Local counts are four bits, already encoded
+in the original status prefix; the redundant 32-bit local event counter is removed.
+Android accumulates and persists the observed increments, including a known rollover.
+It marks unknown baselines, reboots and missed epochs as incomplete history rather
+than inventing an exact lifetime total. The phone is a history sink, not a required
+alarm relay. All reception/receipt/fallback decisions still work without it.
+
+Receipt metadata has a different job from statistics. Two 16-bit epoch tags and a packed
+four-bit receipt/validity/rollover byte are enough for this prototype's chosen transport
+namespace; the origin event nibble is not duplicated. The epoch renews before 15 → 0,
+and active watchdog retention lets a reboot exclude the known prior epoch. This is a
+documented prototype transport choice, not proof that 16 bits are sufficient for every
+fault/replay model. Random boot collisions and eventual namespace reuse remain possible.
+A stricter risk requirement needs a revised/provisioned/authenticated exchange and
+evidence, not an arbitrarily wider lifetime fall counter. Timer and integrity-register
+widths remain separately justified; neither is cumulative application history.
+
+The complete manufacturer frame is now 12 bytes and primary advertising data 19 bytes.
+Available capacity is not justification for filling the 31-byte ceiling. Shorter packets
+reduce encoded data/queue storage and raw airtime; they do not prove a corresponding
+percentage improvement in end-to-end latency, RF recovery or battery life.
+
+Cross-compiler layout evidence against `4828dd4` (RP2040 C ABI, `arm-none-eabi-gcc`
+with Cortex-M0+ / Thumb flags; not host `sizeof`):
+
+| Item | Previous bytes | Compact v2 bytes |
+| --- | ---: | ---: |
+| Manufacturer frame | 24 | 12 |
+| Decoded `Ble_AdvancedThreatPacket_t` | 40 | 22 |
+| `BleComm_PeerFall_t` | 16 | 6 |
+| `SafetyDelivery_t` | 28 | 20 |
+| `IncidentRetention_Record_t` | 4 | 4 |
+
+Whole-image static BSS decreases by 252 bytes on each node in the current Release
+build (cane 71680 → 71428, glasses 72648 → 72396). Flash text increases by 528/480
+bytes respectively for epoch renewal and stricter parsing/receipt handling. These are
+software layout/build results, not measured task jitter, physical delivery or power data.
 
 ### Glasses fallback and watchdog-reset survival implemented; power loss remains
 
@@ -128,7 +174,7 @@ or fails to confirm delivery. This intentionally is not the cane siren. PWM duty
 an acoustic exposure measurement; frequency, enclosure SPL and user suitability still
 require validation before calling the response ear-safe.
 
-Both nodes now retain an unresolved latch and event counter in four RP2040 watchdog
+Both nodes retain an unresolved latch, four-bit sequence and prior 16-bit epoch in four RP2040 watchdog
 scratch words. The role/version commit marker is written before an active payload and
 cleared before the remaining words on incident clearance; complement/check words detect
 a torn payload. A valid active marker fails safe: corrupt payload data restores the
@@ -148,15 +194,16 @@ RP2040 reset-cause and scratch-retention behavior.
 
 ### Versioning implemented; provisioning/authentication remain
 
-The 24-byte manufacturer frame is versioned and handles reboot epochs explicitly with
-a random 32-bit session. Provision a stronger device/group identity and authenticate
+The 12-byte v2 manufacturer frame is versioned and handles reboot epochs explicitly with
+a nonzero 16-bit tag. Provision a stronger device/group identity and authenticate
 safety-relevant control/event messages. Radio CRC handles transmission corruption; it
 does not authenticate the sender. Address filtering is useful for accidental cross-talk,
 but is not cryptographic authentication either.
 
 The original six-byte status remains the frame prefix. Removing the repeated short name
-from the primary advertisement made room for the 18-byte extension; the full name stays
-in the scan response. Flags and AD headers bring the legacy advertisement to 31 bytes.
+from the primary advertisement avoids unnecessary airtime; the full name stays in the
+scan response. The six-byte receipt extension plus flags/AD headers brings primary data
+to 19 bytes. Upgrade both wearables together; older exact-size parsers cannot consume v2.
 
 ## Transport and energy choices to benchmark
 

@@ -120,6 +120,7 @@ void test_FullQueueReportsBackpressure_AndWorkerCoalescesCompleteSnapshots(void)
     MockBleRadio_SetReady(true);
     const MockBleRadio_State_t * const p_radio = MockBleRadio_GetState();
     TEST_ASSERT_EQUAL_UINT32(1U, p_radio->data_count);
+    TEST_ASSERT_EQUAL_UINT8(19U, p_radio->data_len); /* Do not fill the 31-byte ceiling. */
     Ble_RawFrame_t raw;
     memcpy(&raw, &p_radio->data[p_radio->data_len - sizeof(raw)], sizeof(raw));
     Ble_AdvancedThreatPacket_t decoded;
@@ -213,26 +214,80 @@ void test_AdvertisingParserAcceptsOnlyCompleteVersionedFrame(void)
     Ble_AdvancedThreatPacket_t peer = {
         .node_type = BLE_NODE_TYPE_GLASSES,
         .pair_id = BLE_DEFAULT_PAIR_ID,
-        .session_id = 0x12345678U,
-        .event_id = 0xABCDEF01U,
+        .session_id = 0x1234U,
+        .rolling_fall_seq = 1U,
         .nearest_dist_mm = 0xFFFFU,
         .ttc_ms = 0xFFFFU
     };
     Ble_RawFrame_t frame;
     BleComm_EncodeFrame(&peer, &frame);
-    uint8_t ad[28] = {27U, 0xFFU, 0x29U, 0x00U};
+    uint8_t ad[16] = {15U, 0xFFU, 0x29U, 0x00U};
     memcpy(&ad[4], &frame, sizeof(frame));
     MockBleRadio_SetTime(50U);
     MockBleRadio_Receive(ad, sizeof(ad));
     Ble_AdvancedThreatPacket_t received;
     TEST_ASSERT_TRUE(BleComm_PopReceivedPacket(&received, NULL));
-    TEST_ASSERT_EQUAL_UINT32(peer.session_id, received.session_id);
-    TEST_ASSERT_EQUAL_UINT32(peer.event_id, received.event_id);
+    TEST_ASSERT_EQUAL_UINT16(peer.session_id, received.session_id);
+    TEST_ASSERT_EQUAL_UINT8(peer.rolling_fall_seq, received.rolling_fall_seq);
 
     /* A truncated extension must not silently downgrade to legacy status. */
-    ad[0] = 17U;
-    MockBleRadio_Receive(ad, 18U);
-    TEST_ASSERT_FALSE(BleComm_PopReceivedPacket(&received, NULL));
+    for (uint8_t length = 7U; length < sizeof(frame); ++length)
+    {
+        ad[0] = (uint8_t)(3U + length);
+        MockBleRadio_Receive(ad, (uint8_t)(4U + length));
+        TEST_ASSERT_FALSE(BleComm_PopReceivedPacket(&received, NULL));
+    }
+}
+
+void test_CompactEpochOrderingRejectsRetiredAndBackwardEvents(void)
+{
+    s_packet.protocol_version = BLE_PROTOCOL_VERSION;
+    s_packet.session_id = 0x1001U;
+    s_packet.rolling_fall_seq = 14U;
+    s_packet.seq_num = 3U;
+    TEST_ASSERT_TRUE(BleComm_ReceivePacketAt(&s_packet, 100U));
+    s_packet.rolling_fall_seq = 13U;
+    s_packet.seq_num = 4U;
+    TEST_ASSERT_FALSE(BleComm_ReceivePacketAt(&s_packet, 200U));
+    s_packet.session_id = 0x1002U;
+    s_packet.rolling_fall_seq = 0U;
+    s_packet.seq_num = 0U; /* Reboot/rollover rebases heartbeat immediately. */
+    TEST_ASSERT_TRUE(BleComm_ReceivePacketAt(&s_packet, 210U));
+    s_packet.session_id = 0x1001U;
+    s_packet.rolling_fall_seq = 14U;
+    TEST_ASSERT_FALSE(BleComm_ReceivePacketAt(&s_packet, 1000U));
+}
+
+void test_CompactReceiptDecoderRejectsReservedAndUnscopedAcknowledgements(void)
+{
+    s_packet.session_id = 0x1234U;
+    Ble_RawFrame_t frame;
+    Ble_AdvancedThreatPacket_t decoded;
+    BleComm_EncodeFrame(&s_packet, &frame);
+    frame.safety.sequence_flags = 0x80U;
+    TEST_ASSERT_FALSE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &decoded));
+    frame.safety.sequence_flags = BLE_SAFETY_FLAG_PEER_ACK;
+    TEST_ASSERT_FALSE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &decoded));
+}
+
+void test_CoalescedWrapKeepsEpochSequenceAndRolloverInOneSnapshot(void)
+{
+    uint16_t previous_epoch = BleComm_GetSessionId();
+    TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_ACTIVE, false));
+    s_packet.rolling_fall_seq = BleComm_NextFallSequence(15U) & BLE_FALL_SEQ_MASK;
+    s_packet.state_flags = BLE_FLAG_FALL_ALERT;
+    TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_FALL_CONFIRMED, false));
+    Service(0U);
+    MockBleRadio_SetReady(true);
+    const MockBleRadio_State_t * const p_radio = MockBleRadio_GetState();
+    Ble_RawFrame_t frame;
+    memcpy(&frame, &p_radio->data[7], sizeof(frame));
+    Ble_AdvancedThreatPacket_t decoded;
+    TEST_ASSERT_TRUE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &decoded));
+    TEST_ASSERT_NOT_EQUAL(previous_epoch, decoded.session_id);
+    TEST_ASSERT_EQUAL_UINT8(0U, decoded.rolling_fall_seq);
+    TEST_ASSERT_TRUE(decoded.session_rollover);
+    TEST_ASSERT_BITS_HIGH(BLE_FLAG_FALL_ALERT, decoded.state_flags);
 }
 
 int main(void)
@@ -248,5 +303,8 @@ int main(void)
     RUN_TEST(test_WatchdogRequiresActualWorkerAndPerceptionProgress);
     RUN_TEST(test_AdvertisingParserRejectsTruncationWrongPairAndOwnNode);
     RUN_TEST(test_AdvertisingParserAcceptsOnlyCompleteVersionedFrame);
+    RUN_TEST(test_CompactEpochOrderingRejectsRetiredAndBackwardEvents);
+    RUN_TEST(test_CompactReceiptDecoderRejectsReservedAndUnscopedAcknowledgements);
+    RUN_TEST(test_CoalescedWrapKeepsEpochSequenceAndRolloverInOneSnapshot);
     return UNITY_END();
 }

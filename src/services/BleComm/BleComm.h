@@ -30,12 +30,13 @@ extern const BleComm_Config_t BleComm_Config_Glasses;
 
 typedef struct
 {
-    bool initialized;
-    bool active;
-    bool extended;
-    uint32_t session_id;
-    uint32_t event_id;
-    uint8_t fall_seq;
+    uint16_t session_id;
+    uint16_t retired_session_id;
+    uint8_t fall_seq : 4;
+    uint8_t initialized : 1;
+    uint8_t active : 1;
+    uint8_t extended : 1;
+    uint8_t reserved : 1;
 } BleComm_PeerFall_t;
 
 /* Keep this tracker across transient link loss: reconnecting is not a new fall. */
@@ -49,9 +50,12 @@ void BleComm_EncodeFrame(const Ble_AdvancedThreatPacket_t * const p_in,
                          Ble_RawFrame_t * const p_out);
 bool BleComm_DecodeFrame(const Ble_RawFrame_t * const p_in, uint8_t expected_pair_id,
                          Ble_AdvancedThreatPacket_t * const p_out);
-uint32_t BleComm_GetSessionId(void);
+uint16_t BleComm_GetSessionId(void);
+/* Core 0 only: exclude a watchdog-retained epoch before first publication. */
+void BleComm_ExcludeSession(uint16_t previous_session_id);
+/* Core 0 only: advance the four-bit counter and renew the epoch on 15 -> 0. */
+uint8_t BleComm_NextFallSequence(uint8_t current_seq);
 bool BleComm_CheckNewFall(uint8_t rx_fall_seq, uint8_t last_fall_seq);
-bool BleComm_CheckNewEvent(uint32_t rx_event_id, uint32_t last_event_id);
 
 bool BleComm_SendPacket(const Ble_AdvancedThreatPacket_t * const p_pkt);
 /* Enqueue payload and state together. False means retry; never wait for queue space. */

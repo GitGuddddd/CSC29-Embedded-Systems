@@ -10,7 +10,7 @@
 
 /*
  * \file BleComm.c
- * \brief CYW43439 Bluetooth LE Connectionless Broadcaster Implementation (Compact 6-byte Unified Packet)
+ * \brief Connectionless BLE status/receipt service (6-byte status, 12-byte v2 frame)
  * Compliance: Barr-C:2018
  */
 
@@ -19,12 +19,14 @@ static uint16_t s_last_rx_seq = 0xFFFFU;
 static uint32_t s_last_rx_ms;
 static uint8_t s_last_rx_flags;
 static uint8_t s_last_rx_fall;
-static uint32_t s_last_rx_session;
-static uint32_t s_last_rx_event;
-static uint32_t s_last_rx_ack_session;
-static uint32_t s_last_rx_ack_event;
+static uint16_t s_last_rx_session;
+static uint16_t s_retired_rx_session;
+static uint8_t s_last_rx_protocol;
+static uint16_t s_last_rx_ack_session;
+static uint8_t s_last_rx_ack_event;
 static bool s_last_rx_ack_valid;
-static uint32_t s_session_id;
+static uint16_t s_session_id;
+static bool s_session_rollover;
 
 typedef struct
 {
@@ -57,14 +59,14 @@ static uint32_t s_observed_generation;
 static bool s_start_attempted;
 static bool s_radio_started;
 static bool s_profile_programmed;
-static uint8_t s_adv_data[BLECOMM_CFG_ADV_MAX_BYTES];
+static uint8_t s_adv_data[7U + sizeof(Ble_RawFrame_t)]; /* Actual TX size, not the BLE ceiling. */
 static uint8_t s_adv_data_len;
 
 _Static_assert(BLECOMM_CFG_RX_QUEUE_SIZE > 1U, "RX queue needs a sentinel slot");
 _Static_assert(BLECOMM_CFG_TX_QUEUE_SIZE > 1U, "TX queue needs a sentinel slot");
 _Static_assert(sizeof(Ble_RawPacket_t) == 6U, "Compact status packet changed");
-_Static_assert(sizeof(Ble_SafetyExtension_t) == 18U, "Safety extension changed");
-_Static_assert(sizeof(Ble_RawFrame_t) == 24U, "Extended frame changed");
+_Static_assert(sizeof(Ble_SafetyExtension_t) == 6U, "Compact receipt extension changed");
+_Static_assert(sizeof(Ble_RawFrame_t) == 12U, "Compact receipt frame changed");
 _Static_assert((7U + sizeof(Ble_RawFrame_t)) <= BLECOMM_CFG_ADV_MAX_BYTES,
                "Extended manufacturer frame exceeds legacy advertising capacity");
 
@@ -192,17 +194,19 @@ void BleComm_EncodeFrame(const Ble_AdvancedThreatPacket_t * const p_in,
 
     BleComm_Encode(p_in, &p_out->status);
     p_out->safety.marker_version = BLE_SAFETY_EXTENSION_MARKER;
-    for (uint32_t i = 0U; i < 4U; ++i)
+    for (uint32_t i = 0U; i < 2U; ++i)
     {
         uint32_t shift = i * 8U;
         p_out->safety.session_id[i] = (uint8_t)(p_in->session_id >> shift);
-        p_out->safety.event_id[i] = (uint8_t)(p_in->event_id >> shift);
         p_out->safety.peer_ack_session_id[i] =
-            (uint8_t)(p_in->peer_ack_session_id >> shift);
-        p_out->safety.peer_ack_event_id[i] =
-            (uint8_t)(p_in->peer_ack_event_id >> shift);
+            p_in->peer_ack_valid ? (uint8_t)(p_in->peer_ack_session_id >> shift) : 0U;
     }
-    p_out->safety.safety_flags = p_in->peer_ack_valid ? BLE_SAFETY_FLAG_PEER_ACK : 0U;
+    p_out->safety.sequence_flags = p_in->peer_ack_valid ?
+        (uint8_t)(BLE_SAFETY_FLAG_PEER_ACK | p_in->peer_ack_event_seq) : 0U;
+    if (p_in->session_rollover)
+    {
+        p_out->safety.sequence_flags |= BLE_SAFETY_FLAG_ROLLOVER;
+    }
 }
 
 bool BleComm_DecodeFrame(const Ble_RawFrame_t * const p_in, uint8_t expected_pair_id,
@@ -210,6 +214,7 @@ bool BleComm_DecodeFrame(const Ble_RawFrame_t * const p_in, uint8_t expected_pai
 {
     if ((p_in == NULL) || (p_out == NULL) ||
         (p_in->safety.marker_version != BLE_SAFETY_EXTENSION_MARKER) ||
+        ((p_in->safety.sequence_flags & BLE_SAFETY_RESERVED_MASK) != 0U) ||
         !BleComm_Decode(&p_in->status, expected_pair_id, p_out))
     {
         return false;
@@ -217,38 +222,58 @@ bool BleComm_DecodeFrame(const Ble_RawFrame_t * const p_in, uint8_t expected_pai
 
     p_out->protocol_version = BLE_PROTOCOL_VERSION;
     p_out->session_id = 0U;
-    p_out->event_id = 0U;
     p_out->peer_ack_session_id = 0U;
-    p_out->peer_ack_event_id = 0U;
-    for (uint32_t i = 0U; i < 4U; ++i)
+    for (uint32_t i = 0U; i < 2U; ++i)
     {
         uint32_t shift = i * 8U;
-        p_out->session_id |= (uint32_t)p_in->safety.session_id[i] << shift;
-        p_out->event_id |= (uint32_t)p_in->safety.event_id[i] << shift;
+        p_out->session_id |= (uint16_t)((uint16_t)p_in->safety.session_id[i] << shift);
         p_out->peer_ack_session_id |=
-            (uint32_t)p_in->safety.peer_ack_session_id[i] << shift;
-        p_out->peer_ack_event_id |=
-            (uint32_t)p_in->safety.peer_ack_event_id[i] << shift;
+            (uint16_t)((uint16_t)p_in->safety.peer_ack_session_id[i] << shift);
     }
-    p_out->peer_ack_valid = ((p_in->safety.safety_flags & BLE_SAFETY_FLAG_PEER_ACK) != 0U);
-    return (p_out->session_id != 0U);
+    p_out->peer_ack_event_seq = p_in->safety.sequence_flags & BLE_FALL_SEQ_MASK;
+    p_out->peer_ack_valid = ((p_in->safety.sequence_flags & BLE_SAFETY_FLAG_PEER_ACK) != 0U);
+    p_out->session_rollover = ((p_in->safety.sequence_flags & BLE_SAFETY_FLAG_ROLLOVER) != 0U);
+    return (p_out->session_id != 0U) &&
+           (!p_out->peer_ack_valid || ((p_out->node_type == BLE_NODE_TYPE_CANE) &&
+                                      (p_out->peer_ack_session_id != 0U))) &&
+           (p_out->peer_ack_valid || ((p_out->peer_ack_session_id == 0U) &&
+                                     (p_out->peer_ack_event_seq == 0U)));
 }
 
-uint32_t BleComm_GetSessionId(void)
+uint16_t BleComm_GetSessionId(void)
 {
     return s_session_id;
+}
+
+static uint16_t Next_Session(uint16_t session_id)
+{
+    return (session_id == UINT16_MAX) ? 1U : (uint16_t)(session_id + 1U);
+}
+
+void BleComm_ExcludeSession(uint16_t previous_session_id)
+{
+    if (s_session_id == previous_session_id)
+    {
+        s_session_id = Next_Session(s_session_id);
+    }
+}
+
+uint8_t BleComm_NextFallSequence(uint8_t current_seq)
+{
+    uint8_t next = (uint8_t)((current_seq + 1U) & BLE_FALL_SEQ_MASK);
+    if (next == 0U)
+    {
+        /* A four-bit sequence is never reused in the same transport epoch. */
+        s_session_id = Next_Session(s_session_id);
+        s_session_rollover = true;
+    }
+    return next;
 }
 
 bool BleComm_CheckNewFall(uint8_t rx_fall_seq, uint8_t last_fall_seq)
 {
     uint8_t delta = (uint8_t)((rx_fall_seq - last_fall_seq) & 0x0FU);
     return (delta >= 1U) && (delta <= 7U);
-}
-
-bool BleComm_CheckNewEvent(uint32_t rx_event_id, uint32_t last_event_id)
-{
-    uint32_t delta = rx_event_id - last_event_id;
-    return (delta != 0U) && (delta <= (UINT32_MAX / 2U));
 }
 
 bool BleComm_TrackPeerFall(BleComm_PeerFall_t * const p_tracker,
@@ -267,10 +292,13 @@ bool BleComm_TrackPeerFall(BleComm_PeerFall_t * const p_tracker,
     {
         bool new_session = !p_tracker->initialized || !p_tracker->extended ||
                            (p_packet->session_id != p_tracker->session_id);
-        bool same_event = !new_session && (p_packet->event_id == p_tracker->event_id);
-        bool event_forward = !new_session &&
-                             BleComm_CheckNewEvent(p_packet->event_id,
-                                                   p_tracker->event_id);
+        if (new_session && (p_packet->session_id == p_tracker->retired_session_id))
+        {
+            return false;
+        }
+        bool same_event = !new_session && (seq == p_tracker->fall_seq);
+        /* Wrap changes epoch, so ordinary unsigned ordering suffices within one. */
+        bool event_forward = !new_session && (seq > p_tracker->fall_seq);
         if (!new_session && !same_event && !event_forward)
         {
             return false; /* Delayed event identity from this boot session. */
@@ -279,9 +307,12 @@ bool BleComm_TrackPeerFall(BleComm_PeerFall_t * const p_tracker,
         bool event = active && (new_session || event_forward);
         if (new_session || event_forward)
         {
+            if (new_session)
+            {
+                p_tracker->retired_session_id = p_tracker->session_id;
+            }
             p_tracker->session_id = p_packet->session_id;
-            p_tracker->event_id = p_packet->event_id;
-            p_tracker->fall_seq = seq;
+            p_tracker->fall_seq = seq & BLE_FALL_SEQ_MASK;
         }
         p_tracker->initialized = true;
         p_tracker->extended = true;
@@ -294,10 +325,10 @@ bool BleComm_TrackPeerFall(BleComm_PeerFall_t * const p_tracker,
                             !p_tracker->active || forward);
     if (!p_tracker->initialized || p_tracker->extended || !p_tracker->active || forward)
     {
-        p_tracker->fall_seq = seq;
+        p_tracker->fall_seq = seq & BLE_FALL_SEQ_MASK;
         p_tracker->extended = false;
         p_tracker->session_id = 0U;
-        p_tracker->event_id = 0U;
+        p_tracker->retired_session_id = 0U;
     }
     p_tracker->initialized = true;
     p_tracker->active = active;
@@ -426,20 +457,22 @@ void BleComm_Init(const BleComm_Config_t * const p_cfg)
     s_last_rx_flags = 0U;
     s_last_rx_fall = 0U;
     s_last_rx_session = 0U;
-    s_last_rx_event = 0U;
+    s_retired_rx_session = 0U;
+    s_last_rx_protocol = 0U;
     s_last_rx_ack_session = 0U;
     s_last_rx_ack_event = 0U;
     s_last_rx_ack_valid = false;
 #ifdef PICO_ON_DEVICE
-    s_session_id = get_rand_32();
+    s_session_id = (uint16_t)(get_rand_32() & UINT16_MAX);
     if (s_session_id == 0U)
     {
         s_session_id = 1U;
     }
 #else
     /* Deterministic, role-distinct host identity; target boots use hardware entropy. */
-    s_session_id = 0x29000000U | (uint32_t)s_cfg.device_id;
+    s_session_id = (uint16_t)(0x2900U | s_cfg.device_id);
 #endif
+    s_session_rollover = false;
     atomic_store_explicit(&s_rx_q_head, 0U, memory_order_relaxed);
     atomic_store_explicit(&s_rx_q_tail, 0U, memory_order_relaxed);
     atomic_store_explicit(&s_tx_q_head, 0U, memory_order_relaxed);
@@ -475,6 +508,7 @@ bool BleComm_Publish(const Ble_AdvancedThreatPacket_t * const p_pkt, Sys_State_t
     s_tx_queue[head].packet = *p_pkt;
     s_tx_queue[head].packet.protocol_version = BLE_PROTOCOL_VERSION;
     s_tx_queue[head].packet.session_id = s_session_id;
+    s_tx_queue[head].packet.session_rollover = s_session_rollover;
     s_tx_queue[head].profile = BleComm_SelectProfile(state, p_pkt->state_flags, link_lost);
     atomic_store_explicit(&s_tx_q_head, next_head, memory_order_release);
     return true;
@@ -494,8 +528,17 @@ bool BleComm_ReceivePacketAt(const Ble_AdvancedThreatPacket_t * const p_pkt, uin
     {
         return false;
     }
+    bool extended = (p_pkt->protocol_version == BLE_PROTOCOL_VERSION);
+    bool new_session = extended && ((s_last_rx_protocol != BLE_PROTOCOL_VERSION) ||
+                                    (p_pkt->session_id != s_last_rx_session));
+    if (extended && ((p_pkt->session_id == 0U) ||
+        (new_session && (p_pkt->session_id == s_retired_rx_session)) ||
+        (!new_session && (p_pkt->rolling_fall_seq < s_last_rx_fall))))
+    {
+        return false;
+    }
     /* Filter stale or delayed sequence numbers (wrap-safe modulo 8 for heartbeat sequence) */
-    if (s_last_rx_seq != 0xFFFFU)
+    if ((s_last_rx_seq != 0xFFFFU) && !new_session)
     {
         if ((p_pkt->seq_num <= 7U) && (s_last_rx_seq <= 7U))
         {
@@ -503,10 +546,9 @@ bool BleComm_ReceivePacketAt(const Ble_AdvancedThreatPacket_t * const p_pkt, uin
             bool state_changed = (p_pkt->state_flags != s_last_rx_flags) ||
                                   (p_pkt->rolling_fall_seq != s_last_rx_fall) ||
                                   (p_pkt->session_id != s_last_rx_session) ||
-                                  (p_pkt->event_id != s_last_rx_event) ||
                                   (p_pkt->peer_ack_valid != s_last_rx_ack_valid) ||
                                   (p_pkt->peer_ack_session_id != s_last_rx_ack_session) ||
-                                  (p_pkt->peer_ack_event_id != s_last_rx_ack_event);
+                                  (p_pkt->peer_ack_event_seq != s_last_rx_ack_event);
             if (((delta == 0U) && !state_changed) ||
                 ((delta > 4U) && ((uint32_t)(now_ms - s_last_rx_ms) < BLECOMM_CFG_RX_REBASE_MS)))
             {
@@ -535,11 +577,15 @@ bool BleComm_ReceivePacketAt(const Ble_AdvancedThreatPacket_t * const p_pkt, uin
     s_last_rx_ms = now_ms;
     s_last_rx_flags = p_pkt->state_flags;
     s_last_rx_fall = p_pkt->rolling_fall_seq;
+    if (new_session)
+    {
+        s_retired_rx_session = s_last_rx_session;
+    }
     s_last_rx_session = p_pkt->session_id;
-    s_last_rx_event = p_pkt->event_id;
+    s_last_rx_protocol = p_pkt->protocol_version;
     s_last_rx_ack_valid = p_pkt->peer_ack_valid;
     s_last_rx_ack_session = p_pkt->peer_ack_session_id;
-    s_last_rx_ack_event = p_pkt->peer_ack_event_id;
+    s_last_rx_ack_event = p_pkt->peer_ack_event_seq;
     return true;
 }
 

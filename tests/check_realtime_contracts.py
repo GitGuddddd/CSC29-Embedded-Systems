@@ -61,6 +61,14 @@ def source_contracts():
         for call in re.finditer(r"IncidentRetention_(?:Restore|Store)\(", main_source):
             require(call.start() < radio_boundary,
                     f"{main_name}: incident retention runtime access must remain on Core 0")
+        for call in re.finditer(r"BleComm_(?:NextFallSequence|ExcludeSession)\(", main_source):
+            require(call.start() < radio_boundary,
+                    f"{main_name}: compact event/epoch ownership must remain on Core 0")
+    types = (ROOT / "src/rte/Rte_Type.h").read_text()
+    require(not re.search(r"uint32_t\s+(?:event_id|session_id|peer_ack_event_id)\s*;", types),
+            "Wearable telemetry must not restore lifetime-width counters/identities")
+    require(re.search(r"rolling_fall_seq\s*:\s*4", types),
+            "The transmitted local fall counter must stay four bits")
     diagnostics = (ROOT / "src/services/Diagnostics/Diagnostics.c").read_text()
     require("PICO_STDIO_USB_ENABLE_IRQ_BACKGROUND_TASK" in diagnostics,
             "Keep the compile-time guard against USB protocol work in a software IRQ")

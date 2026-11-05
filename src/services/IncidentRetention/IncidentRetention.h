@@ -18,7 +18,9 @@ typedef enum
 
 typedef struct
 {
-    uint32_t event_id;
+    uint16_t session_id;
+    uint8_t event_seq : 4;
+    uint8_t reserved : 4;
 } IncidentRetention_Record_t;
 
 /* Initialize before Watchdog_Init(), which programs the SDK watchdog marker.
@@ -26,7 +28,7 @@ typedef struct
  */
 void IncidentRetention_Init(IncidentRetention_Role_t role);
 bool IncidentRetention_Restore(IncidentRetention_Record_t * const p_record);
-void IncidentRetention_Store(bool active, uint32_t event_id);
+void IncidentRetention_Store(bool active, uint16_t session_id, uint8_t event_seq);
 
 #ifndef PICO_ON_DEVICE
 /* Host-only hooks exercise reset cause, retained scratch and torn-record handling. */

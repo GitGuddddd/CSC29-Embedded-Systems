@@ -14,20 +14,21 @@
 /* Sender-side supervision of one locally originated critical event. */
 typedef struct
 {
-    uint32_t local_session_id;
-    uint32_t peer_session_id;
-    uint32_t receipt_peer_session_id;
+    uint16_t local_session_id;
+    uint16_t peer_session_id;
+    uint16_t receipt_peer_session_id;
     uint32_t event_started_ms;
     uint32_t last_peer_ms;
-    uint32_t event_id;
-    bool active;
-    bool peer_seen;
-    bool receipt_confirmed;
+    uint8_t event_seq : 4;
+    uint8_t active : 1;
+    uint8_t peer_seen : 1;
+    uint8_t receipt_confirmed : 1;
+    uint8_t reserved : 1;
 } SafetyDelivery_t;
 
-void SafetyDelivery_Init(SafetyDelivery_t * const p_delivery, uint32_t local_session_id);
-void SafetyDelivery_Start(SafetyDelivery_t * const p_delivery, uint32_t event_id,
-                          uint32_t now_ms);
+void SafetyDelivery_Init(SafetyDelivery_t * const p_delivery, uint16_t local_session_id);
+void SafetyDelivery_Start(SafetyDelivery_t * const p_delivery, uint16_t local_session_id,
+                          uint8_t event_seq, uint32_t now_ms);
 void SafetyDelivery_Clear(SafetyDelivery_t * const p_delivery);
 void SafetyDelivery_ObservePeer(SafetyDelivery_t * const p_delivery,
                                 const Ble_AdvancedThreatPacket_t * const p_packet,

@@ -6,6 +6,8 @@ import android.content.Context
 import android.os.Build
 import android.os.Vibrator
 import android.os.VibratorManager
+import com.cliftonzg.echoguard.core.ble.FallHistoryStore
+import com.cliftonzg.echoguard.core.ble.PreferencesFallHistoryStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -16,6 +18,11 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object BluetoothModule {
+
+    @Provides
+    @Singleton
+    fun provideFallHistoryStore(@ApplicationContext context: Context): FallHistoryStore =
+        PreferencesFallHistoryStore(context)
 
     @Provides
     @Singleton

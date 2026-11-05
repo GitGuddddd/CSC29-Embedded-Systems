@@ -21,10 +21,12 @@ void test_ActiveIncidentSurvivesEnabledWatchdogReset(void)
 {
     IncidentRetention_Record_t restored;
     IncidentRetention_Init(INCIDENT_RETENTION_ROLE_GLASSES);
-    IncidentRetention_Store(true, 0xF1020304U);
+    IncidentRetention_Store(true, 0xF102U, 4U);
     SimulateWatchdogRestart(INCIDENT_RETENTION_ROLE_GLASSES);
     TEST_ASSERT_TRUE(IncidentRetention_Restore(&restored));
-    TEST_ASSERT_EQUAL_HEX32(0xF1020304U, restored.event_id);
+    TEST_ASSERT_EQUAL_HEX16(0xF102U, restored.session_id);
+    TEST_ASSERT_EQUAL_UINT8(4U, restored.event_seq);
+    TEST_ASSERT_EQUAL_HEX32(0x000F1024U, IncidentRetention_TestReadWord(1U));
 
     /* The record remains valid across a second watchdog reset before clearance. */
     SimulateWatchdogRestart(INCIDENT_RETENTION_ROLE_GLASSES);
@@ -35,10 +37,10 @@ void test_ClearPreventsIncidentRevival(void)
 {
     IncidentRetention_Record_t restored;
     IncidentRetention_Init(INCIDENT_RETENTION_ROLE_CANE);
-    IncidentRetention_Store(true, 7U);
+    IncidentRetention_Store(true, 0x1001U, 7U);
     SimulateWatchdogRestart(INCIDENT_RETENTION_ROLE_CANE);
     TEST_ASSERT_TRUE(IncidentRetention_Restore(&restored));
-    IncidentRetention_Store(false, 7U);
+    IncidentRetention_Store(false, 0x1001U, 7U);
     SimulateWatchdogRestart(INCIDENT_RETENTION_ROLE_CANE);
     TEST_ASSERT_FALSE(IncidentRetention_Restore(&restored));
 }
@@ -47,7 +49,7 @@ void test_NonWatchdogResetDiscardsRetainedIncident(void)
 {
     IncidentRetention_Record_t restored;
     IncidentRetention_Init(INCIDENT_RETENTION_ROLE_CANE);
-    IncidentRetention_Store(true, 11U);
+    IncidentRetention_Store(true, 0x1001U, 11U);
     IncidentRetention_TestSetWatchdogReset(false);
     IncidentRetention_TestRestartRuntime();
     IncidentRetention_Init(INCIDENT_RETENTION_ROLE_CANE);
@@ -59,7 +61,7 @@ void test_WrongFirmwareRoleCannotRestoreRecord(void)
 {
     IncidentRetention_Record_t restored;
     IncidentRetention_Init(INCIDENT_RETENTION_ROLE_CANE);
-    IncidentRetention_Store(true, 12U);
+    IncidentRetention_Store(true, 0x1001U, 12U);
     SimulateWatchdogRestart(INCIDENT_RETENTION_ROLE_GLASSES);
     TEST_ASSERT_FALSE(IncidentRetention_Restore(&restored));
 }
@@ -68,19 +70,20 @@ void test_CorruptOrTornPayloadRestoresConservativeActiveIncident(void)
 {
     IncidentRetention_Record_t restored;
     IncidentRetention_Init(INCIDENT_RETENTION_ROLE_GLASSES);
-    IncidentRetention_Store(true, 0x12345678U);
+    IncidentRetention_Store(true, 0x1234U, 8U);
     IncidentRetention_TestCorruptWord(2U, 0U);
     SimulateWatchdogRestart(INCIDENT_RETENTION_ROLE_GLASSES);
     TEST_ASSERT_TRUE(IncidentRetention_Restore(&restored));
-    TEST_ASSERT_EQUAL_UINT32(0U, restored.event_id);
+    TEST_ASSERT_EQUAL_UINT8(0U, restored.event_seq);
+    TEST_ASSERT_EQUAL_UINT16(0U, restored.session_id);
 
-    IncidentRetention_Store(true, 99U);
+    IncidentRetention_Store(true, 0x1001U, 9U);
     IncidentRetention_TestCorruptWord(3U, 0U); /* Payload update never completed. */
     SimulateWatchdogRestart(INCIDENT_RETENTION_ROLE_GLASSES);
     TEST_ASSERT_TRUE(IncidentRetention_Restore(&restored));
-    TEST_ASSERT_EQUAL_UINT32(0U, restored.event_id);
+    TEST_ASSERT_EQUAL_UINT8(0U, restored.event_seq);
 
-    IncidentRetention_Store(false, 0U); /* An absent active commit remains clear. */
+    IncidentRetention_Store(false, 0x1001U, 0U); /* An absent active commit remains clear. */
     SimulateWatchdogRestart(INCIDENT_RETENTION_ROLE_GLASSES);
     TEST_ASSERT_FALSE(IncidentRetention_Restore(&restored));
 }
@@ -89,23 +92,26 @@ void test_EventCounterWrapIsRetainedWithoutClearingIncident(void)
 {
     IncidentRetention_Record_t restored;
     IncidentRetention_Init(INCIDENT_RETENTION_ROLE_CANE);
-    IncidentRetention_Store(true, UINT32_MAX);
+    IncidentRetention_Store(true, UINT16_MAX, 15U);
     SimulateWatchdogRestart(INCIDENT_RETENTION_ROLE_CANE);
     TEST_ASSERT_TRUE(IncidentRetention_Restore(&restored));
-    TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, restored.event_id);
+    TEST_ASSERT_EQUAL_UINT8(15U, restored.event_seq);
+    TEST_ASSERT_EQUAL_UINT16(UINT16_MAX, restored.session_id);
 
-    IncidentRetention_Store(true, 0U);
-    TEST_ASSERT_EQUAL_HEX32(UINT32_MAX, IncidentRetention_TestReadWord(2U));
+    IncidentRetention_Store(true, 1U, 0U);
+    TEST_ASSERT_EQUAL_HEX32(0x10U, IncidentRetention_TestReadWord(1U));
+    TEST_ASSERT_EQUAL_HEX32(~0x10U, IncidentRetention_TestReadWord(2U));
     SimulateWatchdogRestart(INCIDENT_RETENTION_ROLE_CANE);
     TEST_ASSERT_TRUE(IncidentRetention_Restore(&restored));
-    TEST_ASSERT_EQUAL_UINT32(0U, restored.event_id);
+    TEST_ASSERT_EQUAL_UINT8(0U, restored.event_seq);
+    TEST_ASSERT_EQUAL_UINT16(1U, restored.session_id);
 }
 
 void test_InvalidRoleCannotCreateOrRestoreRecord(void)
 {
     IncidentRetention_Record_t restored;
     IncidentRetention_Init((IncidentRetention_Role_t)0);
-    IncidentRetention_Store(true, 42U);
+    IncidentRetention_Store(true, 0x1001U, 2U);
     IncidentRetention_TestSetWatchdogReset(true);
     IncidentRetention_TestRestartRuntime();
     IncidentRetention_Init((IncidentRetention_Role_t)0);
@@ -117,7 +123,7 @@ void test_NullAndUninitializedAccessFailClosed(void)
 {
     IncidentRetention_Record_t restored;
     TEST_ASSERT_FALSE(IncidentRetention_Restore(&restored));
-    IncidentRetention_Store(true, 1U);
+    IncidentRetention_Store(true, 0x1001U, 1U);
     IncidentRetention_Init(INCIDENT_RETENTION_ROLE_CANE);
     TEST_ASSERT_FALSE(IncidentRetention_Restore(NULL));
 }

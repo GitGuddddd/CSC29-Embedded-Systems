@@ -5,11 +5,11 @@
 
 /*
  * \file SafetyDelivery.c
- * \brief Boot-scoped critical-event receipt and degraded-fallback supervision
+ * \brief Compact epoch-scoped receipt and degraded-fallback supervision
  * Compliance: Barr-C:2018
  */
 
-void SafetyDelivery_Init(SafetyDelivery_t * const p_delivery, uint32_t local_session_id)
+void SafetyDelivery_Init(SafetyDelivery_t * const p_delivery, uint16_t local_session_id)
 {
     if (p_delivery != NULL)
     {
@@ -18,12 +18,13 @@ void SafetyDelivery_Init(SafetyDelivery_t * const p_delivery, uint32_t local_ses
     }
 }
 
-void SafetyDelivery_Start(SafetyDelivery_t * const p_delivery, uint32_t event_id,
-                          uint32_t now_ms)
+void SafetyDelivery_Start(SafetyDelivery_t * const p_delivery, uint16_t local_session_id,
+                          uint8_t event_seq, uint32_t now_ms)
 {
     if (p_delivery != NULL)
     {
-        p_delivery->event_id = event_id;
+        p_delivery->local_session_id = local_session_id;
+        p_delivery->event_seq = event_seq & BLE_FALL_SEQ_MASK;
         p_delivery->event_started_ms = now_ms;
         p_delivery->active = true;
         p_delivery->receipt_confirmed = false;
@@ -50,10 +51,16 @@ void SafetyDelivery_ObservePeer(SafetyDelivery_t * const p_delivery,
         return;
     }
 
-    if (p_delivery->peer_seen &&
-        (p_packet->session_id != p_delivery->peer_session_id))
+    bool matching = (p_packet->protocol_version == BLE_PROTOCOL_VERSION) &&
+                    (p_packet->node_type == BLE_NODE_TYPE_CANE) &&
+                    (p_packet->session_id != 0U) && p_packet->peer_ack_valid &&
+                    (p_delivery->local_session_id != 0U) &&
+                    (p_packet->peer_ack_session_id == p_delivery->local_session_id) &&
+                    (p_packet->peer_ack_event_seq == p_delivery->event_seq);
+    if (!matching || (p_delivery->peer_seen &&
+        (p_packet->session_id != p_delivery->peer_session_id)))
     {
-        /* A peer reboot invalidates a receipt issued by its previous application. */
+        /* Reboot, downgrade or withdrawal invalidates the current receipt lease. */
         p_delivery->receipt_confirmed = false;
         p_delivery->receipt_peer_session_id = 0U;
     }
@@ -61,11 +68,8 @@ void SafetyDelivery_ObservePeer(SafetyDelivery_t * const p_delivery,
     p_delivery->last_peer_ms = received_ms;
     p_delivery->peer_session_id = p_packet->session_id;
 
-    if (p_delivery->active &&
-        (p_packet->protocol_version == BLE_PROTOCOL_VERSION) &&
-        (p_packet->session_id != 0U) && p_packet->peer_ack_valid &&
-        (p_packet->peer_ack_session_id == p_delivery->local_session_id) &&
-        (p_packet->peer_ack_event_id == p_delivery->event_id))
+    if (p_delivery->active && matching &&
+        ((uint32_t)(received_ms - p_delivery->event_started_ms) <= (UINT32_MAX / 2U)))
     {
         p_delivery->receipt_confirmed = true;
         p_delivery->receipt_peer_session_id = p_packet->session_id;

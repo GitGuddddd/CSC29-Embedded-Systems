@@ -5,6 +5,8 @@ data class NodeTelemetry(
     val address: String? = null,
     val packet: SystemPacket? = null,
     val linkState: LinkState = LinkState.WAITING,
+    val phoneFallCount: Long? = null,
+    val phoneHistoryHasGaps: Boolean = false,
 ) {
     val isFresh: Boolean get() = linkState == LinkState.ACTIVE
 }

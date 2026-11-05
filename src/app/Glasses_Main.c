@@ -58,6 +58,13 @@ static uint32_t GetCurrentTimeMs(void)
  * =========================================================================
  */
 #ifdef PICO_ON_DEVICE
+typedef struct
+{
+    uint8_t sequence : 4;
+    uint8_t latched : 1;
+    uint8_t reserved : 3;
+} Glasses_FallState_t; /* Private Core 0 record; history is accumulated by the phone. */
+
 static void vTask_GlassesPerception(void *pvParameters)
 {
     (void)pvParameters;
@@ -67,6 +74,10 @@ static void vTask_GlassesPerception(void *pvParameters)
     uint32_t start_ms = GetCurrentTimeMs();
     IncidentRetention_Record_t retained_incident = {0};
     bool incident_restored = IncidentRetention_Restore(&retained_incident);
+    if (incident_restored)
+    {
+        BleComm_ExcludeSession(retained_incident.session_id);
+    }
     ImuSupervisor_t imu;
     ImuSupervisor_Init(&imu, &Mpu9250_Config_Glasses,
                         GLASSES_PIN_I2C1_SDA, GLASSES_PIN_I2C1_SCL, start_ms);
@@ -78,21 +89,25 @@ static void vTask_GlassesPerception(void *pvParameters)
     uint32_t last_btn_ms = 0U;
     uint32_t last_telemetry_ms = 0U;
     uint8_t last_sent_flags = 0xFFU;
-    uint32_t last_sent_event_id = UINT32_MAX;
+    uint8_t last_sent_event_seq = UINT8_MAX;
+    uint16_t last_sent_session_id = 0U;
     Sys_State_t last_sent_state = SYS_STATE_COUNT;
     BleComm_ProfileId_t last_sent_profile = BLECOMM_PROFILE_FAST;
     uint16_t buzzer_freq_hz = 0U;
     uint8_t buzzer_duty_percent = 0U;
     bool ack_was_pressed = !Hal_Gpio_Read(GLASSES_PIN_ACK_BTN);
 
-    bool head_fall_latched = incident_restored;
-    uint32_t glasses_fall_count = incident_restored ? retained_incident.event_id : 0U;
+    Glasses_FallState_t head_fall = {
+        .sequence = incident_restored ? retained_incident.event_seq : 0U,
+        .latched = incident_restored ? 1U : 0U
+    };
     uint8_t glasses_tx_seq = 0U;
     SafetyDelivery_t fall_delivery;
     SafetyDelivery_Init(&fall_delivery, BleComm_GetSessionId());
     if (incident_restored)
     {
-        SafetyDelivery_Start(&fall_delivery, glasses_fall_count, start_ms);
+        SafetyDelivery_Start(&fall_delivery, BleComm_GetSessionId(), head_fall.sequence, start_ms);
+        IncidentRetention_Store(true, BleComm_GetSessionId(), head_fall.sequence);
         printf("[INCIDENT RETENTION] Restored unresolved head fall after watchdog reset.\n");
     }
     bool previous_delivery_fallback = false;
@@ -166,7 +181,7 @@ static void vTask_GlassesPerception(void *pvParameters)
         /* The BLE receiver stays awake: a fresh cane wake or uncertain link restores
          * head monitoring. The local acknowledgement button can also wake the glasses.
          */
-        if (sleep_requested && (!cane_standby || !Hal_Gpio_Read(GLASSES_PIN_ACK_BTN) || head_fall_latched))
+        if (sleep_requested && (!cane_standby || !Hal_Gpio_Read(GLASSES_PIN_ACK_BTN) || head_fall.latched))
         {
             sleep_requested = false;
             last_movement_ms = now_ms;
@@ -194,14 +209,14 @@ static void vTask_GlassesPerception(void *pvParameters)
             {
                 last_movement_ms = now_ms;
             }
-            if (!head_fall_latched && FallDetection_Step(&imu.sample, now_ms))
+            if (!head_fall.latched && FallDetection_Step(&imu.sample, now_ms))
             {
                 printf("[GLASSES ALERT] Head fall latched; awaiting cane application receipt.\n");
-                head_fall_latched = true;
+                head_fall.latched = 1U;
                 new_head_fall = true;
-                glasses_fall_count++;
-                SafetyDelivery_Start(&fall_delivery, glasses_fall_count, now_ms);
-                IncidentRetention_Store(true, glasses_fall_count);
+                head_fall.sequence = BleComm_NextFallSequence(head_fall.sequence) & BLE_FALL_SEQ_MASK;
+                SafetyDelivery_Start(&fall_delivery, BleComm_GetSessionId(), head_fall.sequence, now_ms);
+                IncidentRetention_Store(true, BleComm_GetSessionId(), head_fall.sequence);
                 sleep_requested = false;
             }
         }
@@ -213,7 +228,7 @@ static void vTask_GlassesPerception(void *pvParameters)
 
         /* Explicit cane parking plus local stillness, never an unresolved head fall. */
         if (!sleep_requested && cane_standby && imu.sample_valid && !imu.fault &&
-            !head_fall_latched && (FallDetection_GetState() == FALL_STATE_IDLE) &&
+            !head_fall.latched && (FallDetection_GetState() == FALL_STATE_IDLE) &&
             ((uint32_t)(now_ms - last_movement_ms) >= 60000U))
         {
             sleep_requested = true;
@@ -247,13 +262,13 @@ static void vTask_GlassesPerception(void *pvParameters)
             bool ack_pressed = !Hal_Gpio_Read(GLASSES_PIN_ACK_BTN);
             if (ack_pressed && !ack_was_pressed && !new_head_fall)
             {
-                head_fall_latched = false;
+                head_fall.latched = 0U;
                 sleep_requested = false;
                 last_movement_ms = now_ms;
                 FallDetection_Reset();
                 AlertManager_AcknowledgeReset();
                 SafetyDelivery_Clear(&fall_delivery);
-                IncidentRetention_Store(false, glasses_fall_count);
+                IncidentRetention_Store(false, BleComm_GetSessionId(), head_fall.sequence);
             }
             ack_was_pressed = ack_pressed;
 
@@ -262,23 +277,23 @@ static void vTask_GlassesPerception(void *pvParameters)
             {
                 printf("[TEST TRIGGER] Simulating Confirmed Head Fall on Glasses!\n");
                 sleep_requested = false;
-                head_fall_latched = true;
-                glasses_fall_count++;
-                SafetyDelivery_Start(&fall_delivery, glasses_fall_count, now_ms);
-                IncidentRetention_Store(true, glasses_fall_count);
+                head_fall.latched = 1U;
+                head_fall.sequence = BleComm_NextFallSequence(head_fall.sequence) & BLE_FALL_SEQ_MASK;
+                SafetyDelivery_Start(&fall_delivery, BleComm_GetSessionId(), head_fall.sequence, now_ms);
+                IncidentRetention_Store(true, BleComm_GetSessionId(), head_fall.sequence);
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
             }
             else if ((ch == (int)'c') || (ch == (int)'C'))
             {
                 printf("[TEST TRIGGER] Clearing Head Fall on Glasses\n");
                 sleep_requested = false;
-                head_fall_latched = false;
+                head_fall.latched = 0U;
                 last_movement_ms = now_ms;
                 FallDetection_Reset();
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
                 AlertManager_AcknowledgeReset();
                 SafetyDelivery_Clear(&fall_delivery);
-                IncidentRetention_Store(false, glasses_fall_count);
+                IncidentRetention_Store(false, BleComm_GetSessionId(), head_fall.sequence);
             }
         }
 
@@ -287,7 +302,7 @@ static void vTask_GlassesPerception(void *pvParameters)
         bool obstacle = !standby && (cane_grip_telemetry != GRIP_STATE_RELEASED) &&
                         current_threat.is_threat_active && !radar_timeout;
         /* Derive the display mode once, so sensor recovery cannot overwrite a fall. */
-        if (head_fall_latched)
+        if (head_fall.latched)
         {
             s_glasses_mode = SYS_STATE_FALL_CONFIRMED;
         }
@@ -307,17 +322,17 @@ static void vTask_GlassesPerception(void *pvParameters)
         {
             s_glasses_mode = obstacle ? SYS_STATE_WATCH : SYS_STATE_ACTIVE;
         }
-        Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, head_fall_latched ||
+        Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, head_fall.latched ||
                        (imu.fault && ((now_ms % 1000U) < 500U)));
 
         Alert_Type_t request = ALERT_NONE;
-        bool delivery_fallback = head_fall_latched &&
+        bool delivery_fallback = head_fall.latched &&
                                  SafetyDelivery_NeedsFallback(&fall_delivery, now_ms);
         if (delivery_fallback)
         {
             request = ALERT_FALL_DELIVERY_FAULT;
         }
-        else if (!head_fall_latched && !standby)
+        else if (!head_fall.latched && !standby)
         {
             if (obstacle)
             {
@@ -351,7 +366,7 @@ static void vTask_GlassesPerception(void *pvParameters)
         }
 
         uint8_t flags = 0U;
-        if (head_fall_latched)
+        if (head_fall.latched)
         {
             flags |= BLE_FLAG_FALL_ALERT;
         }
@@ -371,7 +386,8 @@ static void vTask_GlassesPerception(void *pvParameters)
         BleComm_ProfileId_t profile = BleComm_SelectProfile(s_glasses_mode, flags, link_lost);
         uint32_t telemetry_period_ms = BleComm_GetProfile(profile)->payload_period_ms;
         if ((flags != last_sent_flags) || (s_glasses_mode != last_sent_state) ||
-            (glasses_fall_count != last_sent_event_id) ||
+            (head_fall.sequence != last_sent_event_seq) ||
+            (BleComm_GetSessionId() != last_sent_session_id) ||
             (profile != last_sent_profile) || ((now_ms - last_telemetry_ms) >= telemetry_period_ms))
         {
             uint16_t ttc = (radar_timeout || standby || (current_threat.time_to_collision_ms == UINT16_MAX)) ?
@@ -383,8 +399,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                 .pair_id = BLE_DEFAULT_PAIR_ID,
                 .node_type = BLE_NODE_TYPE_GLASSES,
                 .heartbeat_seq = (uint8_t)(glasses_tx_seq & 0x07U),
-                .rolling_fall_seq = (uint8_t)(glasses_fall_count & 0x0FU),
-                .event_id = glasses_fall_count,
+                .rolling_fall_seq = head_fall.sequence,
                 .seq_num = glasses_tx_seq,
                 .state_flags = flags,
                 .nearest_dist_mm = (radar_timeout || standby) ? 0xFFFFU : current_threat.nearest_distance_mm,
@@ -396,7 +411,8 @@ static void vTask_GlassesPerception(void *pvParameters)
                 glasses_tx_seq++;
                 last_telemetry_ms = now_ms;
                 last_sent_flags = flags;
-                last_sent_event_id = glasses_fall_count;
+                last_sent_event_seq = head_fall.sequence;
+                last_sent_session_id = BleComm_GetSessionId();
                 last_sent_state = s_glasses_mode;
                 last_sent_profile = profile;
             }

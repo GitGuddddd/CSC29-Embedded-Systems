@@ -247,11 +247,20 @@ private fun NodeCard(node: NodeTelemetry, monitoring: MonitoringState) {
                 }
                 Text(
                     "Heartbeat #${packet.seqNum}" + if (packet.compactFormat) {
-                        " · Event #${if (packet.protocolVersion > 0) packet.eventId else packet.rollingFallSeq}"
+                        " · Fall sequence ${packet.rollingFallSeq} (0–15)"
                     } else "",
+                    modifier = Modifier.testTag("node_${node.type}_sequence"),
                     color = Color.White.copy(alpha = 0.8f),
                     style = MaterialTheme.typography.labelSmall,
                 )
+                node.phoneFallCount?.let { count ->
+                    Text(
+                        "Phone-recorded falls: $count" + if (node.phoneHistoryHasGaps) " · incomplete history" else "",
+                        modifier = Modifier.testTag("node_${node.type}_fall_history"),
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         }
     }

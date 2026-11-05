@@ -8,17 +8,19 @@ import com.cliftonzg.echoguard.core.ble.model.NodeType
 import com.cliftonzg.echoguard.core.ble.model.SystemPacket
 
 /** Pure session/sequence logic. The scanner serializes access to this object. */
-class TelemetrySession {
+class TelemetrySession(private val history: PhoneFallHistory = PhoneFallHistory()) {
     private var selected: DiscoveredBleDevice? = null
     private var selectedAt = 0L
     private var scanStartedAt = 0L
     private var scanning = false
     private val entries = mutableMapOf<NodeType, NodeTelemetry>()
+    private val retiredEpochs = mutableMapOf<NodeType, Long>()
 
     fun select(device: DiscoveredBleDevice?, nowMs: Long) {
         selected = device
         selectedAt = nowMs
         entries.clear()
+        retiredEpochs.clear()
     }
 
     fun setScanning(enabled: Boolean, nowMs: Long) {
@@ -42,11 +44,21 @@ class TelemetrySession {
 
         val previous = entries[packet.nodeType]
         if (previous?.address != null && previous.address != address) return false
+        val changedEpoch = packet.protocolVersion == SystemPacket.PROTOCOL_VERSION &&
+            previous?.packet?.sessionId != packet.sessionId
+        if (changedEpoch && retiredEpochs[packet.nodeType] == packet.sessionId) return false
         if (!packet.isFreshAfter(previous?.packet)) return false
         if (address == device.address && device.nodeType == null) {
             selected = device.copy(nodeType = packet.nodeType, pairId = packet.pairId.takeIf { packet.compactFormat })
         }
-        entries[packet.nodeType] = NodeTelemetry(packet.nodeType, address, packet, LinkState.ACTIVE)
+        if (changedEpoch) previous?.packet?.sessionId?.let { retiredEpochs[packet.nodeType] = it }
+        val scope = selected ?: device
+        val key = "${scope.pairId}:${address}:${packet.nodeType}"
+        val record = history.observe(key, packet)
+        entries[packet.nodeType] = NodeTelemetry(
+            packet.nodeType, address, packet, LinkState.ACTIVE,
+            phoneFallCount = record?.total, phoneHistoryHasGaps = record?.hasGaps == true,
+        )
         return true
     }
 

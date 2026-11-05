@@ -30,7 +30,8 @@ enum class TelemetryStatus {
 /**
  * Represents a packet received over BLE from the EchoGuard system.
  * Supports 5-byte basic packet schema, 10-11 byte AdvancedThreatPacket schema,
- * and the compact 6-byte status with an optional 18-byte safety extension.
+ * and compact status with the six-byte v2 receipt extension (12 bytes total).
+ * The former 24-byte v1 frame is readable for telemetry only.
  */
 data class SystemPacket(
     val magic: Int,
@@ -47,7 +48,8 @@ data class SystemPacket(
     val pairId: Int = 0,
     val protocolVersion: Int = 0,
     val sessionId: Long = 0L,
-    val eventId: Long = 0L,
+    val eventId: Long = rollingFallSeq.toLong(),
+    val sessionRollover: Boolean = false,
     val peerAckValid: Boolean = false,
     val peerAckSessionId: Long = 0L,
     val peerAckEventId: Long = 0L,
@@ -140,9 +142,20 @@ data class SystemPacket(
 
     private fun isCompactValid(): Boolean {
         // Compact 6-byte packed schema: deviceId derived from node type (0x01=Cane, 0x02=Glasses)
-        return magic == 0xAA && (deviceId == 0x01 || deviceId == 0x02) &&
-            pairId in 0 until 16 && seqNum in 0 until 8 && rollingFallSeq in 0 until 16 &&
-            (protocolVersion == 0 || (protocolVersion == PROTOCOL_VERSION && sessionId != 0L))
+        if (magic != 0xAA || (deviceId != 0x01 && deviceId != 0x02) ||
+            pairId !in 0 until 16 || seqNum !in 0 until 8 || rollingFallSeq !in 0 until 16
+        ) return false
+        return when (protocolVersion) {
+            0 -> true
+            LEGACY_PROTOCOL_VERSION -> sessionId in 1L..0xFFFFFFFFL
+            PROTOCOL_VERSION -> sessionId in 1L..0xFFFFL && eventId == rollingFallSeq.toLong() &&
+                if (peerAckValid) {
+                    nodeType == NodeType.CANE && peerAckSessionId in 1L..0xFFFFL && peerAckEventId in 0L..15L
+                } else {
+                    peerAckSessionId == 0L && peerAckEventId == 0L
+                }
+            else -> false
+        }
     }
 
     /**
@@ -167,6 +180,8 @@ data class SystemPacket(
         if (receivedAt <= previous.receivedAt) return false
         if (compactFormat != previous.compactFormat || isAdvanced != previous.isAdvanced) return true
         if (!compactFormat) return isNewerThan(previous.seqNum)
+        if (protocolVersion != previous.protocolVersion || sessionId != previous.sessionId) return true
+        if (protocolVersion == PROTOCOL_VERSION && rollingFallSeq < previous.rollingFallSeq) return false
         val delta = (seqNum - previous.seqNum) and 0x07
         val statusChanged = stateFlags != previous.stateFlags ||
             rollingFallSeq != previous.rollingFallSeq || sessionId != previous.sessionId ||
@@ -187,9 +202,16 @@ data class SystemPacket(
         const val FLAG_PARKED_BY_USER = 0x40
         const val LINK_TIMEOUT_MS = 500L
         const val SEQUENCE_REBASE_MS = 250L
-        const val PROTOCOL_VERSION = 1
-        const val SAFETY_EXTENSION_MARKER = 0xE1
-        const val SAFETY_FLAG_PEER_ACK = 0x01
+        const val PROTOCOL_VERSION = 2
+        const val SAFETY_EXTENSION_MARKER = 0xE2
+        const val SAFETY_FLAG_PEER_ACK = 0x10
+        const val SAFETY_FLAG_ROLLOVER = 0x20
+        const val SAFETY_RESERVED_MASK = 0xC0
+        const val LEGACY_PROTOCOL_VERSION = 1
+        const val LEGACY_SAFETY_EXTENSION_MARKER = 0xE1
+
+        private fun readU16Le(data: ByteArray, offset: Int): Long =
+            (data[offset].toLong() and 0xFFL) or ((data[offset + 1].toLong() and 0xFFL) shl 8)
 
         private fun readU32Le(data: ByteArray, offset: Int): Long =
             (data[offset].toLong() and 0xFFL) or
@@ -198,6 +220,16 @@ data class SystemPacket(
                 ((data[offset + 3].toLong() and 0xFFL) shl 24)
 
         fun parse(data: ByteArray, timestamp: Long = 0L): SystemPacket? {
+            if (data.size > 6 && (data[0].toInt() and 0xF0) == 0xA0 &&
+                (data[6].toInt() and 0xF0) == 0xE0
+            ) {
+                // Pair 10 makes the compact sync byte 0xAA, like the old advanced
+                // preamble. A marked but truncated extension must not fall through.
+                val marker = data[6].toInt() and 0xFF
+                if (!((data.size == 12 && marker == SAFETY_EXTENSION_MARKER) ||
+                        (data.size == 24 && marker == LEGACY_SAFETY_EXTENSION_MARKER))
+                ) return null
+            }
             return when {
                 data.size == 10 || data.size == 11 -> {
                     // AdvancedThreatPacket Schema (10 to 11 bytes):
@@ -226,9 +258,9 @@ data class SystemPacket(
                     )
                     packet.takeIf { it.isValid() }
                 }
-                data.size == 6 || data.size == 24 -> {
-                    // Compact 6-byte status, optionally followed by an 18-byte
-                    // boot-scoped event/application-receipt extension.
+                data.size == 6 || data.size == 12 || data.size == 24 -> {
+                    // The four-bit count is already in the six-byte status.
+                    // V2 adds only two 16-bit epochs and packed receipt/rollover flags.
                     // Byte 0: [Sync Nibble 0xA (4b) | Pair ID (4b)]
                     // Byte 1: [Node Type (1b) | Heartbeat Seq (3b) | Rolling Fall Seq (4b)]
                     // Byte 2: [State Flags (8b)]
@@ -263,14 +295,37 @@ data class SystemPacket(
 
                     val deviceId = if (nodeType == 1) 0x01 else 0x02
 
-                    val extended = data.size == 24
-                    if (extended && (data[6].toInt() and 0xFF) != SAFETY_EXTENSION_MARKER) return null
-                    val protocolVersion = if (extended) data[6].toInt() and 0x0F else 0
-                    val sessionId = if (extended) readU32Le(data, 7) else 0L
-                    val eventId = if (extended) readU32Le(data, 11) else rollingFallSeq.toLong()
-                    val peerAckSessionId = if (extended) readU32Le(data, 15) else 0L
-                    val peerAckEventId = if (extended) readU32Le(data, 19) else 0L
-                    val safetyFlags = if (extended) data[23].toInt() and 0xFF else 0
+                    val compactReceipt = data.size == 12
+                    val oldExtension = data.size == 24
+                    if (compactReceipt && (data[6].toInt() and 0xFF) != SAFETY_EXTENSION_MARKER) return null
+                    if (oldExtension && (data[6].toInt() and 0xFF) != LEGACY_SAFETY_EXTENSION_MARKER) return null
+                    val protocolVersion = when {
+                        compactReceipt -> PROTOCOL_VERSION
+                        oldExtension -> LEGACY_PROTOCOL_VERSION
+                        else -> 0
+                    }
+                    val sessionId = when {
+                        compactReceipt -> readU16Le(data, 7)
+                        oldExtension -> readU32Le(data, 7)
+                        else -> 0L
+                    }
+                    val eventId = if (oldExtension) readU32Le(data, 11) else rollingFallSeq.toLong()
+                    val peerAckSessionId = when {
+                        compactReceipt -> readU16Le(data, 9)
+                        oldExtension -> readU32Le(data, 15)
+                        else -> 0L
+                    }
+                    val safetyFlags = when {
+                        compactReceipt -> data[11].toInt() and 0xFF
+                        oldExtension -> data[23].toInt() and 0xFF
+                        else -> 0
+                    }
+                    if (compactReceipt && (safetyFlags and SAFETY_RESERVED_MASK) != 0) return null
+                    val peerAckEventId = when {
+                        compactReceipt -> (safetyFlags and 0x0F).toLong()
+                        oldExtension -> readU32Le(data, 19)
+                        else -> 0L
+                    }
 
                     val packet = SystemPacket(
                         magic = 0xAA, // Synthetic preamble for UI compatibility
@@ -288,7 +343,8 @@ data class SystemPacket(
                         protocolVersion = protocolVersion,
                         sessionId = sessionId,
                         eventId = eventId,
-                        peerAckValid = (safetyFlags and SAFETY_FLAG_PEER_ACK) != 0,
+                        sessionRollover = compactReceipt && (safetyFlags and SAFETY_FLAG_ROLLOVER) != 0,
+                        peerAckValid = (safetyFlags and if (oldExtension) 0x01 else SAFETY_FLAG_PEER_ACK) != 0,
                         peerAckSessionId = peerAckSessionId,
                         peerAckEventId = peerAckEventId,
                         receivedAt = timestamp,

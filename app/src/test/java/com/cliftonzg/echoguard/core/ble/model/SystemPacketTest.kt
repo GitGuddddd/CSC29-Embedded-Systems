@@ -239,19 +239,64 @@ class SystemPacketTest {
         }
     }
 
-    @Test fun `extended firmware packet carries boot scoped event and application receipt`() {
+    @Test fun `compact v2 golden vector carries four-bit sequence and scoped receipt`() {
+        // Same 12 bytes asserted by test_Fall_to_Ble_Dispatch.c.
+        val extended = byteArrayOf(
+            0xA5.toByte(), 0xEE.toByte(), 0x01, 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(),
+            0xE2.toByte(), 0x04, 0xA1.toByte(), 0x05, 0xB2.toByte(), 0x32,
+        )
+        val packet = requireNotNull(SystemPacket.parse(extended, 900L))
+        assertEquals(SystemPacket.PROTOCOL_VERSION, packet.protocolVersion)
+        assertEquals(0xA104L, packet.sessionId)
+        assertEquals(14, packet.rollingFallSeq)
+        assertEquals(14L, packet.eventId)
+        assertTrue(packet.peerAckValid)
+        assertTrue(packet.sessionRollover)
+        assertEquals(0xB205L, packet.peerAckSessionId)
+        assertEquals(2L, packet.peerAckEventId)
+        for (length in 7..11) assertNull(SystemPacket.parse(extended.copyOf(length)))
+        extended[6] = 0xE1.toByte()
+        assertNull(SystemPacket.parse(extended))
+        extended[6] = SystemPacket.SAFETY_EXTENSION_MARKER.toByte()
+        extended[7] = 0
+        extended[8] = 0
+        assertNull(SystemPacket.parse(extended))
+    }
+
+    @Test fun `compact receipt rejects reserved flags and missing acknowledgement epoch`() {
+        val bytes = byteArrayOf(
+            0xA1.toByte(), 0xB5.toByte(), 1, 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(),
+            0xE2.toByte(), 1, 0, 0, 0, 0x10,
+        )
+        assertNull(SystemPacket.parse(bytes))
+        bytes[11] = 0x80.toByte()
+        assertNull(SystemPacket.parse(bytes))
+    }
+
+    @Test fun `pair ten truncated extension cannot masquerade as a legacy advanced packet`() {
+        val bytes = byteArrayOf(
+            0xAA.toByte(), 0x01, 0, 0, 0, 0,
+            0xE2.toByte(), 1, 0, 0, 0, 0,
+        )
+        assertNotNull(SystemPacket.parse(bytes))
+        for (length in 7..11) assertNull(SystemPacket.parse(bytes.copyOf(length)))
+        bytes[6] = 0xE3.toByte()
+        assertNull(SystemPacket.parse(bytes.copyOf(11)))
+    }
+
+    @Test fun `former 24-byte v1 packets remain readable but are not current receipt protocol`() {
         val extended = byteArrayOf(
             0xA1.toByte(), 0xB5.toByte(), SystemPacket.FLAG_FALL_ALERT.toByte(),
             0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(),
-            SystemPacket.SAFETY_EXTENSION_MARKER.toByte(),
+            SystemPacket.LEGACY_SAFETY_EXTENSION_MARKER.toByte(),
             0x78, 0x56, 0x34, 0x12,
             0xEF.toByte(), 0xCD.toByte(), 0xAB.toByte(), 0x09,
             0x21, 0x43, 0x65, 0x07,
             0x98.toByte(), 0xBA.toByte(), 0xDC.toByte(), 0x0F,
-            SystemPacket.SAFETY_FLAG_PEER_ACK.toByte(),
+            0x01,
         )
         val packet = requireNotNull(SystemPacket.parse(extended, 900L))
-        assertEquals(SystemPacket.PROTOCOL_VERSION, packet.protocolVersion)
+        assertEquals(SystemPacket.LEGACY_PROTOCOL_VERSION, packet.protocolVersion)
         assertEquals(0x12345678L, packet.sessionId)
         assertEquals(0x09ABCDEFL, packet.eventId)
         assertTrue(packet.peerAckValid)
@@ -259,7 +304,7 @@ class SystemPacketTest {
         assertEquals(0x0FDCBA98L, packet.peerAckEventId)
         extended[6] = 0xE2.toByte()
         assertNull(SystemPacket.parse(extended))
-        extended[6] = SystemPacket.SAFETY_EXTENSION_MARKER.toByte()
+        extended[6] = SystemPacket.LEGACY_SAFETY_EXTENSION_MARKER.toByte()
         extended[7] = 0
         extended[8] = 0
         extended[9] = 0

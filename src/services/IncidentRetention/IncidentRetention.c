@@ -13,9 +13,10 @@
  */
 
 #define INCIDENT_RETENTION_WORD_COUNT       (4U)
-#define INCIDENT_RETENTION_COMMIT_BASE      (0x45470100U)
+#define INCIDENT_RETENTION_COMMIT_BASE      (0x45470200U)
 #define INCIDENT_RETENTION_ROLE_SHIFT       (4U)
 #define INCIDENT_RETENTION_CHECK_SALT       (0xA53C9E71U)
+#define INCIDENT_RETENTION_PAYLOAD_MASK     (0x000FFFFFU)
 
 static IncidentRetention_Role_t s_role;
 static IncidentRetention_Record_t s_restored_record;
@@ -38,11 +39,11 @@ static uint32_t Commit_Word(IncidentRetention_Role_t role)
            ((uint32_t)role << INCIDENT_RETENTION_ROLE_SHIFT);
 }
 
-static uint32_t Check_Word(uint32_t commit, uint32_t event_id,
-                           uint32_t event_complement)
+static uint32_t Check_Word(uint32_t commit, uint32_t payload,
+                           uint32_t payload_complement)
 {
-    return commit ^ Rotate_Left(event_id, 7U) ^
-           Rotate_Left(event_complement, 17U) ^ INCIDENT_RETENTION_CHECK_SALT;
+    return commit ^ Rotate_Left(payload, 7U) ^
+           Rotate_Left(payload_complement, 17U) ^ INCIDENT_RETENTION_CHECK_SALT;
 }
 
 static uint32_t Read_Word(uint32_t index)
@@ -89,23 +90,25 @@ void IncidentRetention_Init(IncidentRetention_Role_t role)
     s_role = role;
     s_initialized = valid_role;
     s_restore_valid = false;
-    s_restored_record.event_id = 0U;
+    s_restored_record = (IncidentRetention_Record_t){0};
 
     uint32_t commit = Read_Word(0U);
-    uint32_t event_id = Read_Word(1U);
-    uint32_t event_complement = Read_Word(2U);
+    uint32_t payload = Read_Word(1U);
+    uint32_t payload_complement = Read_Word(2U);
     uint32_t check = Read_Word(3U);
     bool active_commit = valid_role && Enabled_Watchdog_Caused_Reset() &&
                          (commit == Commit_Word(role));
     if (active_commit)
     {
-        bool payload_valid = (event_complement == ~event_id) &&
-                             (check == Check_Word(commit, event_id,
-                                                  event_complement));
+        bool payload_valid = ((payload & ~INCIDENT_RETENTION_PAYLOAD_MASK) == 0U) &&
+                             ((payload >> 4U) != 0U) &&
+                             (payload_complement == ~payload) &&
+                             (check == Check_Word(commit, payload, payload_complement));
         /* The active marker is fail-safe. A torn/corrupt counter starts a new
          * event zero in the new boot session rather than clearing the alarm.
          */
-        s_restored_record.event_id = payload_valid ? event_id : 0U;
+        s_restored_record.session_id = payload_valid ? (uint16_t)(payload >> 4U) : 0U;
+        s_restored_record.event_seq = payload_valid ? (uint8_t)(payload & 0x0FU) : 0U;
         s_restore_valid = true;
     }
     else
@@ -125,7 +128,7 @@ bool IncidentRetention_Restore(IncidentRetention_Record_t * const p_record)
     return true;
 }
 
-void IncidentRetention_Store(bool active, uint32_t event_id)
+void IncidentRetention_Store(bool active, uint16_t session_id, uint8_t event_seq)
 {
     if (!s_initialized)
     {
@@ -139,22 +142,26 @@ void IncidentRetention_Store(bool active, uint32_t event_id)
         }
         return;
     }
-    if (s_restore_valid && (s_restored_record.event_id == event_id))
+    event_seq &= 0x0FU;
+    if (s_restore_valid && (s_restored_record.session_id == session_id) &&
+        (s_restored_record.event_seq == event_seq))
     {
         return;
     }
 
     uint32_t commit = Commit_Word(s_role);
-    uint32_t event_complement = ~event_id;
-    uint32_t check = Check_Word(commit, event_id, event_complement);
+    uint32_t payload = ((uint32_t)session_id << 4U) | event_seq;
+    uint32_t payload_complement = ~payload;
+    uint32_t check = Check_Word(commit, payload, payload_complement);
     /* Mark active first. A reset during the remaining writes restores a
      * conservative event zero rather than losing the unresolved alarm.
      */
     Write_Word(0U, commit);
-    Write_Word(1U, event_id);
-    Write_Word(2U, event_complement);
+    Write_Word(1U, payload);
+    Write_Word(2U, payload_complement);
     Write_Word(3U, check);
-    s_restored_record.event_id = event_id;
+    s_restored_record.session_id = session_id;
+    s_restored_record.event_seq = event_seq & 0x0FU;
     s_restore_valid = true;
 }
 
@@ -169,7 +176,7 @@ void IncidentRetention_TestPowerCycle(void)
     s_role = (IncidentRetention_Role_t)0;
     s_initialized = false;
     s_restore_valid = false;
-    s_restored_record.event_id = 0U;
+    s_restored_record = (IncidentRetention_Record_t){0};
 }
 
 void IncidentRetention_TestSetWatchdogReset(bool caused_by_enabled_watchdog)

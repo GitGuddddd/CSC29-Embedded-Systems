@@ -86,17 +86,19 @@ class SafetyHapticPolicyTest {
         )
     }
 
-    @Test fun `new incident counter alerts before normal reminder interval`() {
+    @Test fun `four-bit wrap with a new epoch alerts before normal reminder interval`() {
         val policy = SafetyHapticPolicy()
         val old = packet(flags = SystemPacket.FLAG_FALL_ALERT, fallSeq = 15)
         policy.update(state(node(old)), 0L)
         assertEquals(
             HapticCue.FALL,
-            policy.update(state(node(old.copy(rollingFallSeq = 0, eventId = 16L))), 1000L),
+            policy.update(state(node(old.copy(
+                rollingFallSeq = 0, eventId = 0L, sessionId = old.sessionId + 1L, sessionRollover = true,
+            ))), 1000L),
         )
     }
 
-    @Test fun `new boot session cannot alias an old incident counter`() {
+    @Test fun `distinct boot epochs distinguish the same four-bit counter`() {
         val policy = SafetyHapticPolicy()
         val old = packet(flags = SystemPacket.FLAG_FALL_ALERT, fallSeq = 1, session = 0x1001L)
         policy.update(state(node(old)), 0L)

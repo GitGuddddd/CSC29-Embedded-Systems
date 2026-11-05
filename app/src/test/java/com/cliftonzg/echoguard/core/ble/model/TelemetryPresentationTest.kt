@@ -32,8 +32,8 @@ class TelemetryPresentationTest {
     )
 
     @Test fun `only matching fresh cane application receipt confirms glasses event`() {
-        val glasses = report(NodeType.GLASSES, 0x1234L, 0x41L)
-        val wrong = report(NodeType.CANE, 0x2001L, 0L, 0x1234L, 0x40L, true)
+        val glasses = report(NodeType.GLASSES, 0x1234L, 1L)
+        val wrong = report(NodeType.CANE, 0x2001L, 0L, 0x1234L, 0L, true)
         fun state(cane: SystemPacket) = MonitoringState(
             selectedDevice = DiscoveredBleDevice("Cane", "C", -50, true, nodeType = NodeType.CANE, pairId = 1),
             isScanning = true,
@@ -43,7 +43,7 @@ class TelemetryPresentationTest {
             ),
         )
         assertEquals(PeerReceiptState.WAITING, state(wrong).glassesFallReceiptState)
-        val confirmed = state(wrong.copy(peerAckEventId = 0x41L))
+        val confirmed = state(wrong.copy(peerAckEventId = 1L))
         assertEquals(PeerReceiptState.CONFIRMED, confirmed.glassesFallReceiptState)
         assertTrue(confirmed.presentation().detail.contains("receipt confirmed"))
     }

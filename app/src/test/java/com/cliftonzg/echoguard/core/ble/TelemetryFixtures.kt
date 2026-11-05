@@ -25,11 +25,13 @@ internal fun packet(
     ackSession: Long = 0L,
     ackEvent: Long = 0L,
     ackValid: Boolean = false,
+    rollover: Boolean = false,
 ) = SystemPacket(
     magic = 0xAA, seqNum = seq, radarDistMm = distance, checksum = 0,
     deviceId = type.deviceId, stateFlags = flags, isAdvanced = true,
     compactFormat = true, rollingFallSeq = fallSeq, pairId = pair,
     protocolVersion = SystemPacket.PROTOCOL_VERSION, sessionId = session, eventId = event,
+    sessionRollover = rollover,
     peerAckValid = ackValid, peerAckSessionId = ackSession, peerAckEventId = ackEvent,
     receivedAt = at,
 )

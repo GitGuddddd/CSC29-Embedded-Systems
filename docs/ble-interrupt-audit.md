@@ -10,25 +10,32 @@ Intervals below are **configured base advertising intervals**, not measured pack
 arrival times. BLE adds 0–10 ms advertising delay and RF collisions can lose packets.
 Scanning is passive; advertising is scannable/non-connectable (`ADV_SCAN_IND`) so a
 phone may retrieve the full device name from the scan response without creating a
-GATT connection. The primary advertisement contains flags and one atomic 24-byte
-manufacturer frame; together with AD headers this consumes the 31-byte legacy
-advertising budget, so the redundant short-name AD was removed.
+GATT connection. The primary advertisement contains flags and one atomic 12-byte
+manufacturer frame; together with AD headers this uses 19 bytes. The 31-byte legacy
+limit is a ceiling, not a target. The redundant short-name AD remains omitted.
 
 | Frame bytes | Content |
 | --- | --- |
 | 0–5 | Backward-compatible compact status |
-| 6 | Extension marker/version `0xE1` |
-| 7–10 | Origin's random 32-bit boot session, little-endian |
-| 11–14 | Origin's 32-bit local event counter, little-endian |
-| 15–18 | Session ID of the peer event being receipted, little-endian |
-| 19–22 | Event ID being receipted, little-endian |
-| 23 | Safety flags; bit 0 marks the peer receipt fields valid |
+| 6 | Compact receipt marker/version `0xE2` |
+| 7–8 | Origin's nonzero 16-bit transport epoch, little-endian |
+| 9–10 | Epoch of the peer event being receipted, little-endian; zero without a receipt |
+| 11, bits 0–3 | Receipted four-bit fall sequence; origin sequence is already in byte 1 |
+| 11, bit 4 | Receipt valid (application accepted and requested the matching alarm) |
+| 11, bit 5 | Origin epoch advanced because its fall sequence wrapped 15 → 0 |
+| 11, bits 6–7 | Reserved, must be zero |
 
-The receiver accepts either exactly six legacy bytes or the complete 24-byte versioned
+The receiver accepts either exactly six legacy bytes or the complete 12-byte v2
 frame; a truncated extension is not silently interpreted as legacy. The cane emits a
 receipt only after its mode manager latches the matching glasses event and the alert
 path issues its alarm request. This is application acceptance, not user acknowledgement,
 incident clearance, authentication or proof of physical actuator output.
+
+Version 1's former 24-byte frame is not accepted as a v2 receipt. Android can still
+display it as legacy telemetry, without confirming the new receipt contract. Upgrade
+both wearables together: retaining a six-byte prefix does not make an older exact-size
+parser understand the new extended frame. No receipt means the glasses keep their
+bounded local fallback, regardless of whether a phone is present.
 
 | `Sys_State_t` | Base advertising | Payload refresh | Scan window / interval | Reason |
 | --- | ---: | ---: | ---: | --- |
@@ -71,11 +78,22 @@ sequences may establish a new baseline instead of rejecting a live peer indefini
 Changed incident/status fields survive a same-sequence wrap. This is duplicate/order
 handling, not authenticated replay protection.
 
-Within one boot session, the full event counter must advance in the forward half of
-the modulo-32-bit space. Duplicate identities and delayed older identities do not
-re-latch a peer incident; `UINT32_MAX` to zero is accepted as forward wrap. A changed
-random boot session establishes a new event epoch. The random value reduces accidental
-reboot aliasing but is neither provisioned identity nor cryptographic authentication.
+Within one v2 epoch, the four-bit sequence only increases. Before 15 → 0, Core 0
+advances the nonzero 16-bit epoch (65535 → 1) and marks the rollover bit. This avoids
+reusing a sequence in the same epoch and requires a new matching receipt. Duplicate
+identities and older same-epoch sequences do not re-latch a peer incident; the immediately
+retired epoch is also rejected. A new random boot epoch has its rollover bit clear;
+watchdog restoration excludes the retained prior epoch before first publication.
+
+These are finite prototype transport tags. They are not lifetime fall counts, unique
+device identities, authentication or protection against arbitrary historical replay.
+A random boot tag can collide, and the 16-bit epoch eventually repeats. The chosen
+width and bounded receipt/freshness policy must not be presented as a collision-free
+safety guarantee. Phone history stores the larger totals, outside the wearable payload.
+
+The cane withdraws a receipt when the accepted head event clears, changes identity,
+becomes legacy-only or lacks a fresh origin heartbeat for 500 ms. A withdrawn or
+nonmatching receipt re-arms glasses fallback; it never clears either incident latch.
 
 For a glasses-originated head fall, 750 ms is the software confirmation deadline. It
 allows several FAST-profile advertising/scan opportunities in both directions, but is
@@ -189,7 +207,9 @@ previous cross-core check/clear flag race.
 
 Before enabling the startup watchdog, `IncidentRetention_Init()` checks the SDK's
 enabled-watchdog reset marker and an integrity-tagged, role-specific record in watchdog
-scratch words 0–3. Scratch word 4 remains owned by the Pico SDK. Core 0 writes an active
+scratch words 0–3. The payload contains a 16-bit prior epoch and four-bit sequence;
+the other words provide commit/integrity checks, not a lifetime application counter.
+Scratch word 4 remains owned by the Pico SDK. Core 0 writes an active
 commit marker before event data and clears it before clearance data, so a torn payload
 restores a conservative active event zero rather than silently clearing the alarm. No
 scratch access occurs in an ISR or on Core 1. Power/run-pin/programming resets reject and

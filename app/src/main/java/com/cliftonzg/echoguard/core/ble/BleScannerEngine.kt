@@ -26,12 +26,13 @@ import javax.inject.Singleton
 @Singleton
 class BleScannerEngine @Inject constructor(
     bluetoothAdapter: BluetoothAdapter?,
+    fallHistoryStore: FallHistoryStore = MemoryFallHistoryStore(),
 ) {
     private val adapter = bluetoothAdapter
     private val lock = Any()
     private val engineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var watchdogJob: Job? = null
-    private val session = TelemetrySession()
+    private val session = TelemetrySession(PhoneFallHistory(fallHistoryStore))
     private val _monitoringState = MutableStateFlow(MonitoringState())
     val monitoringState = _monitoringState.asStateFlow()
     private val _discoveredDevices = MutableStateFlow<List<DiscoveredBleDevice>>(emptyList())

@@ -105,20 +105,8 @@ void BleComm_Encode(const Ble_AdvancedThreatPacket_t * const p_in, Ble_RawPacket
         }
     }
 
-    /* TTC (12b): 20ms step */
-    uint16_t ttc_raw;
-    if (p_in->ttc_ms == 0xFFFFU)
-    {
-        ttc_raw = BLE_TTC_NO_THREAT;
-    }
-    else
-    {
-        ttc_raw = (uint16_t)(p_in->ttc_ms / 20U);
-        if (ttc_raw > 0x0FFEU)
-        {
-            ttc_raw = 0x0FFEU;
-        }
-    }
+    /* Already in the exact wire unit: no division, multiplication or narrowing. */
+    uint16_t ttc_raw = p_in->ttc_20ms;
 
     /* Pack 12-bit Distance and 12-bit TTC across Bytes 3, 4, 5 */
     p_out->dist_low = (uint8_t)(dist_raw & 0xFFU);
@@ -171,14 +159,7 @@ bool BleComm_Decode(const Ble_RawPacket_t * const p_in, uint8_t expected_pair_id
 
     /* Decode TTC */
     uint16_t ttc_raw = (uint16_t)(p_in->dist_high_ttc_low & 0x0FU) | (uint16_t)((uint16_t)p_in->ttc_high << 4);
-    if (ttc_raw >= BLE_TTC_NO_THREAT)
-    {
-        p_out->ttc_ms = 0xFFFFU;
-    }
-    else
-    {
-        p_out->ttc_ms = (uint16_t)(ttc_raw * 20U);
-    }
+    p_out->ttc_20ms = ttc_raw & 0x0FFFU;
 
     p_out->closing_speed_cms = 0;
     return true;

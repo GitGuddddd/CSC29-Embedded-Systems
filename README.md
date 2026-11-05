@@ -48,6 +48,7 @@ See [cane mode manager behaviour and verification](src/app/CaneMode/README.md) f
 - **Safety Degradation**: If the Cane scanner misses periodic broadcast packets from the Glasses for $> 500\,\text{ms}$, a software watchdog triggers a localized 2 long-pulse haptic warning (`500ms ON / 200ms OFF`), informing the user that head-level obstacle tracking is offline while keeping local ground sensing active.
 
 ### 6. mmWave Radar Head-Level Threat Assessment
+- **Bounded TTC**: Time-to-collision uses the same 12-bit, 20 ms tick representation internally and on BLE. Values beyond 81.88 s, non-positive closing speeds and unavailable targets use `0xFFF`, rather than wrapping a 16-bit millisecond value into a false urgent estimate. An unavailable TTC does not suppress the distance-based obstacle alert.
 - **HLK-LD2450 Processing**: UART at 256,000 baud feeds an aligned 1024-byte DMA ring. A private completion ISR acknowledges and re-arms each 30-byte block; the 20 ms task parses committed data with bounded work, partial-frame resynchronization and overrun detection.
 - **Target Tracking**: Tracks up to 3 targets, calculates closing speed and Time-To-Collision (TTC), and ignores departing targets ($> 10\,\text{cm/s}$ moving away).
 - **Pitch-Modulated Beeping**: Maps threat proximity ($2000\,\text{mm}$ to $300\,\text{mm}$) with $100\,\text{mm}$ hysteresis to a frequency-modulated beep pattern ($1500\,\text{Hz}$ to $3500\,\text{Hz}$).

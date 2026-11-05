@@ -87,7 +87,7 @@ static void Cycle(void)
         .state_flags = s_out.status_flags,
         .rolling_fall_seq = s_incidents,
         .nearest_dist_mm = 0xFFFFU,
-        .ttc_ms = 0xFFFFU
+        .ttc_20ms = BLE_TTC_NO_THREAT
     };
     Ble_RawPacket_t raw;
     BleComm_Encode(&packet, &raw);

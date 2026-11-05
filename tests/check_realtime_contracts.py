@@ -69,6 +69,8 @@ def source_contracts():
             "Wearable telemetry must not restore lifetime-width counters/identities")
     require(re.search(r"rolling_fall_seq\s*:\s*4", types),
             "The transmitted local fall counter must stay four bits")
+    require(re.search(r"ttc_20ms\s*:\s*12", types),
+            "TTC must use the bounded wire unit, not too-small millisecond storage")
     cmake = (ROOT / "CMakeLists.txt").read_text()
     require("pico_cyw43_arch_lwip_sys_freertos" not in cmake,
             "BLE-only node targets must not reintroduce the unused lwIP stack")

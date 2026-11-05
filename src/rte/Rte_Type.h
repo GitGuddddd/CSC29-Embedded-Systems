@@ -111,6 +111,8 @@ typedef struct
 
 #define BLE_DIST_NO_TARGET           (0x0FFFU)
 #define BLE_TTC_NO_THREAT            (0x0FFFU)
+#define BLE_TTC_MAX_TICKS            (0x0FFEU)
+#define BLE_TTC_STEP_MS              (20U)
 
 typedef enum
 {
@@ -126,7 +128,7 @@ typedef enum
  * Byte 2: [State Flags (8b)]
  * Byte 3: [Distance Low (8b: dist[7:0])] (Units: 2mm, Range: 0-8190mm)
  * Byte 4: [Distance High (4b: dist[11:8]) | TTC Low (4b: ttc[3:0])]
- * Byte 5: [TTC High (8b: ttc[11:4])] (Units: 20ms steps, Range: 0-81.9s)
+ * Byte 5: [TTC High (8b: ttc[11:4])] (20ms steps, 0-81880ms; 0xFFF unavailable)
  */
 typedef struct
 {
@@ -173,7 +175,8 @@ typedef struct
     uint8_t state_flags;          /* BLE_FLAG_* */
     uint16_t nearest_dist_mm;     /* 0 - 8190 mm, or 0xFFFF if invalid / no target */
     int16_t closing_speed_cms;
-    uint16_t ttc_ms;              /* 0 - 81900 ms, or 0xFFFF if no threat */
+    uint16_t ttc_20ms : 12;       /* Same bounded unit on CPU and wire; 0xFFF unavailable */
+    uint16_t reserved_ttc : 4;
     uint16_t session_id;          /* Nonzero epoch; renew before four-bit reuse */
     uint16_t peer_ack_session_id;
     uint8_t protocol_version : 4; /* 0 for legacy, 2 for compact receipts */

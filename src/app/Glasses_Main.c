@@ -390,8 +390,8 @@ static void vTask_GlassesPerception(void *pvParameters)
             (BleComm_GetSessionId() != last_sent_session_id) ||
             (profile != last_sent_profile) || ((now_ms - last_telemetry_ms) >= telemetry_period_ms))
         {
-            uint16_t ttc = (radar_timeout || standby || (current_threat.time_to_collision_ms == UINT16_MAX)) ?
-                            0xFFFFU : current_threat.time_to_collision_ms;
+            uint16_t ttc = (radar_timeout || standby) ?
+                           BLE_TTC_NO_THREAT : current_threat.ttc_20ms;
 
             Ble_AdvancedThreatPacket_t heartbeat_pkt = {
                 .preamble = 0xAAU,
@@ -404,7 +404,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                 .state_flags = flags,
                 .nearest_dist_mm = (radar_timeout || standby) ? 0xFFFFU : current_threat.nearest_distance_mm,
                 .closing_speed_cms = 0,
-                .ttc_ms = ttc
+                .ttc_20ms = ttc & 0x0FFFU
             };
             if (BleComm_Publish(&heartbeat_pkt, s_glasses_mode, link_lost))
             {

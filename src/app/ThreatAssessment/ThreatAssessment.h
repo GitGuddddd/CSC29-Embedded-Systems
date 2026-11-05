@@ -11,10 +11,11 @@
 
 typedef struct
 {
-    bool is_threat_active;
     uint16_t nearest_distance_mm;
     int16_t closing_speed_cms;
-    uint16_t time_to_collision_ms;
+    uint16_t ttc_20ms : 12;       /* 0-4094 ticks; 0xFFF unavailable/out of range */
+    uint16_t is_threat_active : 1;
+    uint16_t reserved : 3;
 } Threat_Result_t;
 
 void ThreatAssessment_Init(void);

@@ -1,6 +1,6 @@
 #include "ThreatAssessment.h"
 #include "ThreatAssessment_Cfg.h"
-#include <string.h>
+#include <stddef.h>
 
 /*
  * \file ThreatAssessment.c
@@ -9,6 +9,15 @@
  */
 
 static bool s_alert_latched = false;
+_Static_assert(sizeof(Threat_Result_t) == 6U, "Compact threat result must remain six bytes");
+
+static void Clear_Result(Threat_Result_t * const p_result)
+{
+    *p_result = (Threat_Result_t){
+        .nearest_distance_mm = UINT16_MAX,
+        .ttc_20ms = BLE_TTC_NO_THREAT
+    };
+}
 
 void ThreatAssessment_Init(void)
 {
@@ -24,7 +33,7 @@ void ThreatAssessment_ProcessTargets(const Radar_Target_t * const p_targets,
     {
         if (p_out_result != NULL)
         {
-            memset(p_out_result, 0, sizeof(*p_out_result));
+            Clear_Result(p_out_result);
         }
         s_alert_latched = false;
         return;
@@ -39,7 +48,7 @@ void ThreatAssessment_ProcessTargets(const Radar_Target_t * const p_targets,
     if (cane_grip_telemetry == GRIP_STATE_RELEASED)
     {
         s_alert_latched = false;
-        memset(p_out_result, 0, sizeof(*p_out_result));
+        Clear_Result(p_out_result);
         return;
     }
 
@@ -73,7 +82,7 @@ void ThreatAssessment_ProcessTargets(const Radar_Target_t * const p_targets,
     if (!found_valid)
     {
         s_alert_latched = false;
-        memset(p_out_result, 0, sizeof(*p_out_result));
+        Clear_Result(p_out_result);
         return;
     }
 
@@ -97,15 +106,18 @@ void ThreatAssessment_ProcessTargets(const Radar_Target_t * const p_targets,
     p_out_result->nearest_distance_mm = min_dist;
     p_out_result->closing_speed_cms = min_dist_speed;
 
-    /* Compute TTC = distance_mm / (speed_cms * 10) in seconds -> convert to ms */
+    /* Direct 20 ms ticks: floor(distance_mm * 5 / speed_cms).
+     * The uint32_t intermediate bounds even UINT16_MAX * 5 safely. Do not
+     * narrow milliseconds or re-quantize later: both can wrap valid values.
+     */
     if (min_dist_speed > 0)
     {
-        /* speed in mm/s is speed_cms * 10 */
-        uint32_t speed_mms = (uint32_t)min_dist_speed * 10U;
-        p_out_result->time_to_collision_ms = (uint16_t)((min_dist * 1000U) / speed_mms);
+        uint32_t ticks = ((uint32_t)min_dist * 5U) / (uint32_t)min_dist_speed;
+        p_out_result->ttc_20ms = (ticks <= BLE_TTC_MAX_TICKS) ?
+                               (uint16_t)(ticks & 0x0FFFU) : BLE_TTC_NO_THREAT;
     }
     else
     {
-        p_out_result->time_to_collision_ms = UINT16_MAX;
+        p_out_result->ttc_20ms = BLE_TTC_NO_THREAT;
     }
 }

@@ -174,6 +174,15 @@ glasses 72396 → 57808), and ELF text by 9148 bytes. Both application radio wor
 remain at 4096 bytes. Source/ELF ownership checks pass, but radio hardware, power,
 worst-case scheduling and watchdog reset behavior remain unvalidated.
 
+The subsequent TTC correction removes both 16-bit millisecond wrap paths without widening
+the application field: threat results and decoded packets retain the existing 12-bit,
+20 ms wire unit. A 200-second estimate is explicitly unavailable (`0xFFF`), not 3392 ms;
+the valid maximum 81880 ms remains 4094 ticks, not 16344 ms after narrowing. The threat
+result packs its active flag with the TTC field, reducing its target layout from eight
+to six bytes. Codec quantization is performed once and the wire layout is unchanged.
+All 4096 TTC values, boundary inputs and the shared Android maximum vector are tested.
+These are software correctness/layout results, not physical hazard-detection validation.
+
 ### Glasses fallback and watchdog-reset survival implemented; power loss remains
 
 The glasses now use a 100 ms pulse every 2 s at 10% PWM duty when the cane is unavailable

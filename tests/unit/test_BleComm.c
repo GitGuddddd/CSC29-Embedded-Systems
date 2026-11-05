@@ -16,7 +16,7 @@ void setUp(void)
         .node_type = BLE_NODE_TYPE_CANE,
         .pair_id = BLE_DEFAULT_PAIR_ID,
         .nearest_dist_mm = 0xFFFFU,
-        .ttc_ms = 0xFFFFU
+        .ttc_20ms = BLE_TTC_NO_THREAT
     };
 }
 
@@ -217,7 +217,7 @@ void test_AdvertisingParserAcceptsOnlyCompleteVersionedFrame(void)
         .session_id = 0x1234U,
         .rolling_fall_seq = 1U,
         .nearest_dist_mm = 0xFFFFU,
-        .ttc_ms = 0xFFFFU
+        .ttc_20ms = BLE_TTC_NO_THREAT
     };
     Ble_RawFrame_t frame;
     BleComm_EncodeFrame(&peer, &frame);

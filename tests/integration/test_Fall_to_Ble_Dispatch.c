@@ -63,7 +63,7 @@ void test_Integration_FallToBleDispatch(void)
     pkt.state_flags = (fall_detected) ? 0x01U : 0x00U;
     pkt.nearest_dist_mm = 0xFFFFU;
     pkt.closing_speed_cms = 0;
-    pkt.ttc_ms = 0xFFFFU;
+    pkt.ttc_20ms = BLE_TTC_NO_THREAT;
 
     bool tx_ok = BleComm_SendPacket(&pkt);
     TEST_ASSERT_TRUE(tx_ok);
@@ -98,7 +98,7 @@ void test_BleComm_EncodeDecode_6ByteRawPacket(void)
         .state_flags = BLE_FLAG_FALL_ALERT | BLE_FLAG_OBSTACLE_ACTIVE,
         .nearest_dist_mm = 1200U, /* 1200 mm */
         .closing_speed_cms = 0,
-        .ttc_ms = 8000U           /* 8000 ms */
+        .ttc_20ms = 400U          /* 8000 ms */
     };
 
     Ble_RawPacket_t raw;
@@ -123,7 +123,7 @@ void test_BleComm_EncodeDecode_6ByteRawPacket(void)
     TEST_ASSERT_EQUAL_UINT8(7U, decoded.rolling_fall_seq);
     TEST_ASSERT_EQUAL_HEX8(src.state_flags, decoded.state_flags);
     TEST_ASSERT_EQUAL_UINT16(1200U, decoded.nearest_dist_mm);
-    TEST_ASSERT_EQUAL_UINT16(8000U, decoded.ttc_ms);
+    TEST_ASSERT_EQUAL_UINT16(400U, decoded.ttc_20ms);
 
     /* Decode with wrong pair ID must be rejected */
     Ble_AdvancedThreatPacket_t wrong = {0};
@@ -141,7 +141,7 @@ void test_BleComm_CompactFrameCarriesEpochScopedApplicationReceipt(void)
         .rolling_fall_seq = 0x0EU,
         .state_flags = BLE_FLAG_FALL_ALERT,
         .nearest_dist_mm = 0xFFFFU,
-        .ttc_ms = 0xFFFFU,
+        .ttc_20ms = BLE_TTC_NO_THREAT,
         .protocol_version = BLE_PROTOCOL_VERSION,
         .session_id = 0xA104U,
         .peer_ack_valid = true,
@@ -299,7 +299,7 @@ void test_PausedAndParkedStatus_RoundTripsWithoutChangingPacketSize(void)
         .pair_id = BLE_DEFAULT_PAIR_ID,
         .state_flags = BLE_FLAG_FALL_ALERT | BLE_FLAG_ALARM_PAUSED,
         .nearest_dist_mm = 0xFFFFU,
-        .ttc_ms = 0xFFFFU
+        .ttc_20ms = BLE_TTC_NO_THREAT
     };
     Ble_RawPacket_t raw;
     Ble_AdvancedThreatPacket_t decoded;

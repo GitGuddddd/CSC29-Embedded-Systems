@@ -470,7 +470,7 @@ static void vTask_SafetyPerception(void *pvParameters)
                 .state_flags = flags,
                 .nearest_dist_mm = mode_out.ground_enabled ? last_dist_mm : 0xFFFFU,
                 .closing_speed_cms = 0,
-                .ttc_ms = 0xFFFFU,
+                .ttc_20ms = BLE_TTC_NO_THREAT,
                 .peer_ack_valid = peer_ack_valid,
                 .peer_ack_session_id = peer_ack_session_id,
                 .peer_ack_event_seq = peer_ack_event_seq & BLE_FALL_SEQ_MASK

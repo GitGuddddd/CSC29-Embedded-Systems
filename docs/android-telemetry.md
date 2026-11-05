@@ -40,6 +40,13 @@ contain closing speed, so the UI does not display the decoder's synthetic zero a
 a measured 0 cm/s. Rolling fall sequence numbers are labeled as sequences, not
 lifetime incident totals.
 
+The compact TTC range is 0–81880 ms at 20 ms resolution, with `0xFFF` unavailable.
+Firmware keeps the 12-bit tick unit through the threat/transport pipeline and checks
+overflow before assigning it; Android expands ticks to its 32-bit millisecond value for
+display. No-target and out-of-range results do not become zero or wrapped urgent TTCs.
+The maximum 81880 ms vector is shared with firmware integration tests, and an unavailable
+TTC does not override an active obstacle flag.
+
 ## Phone-owned cumulative history
 
 Tribunal 1 explicitly keeps the wearable fall count small and offloads accumulation to

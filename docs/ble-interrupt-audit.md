@@ -37,6 +37,16 @@ both wearables together: retaining a six-byte prefix does not make an older exac
 parser understand the new extended frame. No receipt means the glasses keep their
 bounded local fallback, regardless of whether a phone is present.
 
+TTC is stored internally and on wire as 12-bit 20 ms ticks: 0–4094 represents
+0–81880 ms; 4095 (`0xFFF`) means unavailable, including out-of-range or non-positive
+closing-speed estimates. The threat component computes `floor(distance_mm * 5 /
+speed_cms)` with a bounded 32-bit intermediate, then checks the range before assigning
+the field. Encoding/decoding no longer divides/multiplies through a too-small 16-bit
+millisecond DTO. Missing targets use explicit distance/TTC sentinels, not zero milliseconds.
+This leaves the six-/12-byte wire layout unchanged. Obstacle hysteresis/grip gating and
+fall receipts remain independent of TTC availability. All 4096 wire values and shared
+maximum-TTC vectors are regression-tested; hardware behavior remains unvalidated.
+
 | `Sys_State_t` | Base advertising | Payload refresh | Scan window / interval | Reason |
 | --- | ---: | ---: | ---: | --- |
 | INIT | 100 ms | 50 ms | 100 / 100 ms | Discover/synchronize promptly during startup or wake |

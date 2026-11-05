@@ -284,6 +284,19 @@ class SystemPacketTest {
         assertNull(SystemPacket.parse(bytes.copyOf(11)))
     }
 
+    @Test fun `maximum compact TTC matches the firmware vector without sixteen-bit wrap`() {
+        val bytes = byteArrayOf(
+            0xA1.toByte(), 0, 0, 0xFF.toByte(), 0x7E, 0xFF.toByte(),
+            0xE2.toByte(), 0x02, 0x29, 0, 0, 0,
+        )
+        val packet = requireNotNull(SystemPacket.parse(bytes))
+        assertEquals(4094, packet.radarDistMm)
+        assertEquals(81880, packet.ttcMs)
+        assertEquals(81880, SystemPacket.parse(bytes.copyOf(6))?.ttcMs)
+        bytes[4] = 0x7F
+        assertEquals(-1, SystemPacket.parse(bytes)?.ttcMs)
+    }
+
     @Test fun `former 24-byte v1 packets remain readable but are not current receipt protocol`() {
         val extended = byteArrayOf(
             0xA1.toByte(), 0xB5.toByte(), SystemPacket.FLAG_FALL_ALERT.toByte(),

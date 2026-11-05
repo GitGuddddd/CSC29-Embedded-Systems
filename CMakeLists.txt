@@ -226,6 +226,7 @@ endif()
 # Application-owned realtime paths: strict C diagnostics, without imposing project
 # naming/format rules on imported SDK and FreeRTOS implementations.
 set_source_files_properties(
+    src/app/ThreatAssessment/ThreatAssessment.c
     src/services/BleComm/BleComm.c
     src/services/BleComm/BleComm_Policy.c
     src/drivers/BleRadio/BleRadio.c
@@ -387,6 +388,17 @@ add_executable(test_Threat_to_Alert_Pipeline
 )
 target_link_libraries(test_Threat_to_Alert_Pipeline PRIVATE unity)
 add_test(NAME Integration_ThreatToAlert COMMAND test_Threat_to_Alert_Pipeline)
+
+add_executable(test_Threat_to_Ble
+    tests/integration/test_Threat_to_Ble.c
+    src/app/ThreatAssessment/ThreatAssessment.c
+    src/services/BleComm/BleComm.c
+    src/services/BleComm/BleComm_Lcfg.c
+    src/services/BleComm/BleComm_Policy.c
+    tests/harness/mock_BleRadio.c
+)
+target_link_libraries(test_Threat_to_Ble PRIVATE unity)
+add_test(NAME Integration_ThreatToBle COMMAND test_Threat_to_Ble)
 
 # 2. Fall to BLE Dispatch
 add_executable(test_Fall_to_Ble_Dispatch

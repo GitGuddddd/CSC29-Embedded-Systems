@@ -86,6 +86,21 @@ static void vTask_GlassesPerception(void *pvParameters)
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
         uint32_t now_ms = GetCurrentTimeMs();
 
+        /* Auto-retry IMU initialization */
+        if (!imu_ok && ((now_ms - last_imu_retry_ms) >= 1000U))
+        {
+            last_imu_retry_ms = now_ms;
+            imu_ok = Mpu9250_Init(&Mpu9250_Config_Glasses);
+            if (imu_ok && (s_glasses_mode == SYS_STATE_HARD_FAULT))
+            {
+                s_glasses_mode = SYS_STATE_ACTIVE;
+            }
+            else if (!imu_ok)
+            {
+                s_glasses_mode = SYS_STATE_HARD_FAULT;
+            }
+        }
+
         /* Log System Mode State Transitions */
         if (s_glasses_mode != prev_printed_mode)
         {
@@ -119,45 +134,24 @@ static void vTask_GlassesPerception(void *pvParameters)
             cane_grip_telemetry = GRIP_STATE_UNKNOWN;
         }
 
-        /* Check for Standby Mode (Linked to Cane's Grip Release Timer + No Motion) */
-        if (s_glasses_mode != SYS_STATE_STANDBY)
-        {
-            if (cane_grip_telemetry == GRIP_STATE_RELEASED && ((now_ms - cane_release_start_ms) > 60000U))
-            {
-                s_glasses_mode = SYS_STATE_STANDBY;
-                BleComm_SetPowerMode(false);
-            }
-        }
-        else
-        {
-            if ((cane_grip_telemetry == GRIP_STATE_HELD) || (cane_grip_telemetry == GRIP_STATE_UNKNOWN))
-            {
-                s_glasses_mode = SYS_STATE_ACTIVE;
-                BleComm_SetPowerMode(true);
-            }
-        }
-
-        /* Auto-retry IMU initialization */
-        if (!imu_ok && ((now_ms - last_imu_retry_ms) >= 1000U))
-        {
-            last_imu_retry_ms = now_ms;
-            imu_ok = Mpu9250_Init(&Mpu9250_Config_Glasses);
-            if (imu_ok && (s_glasses_mode == SYS_STATE_HARD_FAULT))
-            {
-                s_glasses_mode = SYS_STATE_ACTIVE;
-            }
-            else if (!imu_ok)
-            {
-                s_glasses_mode = SYS_STATE_HARD_FAULT;
-            }
-        }
+        uint32_t last_movement_ms = now_ms;
 
         /* Sub-Task 1A: Head Fall Detection (100 Hz / Every Tick) */
-        Imu_Sample_t imu_sample;
-        if (imu_ok && Mpu9250_ReadSample(&Mpu9250_Config_Glasses, &imu_sample))
+        if (s_glasses_mode != SYS_STATE_STANDBY)
         {
-            if (s_glasses_mode != SYS_STATE_STANDBY)
+            Imu_Sample_t imu_sample;
+            if (imu_ok && Mpu9250_ReadSample(&Mpu9250_Config_Glasses, &imu_sample))
             {
+                /* Evaluate Local Motion for Autonomous Standby (Glasses parked without Cane) */
+                float a_sq = (imu_sample.ax * imu_sample.ax) + (imu_sample.ay * imu_sample.ay) + (imu_sample.az * imu_sample.az);
+                float g_sq = (imu_sample.gx * imu_sample.gx) + (imu_sample.gy * imu_sample.gy) + (imu_sample.gz * imu_sample.gz);
+                
+                /* Perfect stillness (1.0g +/- 0.1g, < 5 deg/s) */
+                if ((a_sq < 0.81f) || (a_sq > 1.21f) || (g_sq > 25.0f))
+                {
+                    last_movement_ms = now_ms;
+                }
+
                 bool fall_detected = FallDetection_Step(&imu_sample, now_ms);
                 if (fall_detected)
                 {
@@ -171,17 +165,40 @@ static void vTask_GlassesPerception(void *pvParameters)
                     Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
                 }
             }
+            else
+            {
+                imu_ok = false;
+                if ((now_ms % 1000U) < 500U)
+                {
+                    Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
+                }
+                else
+                {
+                    Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
+                }
+            }
+        }
+
+        /* Check for Standby Mode (Linked to Cane's Grip Release Timer + No Motion) */
+        if (s_glasses_mode != SYS_STATE_STANDBY)
+        {
+            if (((cane_grip_telemetry == GRIP_STATE_RELEASED) && ((now_ms - cane_release_start_ms) > 60000U)) ||
+                ((now_ms - last_movement_ms) > 60000U))
+            {
+                printf("[STANDBY] Glasses parked (no motion or cane released). Entering Standby.\n");
+                s_glasses_mode = SYS_STATE_STANDBY;
+                BleComm_SetPowerMode(false);
+            }
         }
         else
         {
-            imu_ok = false;
-            if ((now_ms % 1000U) < 500U)
+            /* If the user moves the glasses (which re-triggers I2C IMU interrupts) or grips the cane */
+            /* In a true low-power mode, this would be an IMU Wake-On-Motion hardware interrupt. */
+            if ((cane_grip_telemetry == GRIP_STATE_HELD) || (cane_grip_telemetry == GRIP_STATE_UNKNOWN))
             {
-                Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
-            }
-            else
-            {
-                Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
+                printf("[WAKEUP] Glasses waking up from Standby mode.\n");
+                s_glasses_mode = SYS_STATE_ACTIVE;
+                BleComm_SetPowerMode(true);
             }
         }
 

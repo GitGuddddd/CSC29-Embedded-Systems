@@ -205,6 +205,10 @@ static void vTask_SafetyPerception(void *pvParameters)
                     s_sys_mode = SYS_STATE_ACTIVE;
                     BleComm_SetPowerMode(true);
                 }
+                else if (s_sys_mode == SYS_STATE_FALL_MUTED)
+                {
+                    s_sys_mode = SYS_STATE_ACTIVE;
+                }
                 FallDetection_Reset();
             }
             else
@@ -236,12 +240,12 @@ static void vTask_SafetyPerception(void *pvParameters)
         }
 
         /* Sub-Task 1C: Local IMU Fall Detection (100 Hz / Every Tick) */
-        Imu_Sample_t imu_sample;
-        if (imu_ok && Mpu9250_ReadSample(&Mpu9250_Config_Cane, &imu_sample))
+        if (s_sys_mode != SYS_STATE_STANDBY)
         {
-            cane_status.imu_healthy = 1U;
-            if (s_sys_mode != SYS_STATE_STANDBY)
+            Imu_Sample_t imu_sample;
+            if (imu_ok && Mpu9250_ReadSample(&Mpu9250_Config_Cane, &imu_sample))
             {
+                cane_status.imu_healthy = 1U;
                 bool fall_detected = FallDetection_Step(&imu_sample, now_ms);
                 if (fall_detected)
                 {
@@ -260,7 +264,7 @@ static void vTask_SafetyPerception(void *pvParameters)
         }
 
         /* Sub-Task 1D: Ground ToF Cliff Detection (10 Hz / Every 100ms) */
-        if ((now_ms - last_tof_ms) >= 100U)
+        if (((now_ms - last_tof_ms) >= 100U) && (s_sys_mode != SYS_STATE_STANDBY))
         {
             last_tof_ms = now_ms;
             uint16_t dist_mm = 0U;

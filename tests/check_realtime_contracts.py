@@ -40,10 +40,31 @@ def source_contracts():
         require(not re.search(rf"\b{name}\s*\(\s*\)", text), f"Ordinary ISR call in {path}")
         if "gap_advertisements_set_params(" in text:
             require(path.name == "BleRadio.c", "Radio configuration must stay in the worker adapter")
+        if "watchdog_hw->scratch" in text:
+            require(path.name == "IncidentRetention.c",
+                    "Application watchdog scratch ownership must stay in IncidentRetention")
+        if "IncidentRetention_Store(" in text:
+            require(path.name in ("IncidentRetention.c", "Cane_Main.c", "Glasses_Main.c"),
+                    "Incident retention updates must stay with the service or Core 0 owners")
+    retention = (ROOT / "src/services/IncidentRetention/IncidentRetention.c").read_text()
+    require(re.search(r"#define\s+INCIDENT_RETENTION_WORD_COUNT\s+\(4U\)", retention),
+            "Incident retention must stay within scratch words 0-3")
+    require("scratch[4" not in retention,
+            "Scratch word 4 belongs to the Pico SDK watchdog marker")
+    owners = (("Cane_Main.c", "static void vTask_BleRadioServer"),
+              ("Glasses_Main.c", "static void vTask_GlassesBleRadioServer"))
+    for main_name, radio_task in owners:
+        main_source = (ROOT / "src/app" / main_name).read_text()
+        require(main_source.index("IncidentRetention_Init(") < main_source.index("Watchdog_Init("),
+                f"{main_name}: inspect reset retention before enabling the startup watchdog")
+        radio_boundary = main_source.index(radio_task)
+        for call in re.finditer(r"IncidentRetention_(?:Restore|Store)\(", main_source):
+            require(call.start() < radio_boundary,
+                    f"{main_name}: incident retention runtime access must remain on Core 0")
     diagnostics = (ROOT / "src/services/Diagnostics/Diagnostics.c").read_text()
     require("PICO_STDIO_USB_ENABLE_IRQ_BACKGROUND_TASK" in diagnostics,
             "Keep the compile-time guard against USB protocol work in a software IRQ")
-    print("Realtime source contracts passed: private annotated ISR, no loops/calls, radio ownership, USB guard.")
+    print("Realtime source contracts passed: private annotated ISR, radio/scratch ownership, USB guard.")
 
 
 def binary_contracts(elf, nm, objdump):
@@ -54,9 +75,12 @@ def binary_contracts(elf, nm, objdump):
         if len(fields) == 3:
             entries[fields[2]] = (int(fields[0], 16), fields[1])
     for name in ("__vectors", "ram_vector_table", "__unhandled_user_irq",
-                 "xPortSysTickHandler", "xPortPendSVHandler", "vPortSVCHandler",
-                 "cyw43_gpio_irq_handler"):
+                  "xPortSysTickHandler", "xPortPendSVHandler", "vPortSVCHandler",
+                  "cyw43_gpio_irq_handler"):
         require(name in entries, f"{elf.name}: missing expected SDK/RTOS vector path: {name}")
+    for name in ("IncidentRetention_Init", "IncidentRetention_Restore",
+                 "IncidentRetention_Store"):
+        require(name in entries, f"{elf.name}: missing incident-retention firmware path: {name}")
     require(0x20000000 <= entries["ram_vector_table"][0] < 0x20042000,
             "Vector dispatch table is not in RP2040 SRAM")
     require("low_priority_worker_irq" not in entries,

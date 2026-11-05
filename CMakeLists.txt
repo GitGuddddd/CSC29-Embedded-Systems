@@ -112,6 +112,7 @@ if (BUILD_FOR_PICO_TARGET)
         src/services/Watchdog/Watchdog.c
         src/services/Watchdog/Watchdog_Lcfg.c
         src/services/ImuSupervisor/ImuSupervisor.c
+        src/services/IncidentRetention/IncidentRetention.c
         src/services/SafetyDelivery/SafetyDelivery.c
         src/hal/Hal_I2c.c
         src/hal/Hal_Gpio.c
@@ -175,6 +176,7 @@ if (BUILD_FOR_PICO_TARGET)
         src/services/Watchdog/Watchdog.c
         src/services/Watchdog/Watchdog_Lcfg.c
         src/services/ImuSupervisor/ImuSupervisor.c
+        src/services/IncidentRetention/IncidentRetention.c
         src/services/SafetyDelivery/SafetyDelivery.c
         src/hal/Hal_I2c.c
         src/hal/Hal_Uart.c
@@ -225,6 +227,7 @@ set_source_files_properties(
     src/drivers/BleRadio/BleRadio.c
     src/services/Diagnostics/Diagnostics.c
     src/services/Watchdog/Watchdog.c
+    src/services/IncidentRetention/IncidentRetention.c
     src/services/SafetyDelivery/SafetyDelivery.c
     src/hal/Hal_Uart.c
     src/hal/Hal_I2c.c
@@ -336,6 +339,13 @@ add_executable(test_SafetyDelivery
 )
 target_link_libraries(test_SafetyDelivery PRIVATE unity)
 add_test(NAME Unit_SafetyDelivery COMMAND test_SafetyDelivery)
+
+add_executable(test_IncidentRetention
+    tests/unit/test_IncidentRetention.c
+    src/services/IncidentRetention/IncidentRetention.c
+)
+target_link_libraries(test_IncidentRetention PRIVATE unity)
+add_test(NAME Unit_IncidentRetention COMMAND test_IncidentRetention)
 
 # 5. Ld2450 Parser Unit Test
 add_executable(test_Ld2450_Parser

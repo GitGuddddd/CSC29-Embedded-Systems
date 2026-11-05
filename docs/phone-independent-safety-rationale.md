@@ -1,7 +1,7 @@
 # Phone-independent safety: architecture rationale and robustness assessment
 
 Baseline assessment of firmware and Android revision `67c4148`, updated for the
-versioned critical-event receipt and glasses fallback implementation.
+versioned critical-event receipt, glasses fallback and watchdog-reset retention.
 
 ## Recommendation
 
@@ -97,7 +97,7 @@ Concrete findings:
 | --- | --- | --- |
 | Application receipt is not actuator feedback | Exact receipt in `Rte_Type.h`, `BleComm.c` and both main loops | Confirms cane application acceptance/alarm request, not physical sound output or sound pressure |
 | Glasses fallback is implemented but not acoustically validated | `SafetyDelivery.c`, `Glasses_Main.c`, low-duty `AlertManager` cue | Software enters a defined degraded mode; enclosure SPL and user suitability still require bench/usability evidence |
-| Latches initialize clear | `CaneMode_Init()` and `head_fall_latched = false` | A locally originated incident can disappear after a reset; a still-latched remote peer might reassert its event, but local retention is not guaranteed |
+| Watchdog retention is volatile and reset-cause scoped | `IncidentRetention.c` uses RP2040 watchdog scratch 0–3 and `watchdog_enable_caused_reboot()` | Timeout resets restore unresolved incidents; power loss, run-pin reset, firmware-loading reboot and invalid role markers intentionally do not |
 | Event identity is stronger but unauthenticated | 32-bit random boot session and event counter; four-bit pair ID remains default 1 | Removes practical heartbeat/fall-counter ambiguity, but does not authenticate a peer or prevent deliberate spoofing/replay |
 | Firmware transport discards advertiser identity/RSSI | `BleRadio_RxCallback_t` carries data/length/time only | Firmware has no address binding or link-quality history comparable to Android's role/address scope |
 | Reset recovery affects both cores | Shared MCU hardware watchdog | Core affinity does not isolate power, memory or whole-chip reset; recovery introduces a monitoring interruption |
@@ -121,17 +121,30 @@ Keep **transport receipt**, **user audio pause** and **incident clearance** dist
 Each acknowledgement/reset references the relevant event, so a delayed message cannot
 clear a newer fall. Relay messages retain their original event identity to prevent loops.
 
-### Glasses fallback implemented; reset survival remains
+### Glasses fallback and watchdog-reset survival implemented; power loss remains
 
 The glasses now use a 100 ms pulse every 2 s at 10% PWM duty when the cane is unavailable
 or fails to confirm delivery. This intentionally is not the cane siren. PWM duty is not
 an acoustic exposure measurement; frequency, enclosure SPL and user suitability still
 require validation before calling the response ear-safe.
 
-Preserve critical latch/event state across watchdog resets. A retained record can cover
-watchdog recovery; surviving power loss additionally needs an appropriate nonvolatile
-journal. Write only meaningful event transitions, with integrity/atomic-update handling,
-rather than logging every heartbeat to flash. Flash operations remain outside ISRs.
+Both nodes now retain an unresolved latch and event counter in four RP2040 watchdog
+scratch words. The role/version commit marker is written before an active payload and
+cleared before the remaining words on incident clearance; complement/check words detect
+a torn payload. A valid active marker fails safe: corrupt payload data restores the
+alarm as event zero under
+the newly generated boot session rather than clearing it. Writes occur only when the
+incident becomes active, changes identity or clears, and only from the Core 0 task.
+
+Restoration is accepted only when the SDK reports that the enabled hardware watchdog
+caused the reboot. A retained cane audio pause resumes audible. A restored glasses event
+starts a new 750 ms receipt deadline, and the old cane receipt is not retained as proof
+for the new application instance. Normal guarded/user clearance is still required.
+
+The scratch record is volatile. Surviving power loss or brownout additionally needs an
+appropriate nonvolatile journal and endurance/power-fail analysis; heartbeat-rate flash
+logging would be inappropriate. Hardware fault injection must still verify the actual
+RP2040 reset-cause and scratch-retention behavior.
 
 ### Versioning implemented; provisioning/authentication remain
 
@@ -200,4 +213,5 @@ for these physical fault-injection and RF measurements.
 3. [Android: BLE scan settings](https://developer.android.com/reference/android/bluetooth/le/ScanSettings#SCAN_MODE_LOW_LATENCY)
 4. Project implementation: `src/app/Cane_Main.c`, `src/app/Glasses_Main.c`,
    `src/app/ThreatAssessment/ThreatAssessment.c`, `src/app/CaneMode/CaneMode.c`,
-   `src/services/BleComm/BleComm.c`, `src/drivers/BleRadio/BleRadio.c`, `src/rte/Rte_Type.h`.
+   `src/services/BleComm/BleComm.c`, `src/services/IncidentRetention/IncidentRetention.c`,
+   `src/drivers/BleRadio/BleRadio.c`, `src/rte/Rte_Type.h`.

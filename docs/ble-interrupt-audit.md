@@ -121,7 +121,7 @@ universally lock-free. The application DMA ISR uses neither atomics nor spinlock
 | USB CDC diagnostics | SDK USB controller IRQ plus low-priority `Diagnostics_Task` | Controller service is interrupt-driven; USB protocol processing belongs in task context | SDK endpoint servicing/event enqueue; the former `tud_task()` software-IRQ worker is disabled |
 | FreeRTOS scheduling | SysTick on Core 0; PendSV/SVCall and cross-core SIO IRQs owned by the port | Tick deadlines, context switches, and SMP wake/yield must integrate with the kernel | Kernel scheduling / FIFO notification only; application sensing and radio parsing remain tasks |
 | SDK alarm pool | Default TIMER_IRQ_3 on Core 0 | Supports SDK time/wakeup services such as bounded sensor startup sleeps | SDK alarm dispatch / wake signaling; no application sensor or radio algorithm is registered there |
-| BLE deadman / hardware watchdog | Task elapsed-time check / RP2040 hardware reset | No periodic watchdog ISR is necessary; a live interrupt cannot hide a stalled task | None |
+| BLE deadman / hardware watchdog | Task elapsed-time check / RP2040 hardware reset; task-level incident scratch updates only on transitions | No periodic watchdog ISR is necessary; a live interrupt cannot hide a stalled task | None |
 
 Polling here means task-level bounded acquisition, not polling with interrupts
 disabled. I2C has 5 ms transaction timeouts; a failing transaction and sensor
@@ -186,6 +186,15 @@ a 2 s operational window. It switches to the latter only after both Core 0 perce
 and the ready BTstack worker have progressed. A radio task merely polling/scheduling
 a stuck worker cannot feed it. Core 0 publishes a monotonic generation, avoiding the
 previous cross-core check/clear flag race.
+
+Before enabling the startup watchdog, `IncidentRetention_Init()` checks the SDK's
+enabled-watchdog reset marker and an integrity-tagged, role-specific record in watchdog
+scratch words 0–3. Scratch word 4 remains owned by the Pico SDK. Core 0 writes an active
+commit marker before event data and clears it before clearance data, so a torn payload
+restores a conservative active event zero rather than silently clearing the alarm. No
+scratch access occurs in an ISR or on Core 1. Power/run-pin/programming resets reject and
+clear the record. A restored boot gets a new random BLE session; cane pauses and peer
+receipts are not carried across application restart.
 
 USB's low-priority software ISR formerly ran `tud_task()`. It is compiled out.
 `Diagnostics_Task` pumps the SDK's mutex-protected USB flush/service path every 10 ms,

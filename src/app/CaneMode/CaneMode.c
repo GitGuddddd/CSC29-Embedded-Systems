@@ -88,6 +88,17 @@ void CaneMode_Init(CaneMode_t * const p_mode, uint32_t now_ms)
     }
 }
 
+void CaneMode_RestoreIncident(CaneMode_t * const p_mode)
+{
+    if (p_mode != NULL)
+    {
+        /* Do not retain a bounded audio pause across reset. A release/regrip or
+         * guarded upright recovery is required again after startup.
+         */
+        Latch_Alarm(p_mode, GRIP_STATE_UNKNOWN);
+    }
+}
+
 void CaneMode_Step(CaneMode_t * const p_mode, const CaneMode_Input_t * const p_in,
                    uint32_t now_ms, CaneMode_Output_t * const p_out)
 {

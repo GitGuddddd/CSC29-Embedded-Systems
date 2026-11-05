@@ -76,6 +76,8 @@ typedef struct
 } CaneMode_t;
 
 void CaneMode_Init(CaneMode_t * const p_mode, uint32_t now_ms);
+/* Restored incidents resume audible and require normal guarded recovery. */
+void CaneMode_RestoreIncident(CaneMode_t * const p_mode);
 void CaneMode_Step(CaneMode_t * const p_mode, const CaneMode_Input_t * const p_in,
                    uint32_t now_ms, CaneMode_Output_t * const p_out);
 const char * CaneMode_GetStateName(Sys_State_t state);

@@ -14,6 +14,7 @@
 #include "services/BleComm/BleComm.h"
 #include "services/BleComm/BleComm_Cfg.h"
 #include "services/ImuSupervisor/ImuSupervisor.h"
+#include "services/IncidentRetention/IncidentRetention.h"
 #include "services/Diagnostics/Diagnostics.h"
 #include "services/Watchdog/Watchdog.h"
 #include "services/Watchdog/Watchdog_Cfg.h"
@@ -63,11 +64,14 @@ static void vTask_GlassesPerception(void *pvParameters)
     TickType_t xLastWakeTime = xTaskGetTickCount();
     const TickType_t xFrequency = pdMS_TO_TICKS(10); // 100 Hz loop
 
+    uint32_t start_ms = GetCurrentTimeMs();
+    IncidentRetention_Record_t retained_incident = {0};
+    bool incident_restored = IncidentRetention_Restore(&retained_incident);
     ImuSupervisor_t imu;
     ImuSupervisor_Init(&imu, &Mpu9250_Config_Glasses,
-                        GLASSES_PIN_I2C1_SDA, GLASSES_PIN_I2C1_SCL, GetCurrentTimeMs());
+                        GLASSES_PIN_I2C1_SDA, GLASSES_PIN_I2C1_SCL, start_ms);
     bool sleep_requested = false;
-    uint32_t last_movement_ms = GetCurrentTimeMs();
+    uint32_t last_movement_ms = start_ms;
     uint32_t last_imu_sample_ms = last_movement_ms;
     uint32_t last_radar_ms = 0U;
     uint32_t last_radar_retry_ms = 0U;
@@ -81,11 +85,16 @@ static void vTask_GlassesPerception(void *pvParameters)
     uint8_t buzzer_duty_percent = 0U;
     bool ack_was_pressed = !Hal_Gpio_Read(GLASSES_PIN_ACK_BTN);
 
-    bool head_fall_latched = false;
-    uint32_t glasses_fall_count = 0U;
+    bool head_fall_latched = incident_restored;
+    uint32_t glasses_fall_count = incident_restored ? retained_incident.event_id : 0U;
     uint8_t glasses_tx_seq = 0U;
     SafetyDelivery_t fall_delivery;
     SafetyDelivery_Init(&fall_delivery, BleComm_GetSessionId());
+    if (incident_restored)
+    {
+        SafetyDelivery_Start(&fall_delivery, glasses_fall_count, start_ms);
+        printf("[INCIDENT RETENTION] Restored unresolved head fall after watchdog reset.\n");
+    }
     bool previous_delivery_fallback = false;
     Threat_Result_t current_threat = {0};
     uint32_t last_valid_radar_frame_ms = 0U;
@@ -192,6 +201,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                 new_head_fall = true;
                 glasses_fall_count++;
                 SafetyDelivery_Start(&fall_delivery, glasses_fall_count, now_ms);
+                IncidentRetention_Store(true, glasses_fall_count);
                 sleep_requested = false;
             }
         }
@@ -243,6 +253,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                 FallDetection_Reset();
                 AlertManager_AcknowledgeReset();
                 SafetyDelivery_Clear(&fall_delivery);
+                IncidentRetention_Store(false, glasses_fall_count);
             }
             ack_was_pressed = ack_pressed;
 
@@ -254,6 +265,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                 head_fall_latched = true;
                 glasses_fall_count++;
                 SafetyDelivery_Start(&fall_delivery, glasses_fall_count, now_ms);
+                IncidentRetention_Store(true, glasses_fall_count);
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
             }
             else if ((ch == (int)'c') || (ch == (int)'C'))
@@ -266,6 +278,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
                 AlertManager_AcknowledgeReset();
                 SafetyDelivery_Clear(&fall_delivery);
+                IncidentRetention_Store(false, glasses_fall_count);
             }
         }
 
@@ -436,6 +449,7 @@ int main(void)
     FallDetection_Init(&FallConfig_Head);
     ThreatAssessment_Init();
     AlertManager_Init();
+    IncidentRetention_Init(INCIDENT_RETENTION_ROLE_GLASSES);
     Watchdog_Init(&Watchdog_Config_Default);
 
     printf("\n==================================================\n");

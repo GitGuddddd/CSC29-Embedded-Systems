@@ -370,6 +370,23 @@ void test_MovingAgain_CancelsUncommittedNormalParking(void)
     TEST_ASSERT_TRUE(s_out.fall_detection_enabled);
 }
 
+void test_RestoredIncidentResumesAudibleAndRequiresNormalGuardedClearance(void)
+{
+    CaneMode_RestoreIncident(&s_mode);
+    Step();
+    TEST_ASSERT_EQUAL(SYS_STATE_FALL_CONFIRMED, s_out.state);
+    TEST_ASSERT_TRUE(s_out.fall_latched);
+    TEST_ASSERT_FALSE(s_out.alarm_paused);
+    TEST_ASSERT_FALSE(s_out.fall_detection_enabled);
+
+    /* A held grip at reboot is not treated as an acknowledgement edge. */
+    Advance(100U);
+    TEST_ASSERT_EQUAL(SYS_STATE_FALL_CONFIRMED, s_out.state);
+    Grip(GRIP_STATE_RELEASED);
+    Grip(GRIP_STATE_HELD);
+    TEST_ASSERT_EQUAL(SYS_STATE_FALL_MUTED, s_out.state);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -393,5 +410,6 @@ int main(void)
     RUN_TEST(test_ExpiredPause_CannotBeClearedByALateSleepAcknowledgement);
     RUN_TEST(test_TofFault_DoesNotPreventImuVerifiedRecovery);
     RUN_TEST(test_MovingAgain_CancelsUncommittedNormalParking);
+    RUN_TEST(test_RestoredIncidentResumesAudibleAndRequiresNormalGuardedClearance);
     return UNITY_END();
 }

@@ -17,6 +17,7 @@
 #include "services/BleComm/BleComm.h"
 #include "services/BleComm/BleComm_Cfg.h"
 #include "services/ImuSupervisor/ImuSupervisor.h"
+#include "services/IncidentRetention/IncidentRetention.h"
 #include "services/Diagnostics/Diagnostics.h"
 #include "services/Watchdog/Watchdog.h"
 #include "services/Watchdog/Watchdog_Cfg.h"
@@ -105,10 +106,17 @@ static void vTask_SafetyPerception(void *pvParameters)
     const TickType_t xFrequency = pdMS_TO_TICKS(10); // 100 Hz cyclic loop
 
     uint32_t start_ms = GetCurrentTimeMs();
+    IncidentRetention_Record_t retained_incident = {0};
+    bool incident_restored = IncidentRetention_Restore(&retained_incident);
     ImuSupervisor_t imu;
     ImuSupervisor_Init(&imu, &Mpu9250_Config_Cane, CANE_PIN_I2C0_SDA, CANE_PIN_I2C0_SCL, start_ms);
     CaneMode_t mode;
     CaneMode_Init(&mode, start_ms);
+    if (incident_restored)
+    {
+        CaneMode_RestoreIncident(&mode);
+        printf("[INCIDENT RETENTION] Restored unresolved cane alarm after watchdog reset.\n");
+    }
     CaneMode_Output_t mode_out = { .state = SYS_STATE_INIT };
     uint32_t last_tof_ms = 0U;
     uint32_t last_tof_alive_ms = GetCurrentTimeMs();
@@ -127,7 +135,7 @@ static void vTask_SafetyPerception(void *pvParameters)
     BleComm_ProfileId_t last_sent_profile = BLECOMM_PROFILE_FAST;
     uint16_t buzzer_freq_hz = 0U;
     uint8_t buzzer_duty_percent = 0U;
-    uint32_t cane_event_id = 0U;
+    uint32_t cane_event_id = incident_restored ? retained_incident.event_id : 0U;
     bool peer_ack_valid = false;
     uint32_t peer_ack_session_id = 0U;
     uint32_t peer_ack_event_id = 0U;
@@ -142,7 +150,7 @@ static void vTask_SafetyPerception(void *pvParameters)
         .imu_healthy    = 0U,
         .link_lost      = 0U,
         .tx_seq         = 0U,
-        .fall_seq       = 0U,
+        .fall_seq       = (uint16_t)(cane_event_id & 0x0FU),
         .reserved       = 0U
     };
 
@@ -223,6 +231,7 @@ static void vTask_SafetyPerception(void *pvParameters)
         {
             cane_event_id++;
             cane_status.fall_seq = (uint16_t)(cane_event_id & 0x0FU);
+            IncidentRetention_Store(true, cane_event_id);
         }
 
         bool ground_enabled = mode_out.ground_enabled &&
@@ -338,6 +347,7 @@ static void vTask_SafetyPerception(void *pvParameters)
         CaneMode_Step(&mode, &mode_in, now_ms, &mode_out);
         s_sys_mode = mode_out.state;
         cane_status.fall_latched = mode_out.fall_latched ? 1U : 0U;
+        IncidentRetention_Store(mode_out.fall_latched, cane_event_id);
         cane_status.imu_healthy = imu.fault ? 0U : 1U;
         if (mode_out.reset_fall_detection)
         {
@@ -532,6 +542,7 @@ int main(void)
 
     uint32_t boot_ms = GetCurrentTimeMs();
     GroundProjection_Init(&s_ground_detector, boot_ms);
+    IncidentRetention_Init(INCIDENT_RETENTION_ROLE_CANE);
     Watchdog_Init(&Watchdog_Config_Default);
 
     printf("\n==================================================\n");

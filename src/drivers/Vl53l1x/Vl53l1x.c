@@ -21,6 +21,7 @@
 #define VL53L1X_REG_RESULT_DISTANCE_MM         (0x0096U)
 #define VL53L1X_REG_FIRMWARE_SYSTEM_STATUS     (0x00E5U)
 #define VL53L1X_REG_MODEL_ID                   (0x010FU)
+#define VL53L1X_REG_ROI_CONFIG                 (0x007FU)
 #define VL53L1X_NO_TARGET                      ((uint16_t)0xFFFF)
 
 static const uint8_t default_config[91] = {
@@ -80,6 +81,10 @@ bool Vl53l1x_Init(const Vl53l1x_Config_t * const p_cfg)
 
     /* Clear interrupt flag */
     (void)Hal_I2c_WriteReg16(p_cfg->i2c_port, p_cfg->dev_addr, VL53L1X_REG_SYSTEM_INTERRUPT_CLEAR, 0x01U);
+
+    /* Narrow the SPAD Region-of-Interest (ROI) to center 4x4 (15 degree FoV) */
+    uint8_t roi_cmd[] = {0x03U, 0x03U}; /* TopLeft (3,3) BottomRight (12,12) pseudo-register equivalent */
+    (void)Hal_I2c_WriteRegs16(p_cfg->i2c_port, p_cfg->dev_addr, VL53L1X_REG_ROI_CONFIG, roi_cmd, 2U);
 
     /* Start continuous ranging mode (write 0x40 to SYSTEM__MODE_START 0x0087) */
     if (!Hal_I2c_WriteReg16(p_cfg->i2c_port, p_cfg->dev_addr, VL53L1X_REG_SYSTEM_MODE_START, 0x40U))

@@ -115,6 +115,29 @@ bool Hal_I2c_WriteReg16(uint8_t port, uint8_t addr, uint16_t reg, uint8_t val)
 #endif
 }
 
+bool Hal_I2c_WriteRegs16(uint8_t port, uint8_t addr, uint16_t reg, const uint8_t * p_src, uint32_t len)
+{
+#ifdef PICO_ON_DEVICE
+    i2c_inst_t * p_i2c = (port == 0U) ? i2c0 : i2c1;
+    uint8_t buf[len + 2];
+    buf[0] = (uint8_t)((reg >> 8) & 0xFF);
+    buf[1] = (uint8_t)(reg & 0xFF);
+    for (uint32_t i = 0U; i < len; i++)
+    {
+        buf[2 + i] = p_src[i];
+    }
+    int ret = i2c_write_timeout_us(p_i2c, addr, buf, len + 2, false, HAL_I2C_TIMEOUT_US);
+    return (ret == (int)(len + 2));
+#else
+    (void)port;
+    (void)addr;
+    (void)reg;
+    (void)p_src;
+    (void)len;
+    return true;
+#endif
+}
+
 bool Hal_I2c_ReadRegs16(uint8_t port, uint8_t addr, uint16_t reg, uint8_t * const p_dst, uint32_t len)
 {
 #ifdef PICO_ON_DEVICE

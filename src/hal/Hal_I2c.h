@@ -18,6 +18,7 @@ bool Hal_I2c_WriteReg(uint8_t port, uint8_t addr, uint8_t reg, uint8_t val);
 bool Hal_I2c_ReadRegs(uint8_t port, uint8_t addr, uint8_t reg, uint8_t * const p_dst, uint32_t len);
 
 bool Hal_I2c_WriteReg16(uint8_t port, uint8_t addr, uint16_t reg, uint8_t val);
+bool Hal_I2c_WriteRegs16(uint8_t port, uint8_t addr, uint16_t reg, const uint8_t * p_src, uint32_t len);
 bool Hal_I2c_ReadRegs16(uint8_t port, uint8_t addr, uint16_t reg, uint8_t * const p_dst, uint32_t len);
 
 #endif /* HAL_I2C_H */

@@ -7,6 +7,13 @@
 #include "pico/stdlib.h"
 #include "btstack.h"
 
+#if CYW43_LWIP
+#error Wearable radio builds are BLE-only; do not reserve an unused lwIP network stack
+#endif
+#if !CYW43_NO_DEFAULT_TASK_STACK
+#error BleRadio supplies the Core 1 worker stack; disable the unused SDK default stack
+#endif
+
 /* Hardware ownership: the SDK async worker and its host-wake IRQ both use Core 1.
  * Public request calls come from a task; all GAP/HCI operations run in that worker.
  */
@@ -140,6 +147,7 @@ bool BleRadio_Start(const char * const p_name, BleRadio_WorkCallback_t work_call
         async_context_deinit(&s_context.core);
         return false;
     }
+    configASSERT(cyw43_arch_async_context() == &s_context.core);
     return (async_context_execute_sync(&s_context.core, Radio_StartWorker, NULL) == 0U);
 }
 

@@ -127,7 +127,7 @@ if (BUILD_FOR_PICO_TARGET)
         FreeRTOS-Kernel-Heap4
         pico_stdlib
         pico_multicore
-        pico_cyw43_arch_lwip_sys_freertos
+        pico_cyw43_arch_sys_freertos
         pico_btstack_cyw43
         pico_btstack_ble
         pico_rand
@@ -192,7 +192,7 @@ if (BUILD_FOR_PICO_TARGET)
         FreeRTOS-Kernel-Heap4
         pico_stdlib
         pico_multicore
-        pico_cyw43_arch_lwip_sys_freertos
+        pico_cyw43_arch_sys_freertos
         pico_btstack_cyw43
         pico_btstack_ble
         pico_rand
@@ -212,6 +212,10 @@ if (BUILD_FOR_PICO_TARGET)
 
     foreach(node Cane_Node Glasses_Node)
         target_compile_definitions(${node} PRIVATE
+            # Bluetooth uses BleRadio's explicit Core 1 FreeRTOS async context.
+            # No network stack or unused SDK default task stack is required.
+            CYW43_LWIP=0
+            CYW43_NO_DEFAULT_TASK_STACK=1
             PICO_STDIO_USB_ENABLE_IRQ_BACKGROUND_TASK=0
             PICO_STDIO_USB_STDOUT_TIMEOUT_US=1000
             PICO_STDIO_DEADLOCK_TIMEOUT_MS=1

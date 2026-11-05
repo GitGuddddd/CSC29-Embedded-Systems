@@ -113,6 +113,21 @@ stack. SDK host-wake IRQ setup executes on that same core. Application GAP/HCI s
 advertising/scan parameter changes and payload updates execute only in the worker.
 Runtime assertions check task identity, core and absence of exception context.
 
+The node targets link `pico_cyw43_arch_sys_freertos` with `CYW43_LWIP=0`. No application
+uses Wi-Fi/TCP-IP, so the lwIP pools and their initialization are omitted. The
+`CYW43_NO_DEFAULT_TASK_STACK=1` setting removes only the SDK's unused fallback static
+stack: `BleRadio` still supplies its own 1024-word (4096-byte) Core 1 worker stack and
+asserts that the SDK retained that exact async context. This is not a switch to a polling
+or software-IRQ radio backend. Binary audits reject the removed lwIP/default-stack symbols
+and require the supplied worker to remain linked. Runtime hardware behavior is unvalidated.
+
+Release build evidence against `3c2d3a8`: static BSS drops from 71428 to 56840 bytes
+on the cane and 72396 to 57808 bytes on the glasses (14588 bytes saved per node).
+ELF text drops by 9148 bytes per node, including the added context-retention assertion.
+Both supplied 4096-byte radio stacks remain; the 32 KB FreeRTOS heap, sensing periods,
+DMA ring, scan duty and receipt/watchdog deadlines are unchanged. This is build/layout
+evidence, not a measured power, scheduling or delivery improvement.
+
 The Core 0 producer queues a complete payload-plus-profile snapshot. The worker
 coalesces a bounded number of pending snapshots and preserves the newest application
 sequence. Profile changes call the actual `gap_advertisements_set_params()` and scan

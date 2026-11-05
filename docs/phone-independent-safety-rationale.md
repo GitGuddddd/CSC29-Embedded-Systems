@@ -167,6 +167,13 @@ build (cane 71680 → 71428, glasses 72648 → 72396). Flash text increases by 5
 bytes respectively for epoch renewal and stricter parsing/receipt handling. These are
 software layout/build results, not measured task jitter, physical delivery or power data.
 
+The subsequent BLE-only dependency cleanup keeps the same FreeRTOS worker and removes
+unused lwIP initialization/pools plus the SDK default static radio stack. Against
+`3c2d3a8`, BSS decreases by another 14588 bytes per node (cane 71428 → 56840,
+glasses 72396 → 57808), and ELF text by 9148 bytes. Both application radio workers
+remain at 4096 bytes. Source/ELF ownership checks pass, but radio hardware, power,
+worst-case scheduling and watchdog reset behavior remain unvalidated.
+
 ### Glasses fallback and watchdog-reset survival implemented; power loss remains
 
 The glasses now use a 100 ms pulse every 2 s at 10% PWM duty when the cane is unavailable

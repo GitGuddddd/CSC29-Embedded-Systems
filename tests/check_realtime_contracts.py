@@ -69,6 +69,15 @@ def source_contracts():
             "Wearable telemetry must not restore lifetime-width counters/identities")
     require(re.search(r"rolling_fall_seq\s*:\s*4", types),
             "The transmitted local fall counter must stay four bits")
+    cmake = (ROOT / "CMakeLists.txt").read_text()
+    require("pico_cyw43_arch_lwip_sys_freertos" not in cmake,
+            "BLE-only node targets must not reintroduce the unused lwIP stack")
+    require("CYW43_LWIP=0" in cmake and "CYW43_NO_DEFAULT_TASK_STACK=1" in cmake,
+            "Keep the explicit BLE-only/no-default-stack build contract")
+    radio = (ROOT / "src/drivers/BleRadio/BleRadio.c").read_text()
+    require("cfg.task_stack = s_worker_stack" in radio and
+            "cyw43_arch_async_context() == &s_context.core" in radio,
+            "Radio startup must retain the application's supplied Core 1 worker")
     diagnostics = (ROOT / "src/services/Diagnostics/Diagnostics.c").read_text()
     require("PICO_STDIO_USB_ENABLE_IRQ_BACKGROUND_TASK" in diagnostics,
             "Keep the compile-time guard against USB protocol work in a software IRQ")
@@ -93,6 +102,11 @@ def binary_contracts(elf, nm, objdump):
             "Vector dispatch table is not in RP2040 SRAM")
     require("low_priority_worker_irq" not in entries,
             "TinyUSB protocol processing is still linked into a stdio software IRQ")
+    for name in ("ram_heap", "memp_memory_PBUF_POOL_base", "memp_memory_FRAG_PBUF_base",
+                 "cyw43_async_context_freertos_task_stack"):
+        require(name not in entries, f"{elf.name}: unused networking/default stack linked: {name}")
+    require("s_worker_stack" in entries and "s_context" in entries,
+            f"{elf.name}: supplied FreeRTOS radio worker is missing")
     if "hal_uart_rx_dma_isr" in entries:
         require(entries["hal_uart_rx_dma_isr"][1] == "t", "DMA ISR must be a private text symbol")
         assembly = subprocess.check_output(

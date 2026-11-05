@@ -35,26 +35,37 @@ void Hal_I2c_BusReset(uint8_t sda_pin, uint8_t scl_pin)
     gpio_set_function(sda_pin, GPIO_FUNC_SIO);
     gpio_set_function(scl_pin, GPIO_FUNC_SIO);
     gpio_set_dir(sda_pin, GPIO_IN);
-    gpio_set_dir(scl_pin, GPIO_OUT);
+    gpio_set_dir(scl_pin, GPIO_IN);
+    gpio_pull_up(sda_pin);
+    gpio_pull_up(scl_pin);
+    gpio_put(sda_pin, 0);
+    gpio_put(scl_pin, 0);
 
-    for (uint8_t i = 0U; i < 9U; i++)
+    /* Open-drain bus clear: drive LOW or release, never drive a slave's line HIGH. */
+    for (uint8_t i = 0U; (i < 9U) && (gpio_get(sda_pin) == 0); i++)
     {
-        gpio_put(scl_pin, 0);
+        gpio_set_dir(scl_pin, GPIO_OUT);
         sleep_us(5);
-        gpio_put(scl_pin, 1);
-        sleep_us(5);
-        if (gpio_get(sda_pin) != 0)
+        gpio_set_dir(scl_pin, GPIO_IN);
+        uint32_t start_us = time_us_32();
+        while (gpio_get(scl_pin) == 0)
         {
-            break;
+            if ((uint32_t)(time_us_32() - start_us) >= HAL_I2C_TIMEOUT_US)
+            {
+                return;
+            }
         }
+        sleep_us(5);
     }
 
+    /* STOP: release SDA only while SCL is observed HIGH. Caller restores I2C mux. */
+    if (gpio_get(scl_pin) == 0)
+    {
+        return;
+    }
     gpio_set_dir(sda_pin, GPIO_OUT);
-    gpio_put(sda_pin, 0);
     sleep_us(5);
-    gpio_put(scl_pin, 1);
-    sleep_us(5);
-    gpio_put(sda_pin, 1);
+    gpio_set_dir(sda_pin, GPIO_IN);
     sleep_us(5);
 #else
     (void)sda_pin;

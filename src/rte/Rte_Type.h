@@ -27,7 +27,9 @@ typedef enum
     SYS_STATE_FALL_CONFIRMED,
     SYS_STATE_FALL_MUTED,
     SYS_STATE_HARD_FAULT,
-    SYS_STATE_STANDBY
+    SYS_STATE_STANDBY,
+    SYS_STATE_UNGRIPPED_WATCH,
+    SYS_STATE_FAULT_DEGRADED
 } Sys_State_t;
 
 typedef enum
@@ -44,7 +46,7 @@ typedef enum
 typedef struct
 {
     uint16_t grip_state       : 2; /* 0=RELEASED, 1=HELD, 2=UNKNOWN */
-    uint16_t fall_latched     : 1; /* 1 = siren active */
+    uint16_t fall_latched     : 1; /* Incident remains latched during audio pause */
     uint16_t tof_obstructed   : 1; /* 1 = sensor blinded/blocked */
     uint16_t imu_healthy      : 1; /* 1 = IMU responding */
     uint16_t link_lost        : 1; /* 1 = >500ms watchdog tripped */
@@ -94,7 +96,10 @@ typedef struct
 #define BLE_FLAG_FALL_ALERT          (0x01U)
 #define BLE_FLAG_SENSOR_FAULT        (0x02U)
 #define BLE_FLAG_OBSTACLE_ACTIVE     (0x04U)
+#define BLE_FLAG_ALARM_PAUSED        (0x08U)
 #define BLE_FLAG_CANE_HELD           (0x10U)
+#define BLE_FLAG_STANDBY             (0x20U)
+#define BLE_FLAG_PARKED_BY_USER      (0x40U)
 
 #define BLE_DIST_NO_TARGET           (0x0FFFU)
 #define BLE_TTC_NO_THREAT            (0x0FFFU)

@@ -216,13 +216,11 @@ void test_Scenario_Watchdog_LinkLoss_Preempted_By_CliffHazard(void)
 }
 
 /*
- * SCENARIO 6: 30-Second Alarm Timeout Auto-Mute vs Latched State
- * Objective: If user is incapacitated after a fall and cannot reach the cane
- * or press the acknowledge button, the acoustic siren must auto-mute after 30s
- * to prevent ear damage / battery exhaustion, but the emergency fall state
- * MUST remain latched to keep broadcasting emergency BLE telemetry.
+ * SCENARIO 6: An unacknowledged incident does not silently expire.
+ * Audio pause is explicit and bounded by the mode manager; the latch remains
+ * set through pulse gaps, technical faults and an acknowledged pause.
  */
-void test_Scenario_Incapacitated_Fall_30s_AutoMute_LatchedPreservation(void)
+void test_Scenario_Incapacitated_Fall_LatchedUntilExplicitRecovery(void)
 {
     AlertManager_Init();
 
@@ -235,24 +233,22 @@ void test_Scenario_Incapacitated_Fall_30s_AutoMute_LatchedPreservation(void)
     TEST_ASSERT_TRUE(out.buzzer_active);
     TEST_ASSERT_TRUE(out.fall_latched);
 
-    /* At 29.9 seconds: siren still sounding */
+    /* During a rhythmic silent gap the incident is still active. */
     AlertManager_Arbitrate(ALERT_FALL_ALARM, 0U, t + 29900U, &out);
     TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out.active_alert);
-    TEST_ASSERT_TRUE(out.buzzer_active);
     TEST_ASSERT_TRUE(out.fall_latched);
 
-    /* At 30.1 seconds: siren mutes, but fall_latched remains TRUE */
+    /* After 30 seconds there is no automatic indefinite mute. */
     AlertManager_Arbitrate(ALERT_NONE, 0U, t + 30100U, &out);
-    TEST_ASSERT_EQUAL(ALERT_FALL_MUTED, out.active_alert);
-    TEST_ASSERT_FALSE(out.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out.active_alert);
     TEST_ASSERT_TRUE(out.fall_latched);
 
     /* Even if other minor alerts arrive, latched fall prevents them from clearing */
     AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, 500U, t + 35000U, &out);
-    TEST_ASSERT_EQUAL(ALERT_FALL_MUTED, out.active_alert);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out.active_alert);
     TEST_ASSERT_TRUE(out.fall_latched);
 
-    /* Explicit acknowledge resets the system */
+    /* Explicit, verified recovery resets the system. */
     AlertManager_AcknowledgeReset();
     AlertManager_Arbitrate(ALERT_NONE, 0U, t + 36000U, &out);
     TEST_ASSERT_FALSE(out.fall_latched);
@@ -266,6 +262,6 @@ int main(void)
     RUN_TEST(test_Scenario_Tof_BusHang_Timeout_And_Hotplug_Recovery);
     RUN_TEST(test_Scenario_Ble_PacketCorruption_And_MonotonicRecovery);
     RUN_TEST(test_Scenario_Watchdog_LinkLoss_Preempted_By_CliffHazard);
-    RUN_TEST(test_Scenario_Incapacitated_Fall_30s_AutoMute_LatchedPreservation);
+    RUN_TEST(test_Scenario_Incapacitated_Fall_LatchedUntilExplicitRecovery);
     return UNITY_END();
 }

@@ -7,7 +7,19 @@
  * Compliance: Barr-C:2018
  */
 
-#define ALERT_MAX_FALL_TIMEOUT_MS      (30000U) /* 30 seconds auto-clear */
+/* Prototype 3-2-3-2 pulse rhythm. These timings do not establish IEC certification. */
+#define ALERT_FALL_PULSE_MS            (150U)
+#define ALERT_FALL_SHORT_GAP_MS        (100U)
+#define ALERT_FALL_MEDIUM_GAP_MS       (300U)
+#define ALERT_FALL_LONG_GAP_MS         (500U)
+#define ALERT_FALL_BURST_GAP_MS        (2500U)
+#define ALERT_FALL_PERIOD_MS          ((10U * ALERT_FALL_PULSE_MS) + \
+                                      (6U * ALERT_FALL_SHORT_GAP_MS) + \
+                                      (2U * ALERT_FALL_MEDIUM_GAP_MS) + \
+                                      ALERT_FALL_LONG_GAP_MS + ALERT_FALL_BURST_GAP_MS)
+#define ALERT_FAULT_PULSE_MS           (150U)
+#define ALERT_FAULT_GAP_MS             (200U)
+#define ALERT_FAULT_PERIOD_MS          (5000U)
 
 /* Pitch mapping for obstacle proximity: 1500 Hz at 2000 mm down to 3500 Hz at 300 mm */
 #define ALERT_BUZZER_MIN_FREQ_HZ       (1500U)

@@ -15,11 +15,14 @@
 #include "drivers/Haptic/Haptic.h"
 #include "drivers/Buzzer/Buzzer.h"
 #include "services/BleComm/BleComm.h"
+#include "services/BleComm/BleComm_Cfg.h"
+#include "services/ImuSupervisor/ImuSupervisor.h"
 #include "services/Watchdog/Watchdog.h"
 #include "services/Watchdog/Watchdog_Cfg.h"
 #include "app/FallDetection/FallDetection.h"
 #include "app/GroundProjection/GroundProjection.h"
 #include "app/AlertManager/AlertManager.h"
+#include "app/CaneMode/CaneMode.h"
 
 #ifdef PICO_ON_DEVICE
 #include "pico/stdlib.h"
@@ -34,8 +37,8 @@ extern void vTaskCoreAffinitySet(TaskHandle_t xTask, UBaseType_t uxCoreAffinityM
 
 /*
  * \file Cane_Main.c
- * \brief Smart Walking Cane FreeRTOS Dual-Core (AMP) System Mode Manager (BswM / ComM)
- * Compliance: Barr-C:2018 / AUTOSAR Classical Mode Management / ISO 26262 ASIL-D
+ * \brief Cane FreeRTOS SMP integration: single-owner mode manager and supervised I/O
+ * Style: Barr-C:2018; application policy is separate from HAL and driver actions.
  */
 
 static Gp_Detector_t s_ground_detector;
@@ -50,7 +53,7 @@ static uint32_t GetCurrentTimeMs(void)
 #ifdef PICO_ON_DEVICE
     if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
     {
-        return (uint32_t)xTaskGetTickCount();
+        return (uint32_t)xTaskGetTickCount() * (uint32_t)portTICK_PERIOD_MS;
     }
     return to_ms_since_boot(get_absolute_time());
 #else
@@ -103,33 +106,38 @@ static void vTask_SafetyPerception(void *pvParameters)
     TickType_t xLastWakeTime = xTaskGetTickCount();
     const TickType_t xFrequency = pdMS_TO_TICKS(10); // 100 Hz cyclic loop
 
-    bool imu_ok = Mpu9250_Init(&Mpu9250_Config_Cane);
-    uint32_t last_imu_retry_ms = 0U;
+    uint32_t start_ms = GetCurrentTimeMs();
+    ImuSupervisor_t imu;
+    ImuSupervisor_Init(&imu, &Mpu9250_Config_Cane, CANE_PIN_I2C0_SDA, CANE_PIN_I2C0_SCL, start_ms);
+    CaneMode_t mode;
+    CaneMode_Init(&mode, start_ms);
+    CaneMode_Output_t mode_out = { .state = SYS_STATE_INIT };
     uint32_t last_tof_ms = 0U;
     uint32_t last_tof_alive_ms = GetCurrentTimeMs();
     uint32_t last_tof_reinit_ms = last_tof_alive_ms;
     uint32_t last_telemetry_ms = 0U;
     uint32_t last_cmd_ms = 0U;
-    uint32_t release_time_ms = 0U;
 
     Grip_State_t prev_grip = GRIP_STATE_RELEASED;
-    uint16_t last_dist_mm = 0U;
+    uint16_t last_dist_mm = 0xFFFFU;
     Gp_State_t last_gstate = GP_STATE_LEVEL;
-    uint8_t last_glasses_fall_seq = 0xFFU;
+    BleComm_PeerFall_t peer_fall = {0};
     bool prev_link_lost = false;
+    uint8_t last_sent_flags = 0xFFU;
+    uint16_t buzzer_freq_hz = 0U;
 
     Cane_CompactStatus_t cane_status = {
         .grip_state     = (uint16_t)GRIP_STATE_RELEASED,
         .fall_latched   = 0U,
         .tof_obstructed = 0U,
-        .imu_healthy    = imu_ok ? 1U : 0U,
+        .imu_healthy    = 0U,
         .link_lost      = 0U,
         .tx_seq         = 0U,
         .fall_seq       = 0U,
         .reserved       = 0U
     };
 
-    s_sys_mode = SYS_STATE_ACTIVE;
+    s_sys_mode = SYS_STATE_INIT;
     Sys_State_t prev_printed_mode = SYS_STATE_INIT;
 
     for (;;)
@@ -137,134 +145,66 @@ static void vTask_SafetyPerception(void *pvParameters)
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
         uint32_t now_ms = GetCurrentTimeMs();
 
-        /* Log System State Transitions */
-        if (s_sys_mode != prev_printed_mode)
-        {
-            const char *mode_str = "ACTIVE";
-            if (s_sys_mode == SYS_STATE_WATCH)          mode_str = "WATCH (HAZARD)";
-            if (s_sys_mode == SYS_STATE_FALL_CONFIRMED) mode_str = "FALL_CONFIRMED";
-            if (s_sys_mode == SYS_STATE_FALL_MUTED)     mode_str = "FALL_MUTED";
-            if (s_sys_mode == SYS_STATE_HARD_FAULT)     mode_str = "HARD_FAULT";
-            if (s_sys_mode == SYS_STATE_STANDBY)        mode_str = "STANDBY (DOCKED)";
-            printf("[SYS MODE] Cane State Transition -> %s\n", mode_str);
-            prev_printed_mode = s_sys_mode;
-        }
-
-        /* Check for Standby Mode (Released + 60s idle) */
-        if (prev_grip == GRIP_STATE_RELEASED && s_sys_mode != SYS_STATE_STANDBY)
-        {
-            if ((now_ms - release_time_ms) > 60000U)
-            {
-                s_sys_mode = SYS_STATE_STANDBY;
-                BleComm_SetPowerMode(false);
-            }
-        }
-
-        /* IMU Recovery Supervisor */
-        if (!imu_ok && ((now_ms - last_imu_retry_ms) >= 1000U))
-        {
-            last_imu_retry_ms = now_ms;
-            imu_ok = Mpu9250_Init(&Mpu9250_Config_Cane);
-            if (imu_ok)
-            {
-                printf("[IMU RECOVERY] Cane MPU9250 successfully re-initialized!\n");
-                if (s_sys_mode == SYS_STATE_HARD_FAULT)
-                {
-                    s_sys_mode = SYS_STATE_ACTIVE;
-                }
-            }
-            else
-            {
-                s_sys_mode = SYS_STATE_HARD_FAULT;
-            }
-        }
-
-        /* Sub-Task 1A: Touch Sensor Sampling (200 Hz / Every Tick) */
+        /* Touch remains powered and sampled at 100 Hz, including IMU standby. */
         bool raw_touch = Hal_Gpio_Read(CANE_PIN_TOUCH_IN);
         Grip_State_t current_grip;
-        (void)TouchSensor_Update(&TouchSensor_Config_Cane, raw_touch, &current_grip);
+        (void)TouchSensor_Update(&TouchSensor_Config_Cane, raw_touch, now_ms, &current_grip);
 
         if (current_grip != prev_grip)
         {
             printf("[TOUCH] State changed -> %s (Raw GPIO: %d)\n",
                    (current_grip == GRIP_STATE_HELD) ? "HELD" : "RELEASED", raw_touch);
 
-            if (current_grip == GRIP_STATE_HELD)
+            if (current_grip == GRIP_STATE_RELEASED)
             {
-                if (s_sys_mode == SYS_STATE_FALL_CONFIRMED)
-                {
-                    printf("[RECOVERY] Regrip confirmed! Silencing Siren & Resetting Fall Alarm\n");
-                    s_sys_mode = SYS_STATE_FALL_MUTED;
-                    cane_status.fall_latched = 0U;
-                    AlertManager_AcknowledgeReset();
-                    Buzzer_Silence();
-                }
-                else if (s_sys_mode == SYS_STATE_STANDBY)
-                {
-                    printf("[WAKEUP] Cane gripped! Waking up from Standby mode.\n");
-                    s_sys_mode = SYS_STATE_ACTIVE;
-                    BleComm_SetPowerMode(true);
-                }
-                else if (s_sys_mode == SYS_STATE_FALL_MUTED)
-                {
-                    s_sys_mode = SYS_STATE_ACTIVE;
-                }
-                FallDetection_Reset();
-            }
-            else
-            {
-                printf("[TOUCH] Cane released - Fall Watch Armed. Standby timer started.\n");
-                release_time_ms = now_ms;
                 GroundProjection_CancelCalibration(&s_ground_detector, now_ms);
             }
             prev_grip = current_grip;
             cane_status.grip_state = (uint16_t)current_grip;
-            Haptic_SetGripHeld(current_grip == GRIP_STATE_HELD);
         }
 
-        /* Sub-Task 1B: Calibration Button Check (50 ms) */
-        if ((now_ms - last_cmd_ms) >= 50U)
+        bool remote_fall = false;
+        Ble_AdvancedThreatPacket_t rx_pkt;
+        while (BleComm_PopReceivedPacket(&rx_pkt))
         {
-            last_cmd_ms = now_ms;
-            bool grip_held = (prev_grip == GRIP_STATE_HELD);
-
-            if (CalButton_Update(Hal_Gpio_Read(CANE_PIN_CAL_BTN), now_ms) == CALBTN_EVENT_GROUND_HOLD)
+            if (rx_pkt.device_id == 0x02U)
             {
-                Ground_StartCalibration(now_ms, grip_held, "button");
-            }
-            int ch = getchar_timeout_us(0);
-            if ((ch == (int)'c') || (ch == (int)'C'))
-            {
-                Ground_StartCalibration(now_ms, grip_held, "serial");
-            }
-        }
-
-        /* Sub-Task 1C: Local IMU Fall Detection (100 Hz / Every Tick) */
-        if (s_sys_mode != SYS_STATE_STANDBY)
-        {
-            Imu_Sample_t imu_sample;
-            if (imu_ok && Mpu9250_ReadSample(&Mpu9250_Config_Cane, &imu_sample))
-            {
-                cane_status.imu_healthy = 1U;
-                bool fall_detected = FallDetection_Step(&imu_sample, now_ms);
-                if (fall_detected)
+                Watchdog_KickBleDeadman(now_ms);
+                if (BleComm_TrackPeerFall(&peer_fall, &rx_pkt))
                 {
-                    printf("[ALERT] *** FALL DETECTED! *** Triggering Buzzer Siren\n");
-                    s_sys_mode = SYS_STATE_FALL_CONFIRMED;
-                    cane_status.fall_latched = 1U;
-                    cane_status.fall_seq = (uint16_t)((cane_status.fall_seq + 1U) & 0x0FU);
-                    Alert_Output_t alert_out;
-                    AlertManager_Arbitrate(ALERT_FALL_ALARM, 0U, now_ms, &alert_out);
-                    if (alert_out.buzzer_active)
-                    {
-                        Buzzer_PlayTone(alert_out.generated_freq_hz);
-                    }
+                    remote_fall = true;
                 }
             }
         }
 
+        /* A regrip/new incident may cancel normal parking before the I2C sleep command. */
+        bool sleep_requested = mode_out.imu_sleep_requested;
+        if ((mode.power != CANE_POWER_STANDBY) &&
+            (remote_fall || ((current_grip == GRIP_STATE_HELD) && !mode.park_override)))
+        {
+            sleep_requested = false;
+        }
+        ImuSupervisor_Step(&imu, sleep_requested, now_ms);
+        bool local_fall = false;
+        if (imu.sample_valid && mode_out.fall_detection_enabled)
+        {
+            local_fall = FallDetection_Step(&imu.sample, now_ms);
+        }
+        else if (!imu.sample_valid)
+        {
+            FallDetection_Reset();
+        }
+        if (local_fall)
+        {
+            cane_status.fall_seq = (uint16_t)((cane_status.fall_seq + 1U) & 0x0FU);
+        }
+
+        bool ground_enabled = mode_out.ground_enabled &&
+                              (current_grip == GRIP_STATE_HELD) && !local_fall && !remote_fall;
+        GroundProjection_SetArmed(&s_ground_detector, ground_enabled, now_ms);
+
         /* Sub-Task 1D: Ground ToF Cliff Detection (10 Hz / Every 100ms) */
-        if (((now_ms - last_tof_ms) >= 100U) && (s_sys_mode != SYS_STATE_STANDBY))
+        if (((now_ms - last_tof_ms) >= 100U) && ground_enabled)
         {
             last_tof_ms = now_ms;
             uint16_t dist_mm = 0U;
@@ -332,19 +272,6 @@ static void vTask_SafetyPerception(void *pvParameters)
                 last_gstate = gstate;
             }
 
-            /* Update System Mode for Active Hazards */
-            if ((gstate == GP_STATE_STEP_DOWN) || (gstate == GP_STATE_STEP_UP))
-            {
-                if (s_sys_mode == SYS_STATE_ACTIVE)
-                {
-                    s_sys_mode = SYS_STATE_WATCH;
-                }
-            }
-            else if (s_sys_mode == SYS_STATE_WATCH)
-            {
-                s_sys_mode = SYS_STATE_ACTIVE;
-            }
-
             Gp_CalEvent_t cal_event = GroundProjection_TakeCalEvent(&s_ground_detector);
             if (cal_event == GP_CAL_EVENT_DONE)
             {
@@ -361,41 +288,77 @@ static void vTask_SafetyPerception(void *pvParameters)
             Haptic_Request(HAPTIC_SRC_GROUND, ground_req);
         }
 
-        /* Sub-Task 1E: BLE Wireless Reception & Watchdog Check */
-        Ble_AdvancedThreatPacket_t rx_pkt;
-        while (BleComm_PopReceivedPacket(&rx_pkt))
+        /* Recovery I/O can take longer than one period; stale IMU data must not
+         * qualify a parking or upright-recovery transition after that delay.
+         */
+        now_ms = GetCurrentTimeMs();
+        GroundProjection_Tick(&s_ground_detector, now_ms);
+        bool ground_fault = (cane_status.tof_obstructed != 0U) || (!s_is_l0x && !s_is_l1x) ||
+                            (s_ground_detector.state == GP_STATE_SENSOR_FAULT);
+        CaneMode_Input_t mode_in = {
+            .grip = current_grip,
+            .imu_ready = (imu.state == IMU_SUPERVISOR_RUNNING),
+            .imu_sleeping = (imu.state == IMU_SUPERVISOR_ASLEEP),
+            .imu_fault = imu.fault,
+            .sample_valid = imu.sample_valid,
+            .sample = imu.sample,
+            .local_fall = local_fall,
+            .peer_fall = remote_fall,
+            .fall_pending = (FallDetection_GetState() != FALL_STATE_IDLE),
+            .ground_hazard = (s_ground_detector.state == GP_STATE_STEP_DOWN) ||
+                             (s_ground_detector.state == GP_STATE_STEP_UP),
+            .technical_fault = ground_fault
+        };
+        CaneMode_Step(&mode, &mode_in, now_ms, &mode_out);
+        s_sys_mode = mode_out.state;
+        cane_status.fall_latched = mode_out.fall_latched ? 1U : 0U;
+        cane_status.imu_healthy = imu.fault ? 0U : 1U;
+        if (mode_out.reset_fall_detection)
         {
-            if (rx_pkt.device_id == 0x02U)
+            FallDetection_Reset();
+        }
+        bool ground_was_armed = s_ground_detector.is_armed;
+        GroundProjection_SetArmed(&s_ground_detector, mode_out.ground_enabled, now_ms);
+        if (mode_out.ground_enabled && !ground_was_armed && !s_ground_detector.is_calibrated)
+        {
+            Ground_StartCalibration(now_ms, true, "first grip");
+        }
+        Haptic_SetGripHeld(mode_out.ground_enabled);
+        if (!mode_out.ground_enabled)
+        {
+            Haptic_Request(HAPTIC_SRC_GROUND, ALERT_NONE);
+        }
+
+        /* The mode manager is the sole alarm owner; the arbitrator renders each pulse. */
+        AlertManager_SetFallState(mode_out.fall_latched, mode_out.alarm_paused, now_ms);
+        Alert_Output_t alert_out;
+        bool technical_audio = mode_out.degraded && (mode.power != CANE_POWER_STANDBY);
+        AlertManager_Arbitrate(technical_audio ? ALERT_SENSOR_FAULT : ALERT_NONE,
+                               0U, now_ms, &alert_out);
+        uint16_t next_freq_hz = alert_out.buzzer_active ? alert_out.generated_freq_hz : 0U;
+        if (next_freq_hz != buzzer_freq_hz)
+        {
+            Buzzer_PlayTone(next_freq_hz);
+            buzzer_freq_hz = next_freq_hz;
+        }
+        if (s_sys_mode != prev_printed_mode)
+        {
+            printf("[SYS MODE] Cane -> %s\n", CaneMode_GetStateName(s_sys_mode));
+            prev_printed_mode = s_sys_mode;
+        }
+
+        if ((now_ms - last_cmd_ms) >= 50U)
+        {
+            last_cmd_ms = now_ms;
+            bool calibrate_allowed = mode_out.ground_enabled;
+            if (CalButton_Update(Hal_Gpio_Read(CANE_PIN_CAL_BTN), now_ms) == CALBTN_EVENT_GROUND_HOLD)
             {
-                Watchdog_KickBleDeadman(now_ms);
-
-                if (last_glasses_fall_seq == 0xFFU)
-                {
-                    last_glasses_fall_seq = rx_pkt.rolling_fall_seq;
-                    printf("[BLE SYNC] Linked to Glasses (FallSeq Baseline: %u)\n", rx_pkt.rolling_fall_seq);
-                }
-                else
-                {
-                    bool is_new_fall = BleComm_CheckNewFall(rx_pkt.rolling_fall_seq, last_glasses_fall_seq);
-                    if (is_new_fall)
-                    {
-                        printf("[BLE ALERT] *** REMOTE HEAD FALL CONFIRMED (Seq: %u -> %u)! ***\n",
-                               last_glasses_fall_seq, rx_pkt.rolling_fall_seq);
-                        last_glasses_fall_seq = rx_pkt.rolling_fall_seq;
-                    }
-
-                    if ((is_new_fall || ((rx_pkt.state_flags & BLE_FLAG_FALL_ALERT) != 0U)) && (cane_status.fall_latched == 0U))
-                    {
-                        s_sys_mode = SYS_STATE_FALL_CONFIRMED;
-                        cane_status.fall_latched = 1U;
-                        Alert_Output_t alert_out;
-                        AlertManager_Arbitrate(ALERT_FALL_ALARM, 0U, now_ms, &alert_out);
-                        if (alert_out.buzzer_active)
-                        {
-                            Buzzer_PlayTone(alert_out.generated_freq_hz);
-                        }
-                    }
-                }
+                Ground_StartCalibration(now_ms, calibrate_allowed, "button");
+            }
+            int ch = getchar_timeout_us(0);
+            if ((ch == (int)'c') || (ch == (int)'C'))
+            {
+                Ground_StartCalibration(now_ms, calibrate_allowed, "serial");
             }
         }
 
@@ -407,29 +370,26 @@ static void vTask_SafetyPerception(void *pvParameters)
             if (is_link_lost)
             {
                 printf("[WATCHDOG] BLE LINK LOSS DETECTED (>%u ms)\n", (unsigned int)WATCHDOG_CFG_DEADMAN_TIMEOUT_MS);
-                last_glasses_fall_seq = 0xFFU;
             }
         }
         Haptic_Request(HAPTIC_SRC_LINK, is_link_lost ? ALERT_LINK_LOSS : ALERT_NONE);
 
-        /* Sub-Task 1F: Adaptive Telemetry Broadcast (Power/RF Spectrum Efficiency) */
-        /* Rate: 10 Hz (every 100ms) during active hazards/alarms. 2 Hz (every 500ms) when SAFE/IDLE. */
-        uint32_t active_telemetry_period_ms = 500U;
-        if ((s_sys_mode == SYS_STATE_WATCH) || (s_sys_mode == SYS_STATE_FALL_CONFIRMED) || (s_sys_mode == SYS_STATE_HARD_FAULT))
+        /* Keep BLE available during IMU sleep for peer alarms and explicit parked status.
+         * Payload freshness has margin below the link deadline; this is not an RF interval.
+         */
+        uint32_t active_telemetry_period_ms = BLECOMM_CFG_TELEMETRY_IDLE_MS;
+        if ((s_sys_mode == SYS_STATE_WATCH) || mode_out.fall_latched || mode_out.degraded)
         {
-            active_telemetry_period_ms = 100U;
+            active_telemetry_period_ms = BLECOMM_CFG_TELEMETRY_ALERT_MS;
         }
 
-        if ((now_ms - last_telemetry_ms) >= active_telemetry_period_ms)
+        uint8_t flags = mode_out.status_flags;
+        if (mode_out.ground_enabled && mode_in.ground_hazard)
         {
-            last_telemetry_ms = now_ms;
-
-            uint8_t flags = 0;
-            if (cane_status.fall_latched != 0U)                    flags |= BLE_FLAG_FALL_ALERT;
-            if ((cane_status.tof_obstructed != 0U) || (!s_is_l0x && !s_is_l1x)) flags |= BLE_FLAG_SENSOR_FAULT;
-            if (s_ground_detector.state == GP_STATE_STEP_DOWN)     flags |= BLE_FLAG_OBSTACLE_ACTIVE;
-            if (cane_status.grip_state == (uint16_t)GRIP_STATE_HELD) flags |= BLE_FLAG_CANE_HELD;
-
+            flags |= BLE_FLAG_OBSTACLE_ACTIVE;
+        }
+        if ((flags != last_sent_flags) || ((now_ms - last_telemetry_ms) >= active_telemetry_period_ms))
+        {
             Ble_AdvancedThreatPacket_t cane_pkt = {
                 .preamble = 0xAAU,
                 .device_id = 0x01U,
@@ -439,12 +399,16 @@ static void vTask_SafetyPerception(void *pvParameters)
                 .rolling_fall_seq = (uint8_t)cane_status.fall_seq,
                 .seq_num = (uint16_t)cane_status.tx_seq,
                 .state_flags = flags,
-                .nearest_dist_mm = (last_dist_mm == 0xFFFFU) ? 0xFFFFU : last_dist_mm,
+                .nearest_dist_mm = mode_out.ground_enabled ? last_dist_mm : 0xFFFFU,
                 .closing_speed_cms = 0,
                 .ttc_ms = 0xFFFFU
             };
-            cane_status.tx_seq = (uint16_t)((cane_status.tx_seq + 1U) & 0x07U);
-            BleComm_SendPacket(&cane_pkt);
+            if (BleComm_SendPacket(&cane_pkt))
+            {
+                cane_status.tx_seq = (uint16_t)((cane_status.tx_seq + 1U) & 0x07U);
+                last_telemetry_ms = now_ms;
+                last_sent_flags = flags;
+            }
         }
 
         /* Token-Passing: Notify Core 1 that Core 0 safety loop is alive */
@@ -474,7 +438,7 @@ static void vTask_AlertActuator(void *pvParameters)
 /*
  * =========================================================================
  * CORE 1: TASK 3 - Dedicated BLE Wireless Radio Server Task
- * Dedicated execution on Core 1 guarantees zero SPI radio jitter on Core 0!
+ * Radio work runs on Core 1; shared-bus and scheduling interference still apply.
  * =========================================================================
  */
 static void vTask_BleRadioServer(void *pvParameters)
@@ -508,7 +472,6 @@ int main(void)
     CalButton_Init(&CalButton_Config_Cane);
     Haptic_Init(&Haptic_Config_Cane);
     Buzzer_Init(&Buzzer_Config_Cane);
-    Watchdog_Init(&Watchdog_Config_Default);
     BleComm_Init(&BleComm_Config_Cane);
 
     s_is_l0x = Vl53l0x_Init(&Vl53l0x_Config_Cane);
@@ -522,8 +485,7 @@ int main(void)
 
     uint32_t boot_ms = GetCurrentTimeMs();
     GroundProjection_Init(&s_ground_detector, boot_ms);
-    GroundProjection_SetArmed(&s_ground_detector, true, boot_ms);
-    GroundProjection_StartCalibration(&s_ground_detector, boot_ms);
+    Watchdog_Init(&Watchdog_Config_Default);
 
     printf("\n==================================================\n");
     printf("  EchoGuard Smart Cane FreeRTOS Dual-Core System  \n");

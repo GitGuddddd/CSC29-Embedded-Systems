@@ -8,6 +8,8 @@
  */
 
 #define BLECOMM_CFG_RATE_HZ           (10U)
+#define BLECOMM_CFG_TELEMETRY_IDLE_MS (200U) /* Margin below the 500 ms deadman deadline. */
+#define BLECOMM_CFG_TELEMETRY_ALERT_MS (100U)
 #define BLECOMM_CFG_SCAN_WINDOW_MS    (80U)
 #define BLECOMM_CFG_ADV_WINDOW_MS     (20U)
 #define BLECOMM_CFG_BURST_REPEATS     (5U)

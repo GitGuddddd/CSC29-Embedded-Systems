@@ -19,6 +19,7 @@ typedef struct
 extern const TouchSensor_Config_t TouchSensor_Config_Cane;
 
 void TouchSensor_Init(const TouchSensor_Config_t * const p_cfg);
-bool TouchSensor_Update(const TouchSensor_Config_t * const p_cfg, bool raw_pin_level, Grip_State_t * const p_state_out);
+bool TouchSensor_Update(const TouchSensor_Config_t * const p_cfg, bool raw_pin_level,
+                         uint32_t now_ms, Grip_State_t * const p_state_out);
 
 #endif /* TOUCHSENSOR_H */

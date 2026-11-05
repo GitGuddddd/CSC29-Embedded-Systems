@@ -5,7 +5,7 @@
 
 static Grip_State_t s_committed_state = GRIP_STATE_RELEASED;
 static bool s_candidate_level = false;
-static uint8_t s_consecutive_count = 0U;
+static uint32_t s_candidate_since_ms = 0U;
 
 void TouchSensor_Init(const TouchSensor_Config_t * const p_cfg)
 {
@@ -16,29 +16,23 @@ void TouchSensor_Init(const TouchSensor_Config_t * const p_cfg)
     }
     s_committed_state = GRIP_STATE_RELEASED;
     s_candidate_level = false;
-    s_consecutive_count = 0U;
+    s_candidate_since_ms = 0U;
 }
 
-bool TouchSensor_Update(const TouchSensor_Config_t * const p_cfg, bool raw_pin_level, Grip_State_t * const p_state_out)
+bool TouchSensor_Update(const TouchSensor_Config_t * const p_cfg, bool raw_pin_level,
+                         uint32_t now_ms, Grip_State_t * const p_state_out)
 {
     (void)p_cfg;
 
     if (raw_pin_level != s_candidate_level)
     {
         s_candidate_level = raw_pin_level;
-        s_consecutive_count = 1U;
-    }
-    else
-    {
-        if (s_consecutive_count < TOUCH_CFG_DEBOUNCE_COUNT)
-        {
-            s_consecutive_count++;
-        }
+        s_candidate_since_ms = now_ms;
     }
 
     bool transition_occurred = false;
 
-    if (s_consecutive_count >= TOUCH_CFG_DEBOUNCE_COUNT)
+    if ((uint32_t)(now_ms - s_candidate_since_ms) >= TOUCH_CFG_DEBOUNCE_MS)
     {
         Grip_State_t new_state = (s_candidate_level) ? GRIP_STATE_HELD : GRIP_STATE_RELEASED;
         if (new_state != s_committed_state)

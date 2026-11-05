@@ -8,9 +8,9 @@ A dual-node real-time embedded assistance system designed for visually impaired 
 
 ## Architecture Overview
 
-Uses an **Asymmetric Multiprocessing (AMP)** model across the RP2040's dual ARM Cortex-M0+ cores:
+Uses **FreeRTOS SMP with task affinity** across the RP2040's dual ARM Cortex-M0+ cores:
 - **Core 0**: Dedicated to hard real-time sensor polling (100 Hz IMU loops, ToF ground projection, mmWave radar parsing, and actuator PWM execution).
-- **Core 1**: Dedicated to the Infineon CYW43439 SPI radio stack, managing connectionless BLE periodic advertising and scanning without introducing timing jitter into Core 0 loops.
+- **Core 1**: Runs the radio service for BLE advertising and scanning. The cores still share memory, buses and the scheduler.
 
 ---
 
@@ -20,19 +20,23 @@ Uses an **Asymmetric Multiprocessing (AMP)** model across the RP2040's dual ARM 
 - **Sensor Fusion**: Dynamically projects ToF distance vectors (`VL53L1X` / `VL53L0X`) onto the virtual ground plane using `MPU9250` pitch and roll angle estimates via complementary filtering.
 - **Pendulum Compensation**: Rejects false drop-off alerts caused by the user's natural pendulum cane swinging motion during walking.
 - **Voting Filter**: Applies a 5-sample median filter and 3-vote threshold logic to detect genuine drop-offs (`STEP_DOWN > +150mm`) or curb rises (`STEP_UP <= -80mm`).
-- **Ground Calibration**: Auto-calibrates at power-on. To recalibrate, grip the cane at walking height over level ground and hold the GP20 button for 2 s (or send `c` over serial). Vibration feedback: 1 short pulse = started, one 1 s pulse = saved, two 1 s pulses = failed (no steady reading within 10 s, sensor fault or cane released; the previous baseline is kept). Without a baseline the gripped cane plays 4 quick ticks every 3 s.
+- **Ground Calibration**: Starts on the first active grip when no baseline exists. To recalibrate, grip the cane at walking height over level ground and hold the GP20 button for 2 s (or send `c` over serial). Vibration feedback: 1 short pulse = started, one 1 s pulse = saved, two 1 s pulses = failed (no steady reading within 10 s, sensor fault or cane released; the previous baseline is kept). Without a baseline the gripped cane plays 4 quick ticks every 3 s.
 
 ### 2. Dual-Stage Fall Detection Engine
 - **Physics Pipeline**: Monitors 3-axis accelerometer/gyroscope magnitude for free-fall ($|a| < 0.35g$ for cane, $< 0.5g$ for head) followed by impact ($|a| > 2.5g$ within 800–1000 ms) and post-impact stillness/tilt verification.
-- **Release Watch Window**: When the user lets go of the cane (capacitive touch released), a 1000 ms watch window opens to detect falls while preventing false alarms during deliberate cane placement.
+- **Release Watch**: Releasing the touch sensor enters silent `UNGRIPPED_WATCH`. Upright, still and released for 3 continuous seconds permits IMU standby; elapsed release time alone never disarms a pending fall.
 
 ### 3. Asymmetric Ear-Safe Emergency Protocol
 - **Acoustic Protection**: To avoid disorienting the wearer near their ears, the Smart Glasses buzzer remains silent when a head-drop or fall is detected.
-- **Remote Offloading**: The glasses offload emergency alerts via connectionless BLE broadcasts to the Cane, which latches a high-decibel piezo siren and haptic motor vibration.
-- **Reset Logic**: Holding the cane grip continuously for > 3 seconds or pressing the onboard acknowledge button sends a `CANCEL` command over BLE, silencing alarms on both nodes.
+- **Remote Offloading**: The glasses broadcast head-fall incidents to the cane. The cane retains the incident latch, plays a non-blocking 3-2-3-2 buzzer pattern and inhibits ground haptics during the incident. Repeated packets for the same incident do not undo acknowledgement.
+- **Acknowledge / Recover / Park**: A fresh grip pauses the cane alarm for at most 15 s without clearing its BLE fall flag. Holding the cane upright and still for 1 s clears the incident. Releasing it while unrecovered for 3 s re-sounds the alarm. To park it horizontally, acknowledge, release, then hold again for 3 s while still. The initial acknowledgement hold cannot perform this override.
+- **Real IMU Sleep**: Standby writes and verifies the MPU `PWR_MGMT_1.SLEEP` bit. The touch sensor stays powered; release then hold to wake after an override. Wake-up waits for IMU settling and three valid samples. BLE and the RTOS/watchdog remain running. The glasses retain their own head-fall latch until their local acknowledgement button is pressed.
+- **Technical Faults**: Three consecutive failed IMU reads cause degraded operation and bounded bus-recovery retries. An IMU fault cannot qualify upright recovery or overwrite a fall latch. Technical audio uses a distinct two-pulse pattern.
 
-### 4. Connectionless BLE Periodic Advertising (ADV_NONCONN_IND)
-- **Torso Attenuation Survival**: Replaces standard paired GATT connections with stateless $10\,\text{Hz}$ non-connectable advertising carrying an 11-byte `AdvancedThreatPacket` (`0xFF29` manufacturer ID).
+See [cane mode manager behaviour and verification](src/app/CaneMode/README.md) for transitions, mounting configuration and telemetry flags. Alarm timing is a prototype configuration, not an IEC/ASIL certification claim.
+
+### 4. BLE Advertising Telemetry
+- **Compact Status**: Manufacturer data (company ID `0x0029`) carries a 6-byte packet with incident sequence, grip, fall, audio-pause, standby and deliberate-parking flags. Payloads refresh every 200 ms normally and 100 ms for hazards/alarms, with immediate state-change updates. The controller advertising interval remains 100 ms.
 - **Fast Recovery**: Provides $\sim 72\,\text{ms}$ average recovery from human body shadowing ($\approx 22\times$ faster than GATT reconnection timeouts).
 - **Monotonic Sequence Filtering**: Rejects delayed, duplicate, or stale packets escaping RF baseband buffers during interference bursts.
 

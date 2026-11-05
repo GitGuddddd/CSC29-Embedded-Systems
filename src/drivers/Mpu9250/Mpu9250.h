@@ -24,6 +24,8 @@ extern const Mpu9250_Config_t Mpu9250_Config_Cane;
 extern const Mpu9250_Config_t Mpu9250_Config_Glasses;
 
 bool Mpu9250_Init(const Mpu9250_Config_t * const p_cfg);
+/* PWR_MGMT_1 hardware sleep. After waking, the caller must wait for sensor settling. */
+bool Mpu9250_SetSleep(const Mpu9250_Config_t * const p_cfg, bool sleep_enabled);
 uint8_t Mpu9250_ReadWhoAmI(const Mpu9250_Config_t * const p_cfg);
 bool Mpu9250_ReadSample(const Mpu9250_Config_t * const p_cfg, Imu_Sample_t * const p_sample);
 void Mpu9250_CalibrateGyro(const Mpu9250_Config_t * const p_cfg, uint32_t n_samples);

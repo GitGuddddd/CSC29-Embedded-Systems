@@ -27,6 +27,17 @@ typedef struct
 extern const BleComm_Config_t BleComm_Config_Cane;
 extern const BleComm_Config_t BleComm_Config_Glasses;
 
+typedef struct
+{
+    bool initialized;
+    bool active;
+    uint8_t fall_seq;
+} BleComm_PeerFall_t;
+
+/* Keep this tracker across transient link loss: reconnecting is not a new fall. */
+bool BleComm_TrackPeerFall(BleComm_PeerFall_t * const p_tracker,
+                          const Ble_AdvancedThreatPacket_t * const p_packet);
+
 void BleComm_Init(const BleComm_Config_t * const p_cfg);
 void BleComm_Encode(const Ble_AdvancedThreatPacket_t * const p_in, Ble_RawPacket_t * const p_out);
 bool BleComm_Decode(const Ble_RawPacket_t * const p_in, uint8_t expected_pair_id, Ble_AdvancedThreatPacket_t * const p_out);

@@ -15,6 +15,11 @@
 #define REG_ACCEL_XOUT_H  (0x3BU)
 #define REG_WHO_AM_I      (0x75U)
 
+/* MPU-9250 Register Map, section 4.34: PWR_MGMT_1 (also MPU-6500 compatible). */
+#define PWR_MGMT_RESET       (0x80U)
+#define PWR_MGMT_SLEEP       (0x40U)
+#define PWR_MGMT_LOW_POWER   (0x70U) /* SLEEP, CYCLE and gyro STANDBY */
+
 #define WHO_AM_I_9250     (0x71U)
 #define WHO_AM_I_9255     (0x73U)
 #define WHO_AM_I_6500     (0x70U)
@@ -71,6 +76,37 @@ bool Mpu9250_Init(const Mpu9250_Config_t * const p_cfg)
     ok = ok && Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_ACCEL_CONFIG2, MPU9250_CFG_DLPF_CONFIG);
 
     return ok;
+}
+
+bool Mpu9250_SetSleep(const Mpu9250_Config_t * const p_cfg, bool sleep_enabled)
+{
+    if (p_cfg == NULL)
+    {
+        return false;
+    }
+
+    uint8_t power = 0U;
+    if (!Hal_I2c_ReadRegs(p_cfg->i2c_port, p_cfg->dev_addr, REG_PWR_MGMT_1, &power, 1U) ||
+        ((power & PWR_MGMT_RESET) != 0U))
+    {
+        return false;
+    }
+    /* Preserve clock/temperature configuration. This is full sleep, not accel cycling.
+     * This six-axis driver never starts the separate AK8963 magnetometer; its
+     * power-on default is power-down. Do not address an AK8963 on MPU-6500 boards.
+     */
+    power = (uint8_t)(power & (uint8_t)~PWR_MGMT_LOW_POWER);
+    if (sleep_enabled)
+    {
+        power |= PWR_MGMT_SLEEP;
+    }
+    if (!Hal_I2c_WriteReg(p_cfg->i2c_port, p_cfg->dev_addr, REG_PWR_MGMT_1, power))
+    {
+        return false;
+    }
+    uint8_t readback = 0U;
+    return Hal_I2c_ReadRegs(p_cfg->i2c_port, p_cfg->dev_addr, REG_PWR_MGMT_1, &readback, 1U) &&
+           (readback == power);
 }
 
 bool Mpu9250_ReadSample(const Mpu9250_Config_t * const p_cfg, Imu_Sample_t * const p_sample)

@@ -7,7 +7,8 @@
  * Compliance: Barr-C:2018
  */
 
-static uint8_t s_circ_buf[LD2450_CFG_CIRC_BUF_SIZE];
+/* RP2040 DMA ring wrapping is on address bits, not relative to the buffer pointer. */
+_Alignas(LD2450_CFG_CIRC_BUF_SIZE) static uint8_t s_circ_buf[LD2450_CFG_CIRC_BUF_SIZE];
 static uint32_t s_tail_idx = 0U;
 
 uint8_t * Ld2450_Irq_GetBuffer(void)

@@ -11,12 +11,16 @@
 static bool s_fall_alarm_latched = false;
 static bool s_fall_alarm_muted = false;
 static uint32_t s_fall_start_time_ms = 0U;
+static Alert_Type_t s_previous_request = ALERT_NONE;
+static uint32_t s_request_start_ms = 0U;
 
 void AlertManager_Init(void)
 {
     s_fall_alarm_latched = false;
     s_fall_alarm_muted = false;
     s_fall_start_time_ms = 0U;
+    s_previous_request = ALERT_NONE;
+    s_request_start_ms = 0U;
 }
 
 void AlertManager_AcknowledgeReset(void)
@@ -24,6 +28,42 @@ void AlertManager_AcknowledgeReset(void)
     s_fall_alarm_latched = false;
     s_fall_alarm_muted = false;
     s_fall_start_time_ms = 0U;
+}
+
+void AlertManager_SetFallState(bool latched, bool paused, uint32_t now_ms)
+{
+    if (latched && (!s_fall_alarm_latched || (s_fall_alarm_muted && !paused)))
+    {
+        s_fall_start_time_ms = now_ms;
+    }
+    s_fall_alarm_latched = latched;
+    s_fall_alarm_muted = latched && paused;
+}
+
+static bool Fall_PulseOn(uint32_t elapsed_ms)
+{
+    static const uint16_t phases_ms[] = {
+        ALERT_FALL_PULSE_MS, ALERT_FALL_SHORT_GAP_MS,
+        ALERT_FALL_PULSE_MS, ALERT_FALL_SHORT_GAP_MS,
+        ALERT_FALL_PULSE_MS, ALERT_FALL_MEDIUM_GAP_MS,
+        ALERT_FALL_PULSE_MS, ALERT_FALL_SHORT_GAP_MS,
+        ALERT_FALL_PULSE_MS, ALERT_FALL_LONG_GAP_MS,
+        ALERT_FALL_PULSE_MS, ALERT_FALL_SHORT_GAP_MS,
+        ALERT_FALL_PULSE_MS, ALERT_FALL_SHORT_GAP_MS,
+        ALERT_FALL_PULSE_MS, ALERT_FALL_MEDIUM_GAP_MS,
+        ALERT_FALL_PULSE_MS, ALERT_FALL_SHORT_GAP_MS,
+        ALERT_FALL_PULSE_MS, ALERT_FALL_BURST_GAP_MS
+    };
+    uint32_t t = elapsed_ms % ALERT_FALL_PERIOD_MS;
+    for (uint32_t i = 0U; i < (sizeof(phases_ms) / sizeof(phases_ms[0])); ++i)
+    {
+        if (t < phases_ms[i])
+        {
+            return ((i % 2U) == 0U);
+        }
+        t -= phases_ms[i];
+    }
+    return false;
 }
 
 uint16_t AlertManager_MapDistanceToPitch(uint16_t distance_mm)
@@ -58,14 +98,10 @@ void AlertManager_Arbitrate(Alert_Type_t requested_alert,
 
     memset(p_out, 0, sizeof(*p_out));
 
-    /*
-     * FR3 & NFR4: If 30 seconds elapse without explicit reset, 
-     * transition from active siren into muted latched state (SYS_FALL_MUTED).
-     */
-    if (s_fall_alarm_latched && (!s_fall_alarm_muted) &&
-        ((now_ms - s_fall_start_time_ms) >= ALERT_MAX_FALL_TIMEOUT_MS))
+    if (requested_alert != s_previous_request)
     {
-        s_fall_alarm_muted = true;
+        s_previous_request = requested_alert;
+        s_request_start_ms = now_ms;
     }
 
     if (requested_alert == ALERT_FALL_ALARM)
@@ -87,16 +123,14 @@ void AlertManager_Arbitrate(Alert_Type_t requested_alert,
         if (s_fall_alarm_muted)
         {
             p_out->active_alert = ALERT_FALL_MUTED;
-            p_out->buzzer_active = false; /* Muted after 30 seconds */
+            p_out->buzzer_active = false; /* Bounded pause is owned by the mode manager. */
             p_out->haptic_active = false; /* FR4: Inhibit haptics */
         }
         else
         {
             p_out->active_alert = ALERT_FALL_ALARM;
-            p_out->buzzer_active = true;
-            /* Toggle alternating fall alarm frequency every 250ms */
-            p_out->generated_freq_hz = (((now_ms / 250U) % 2U) == 0U) ?
-                                       ALERT_FALL_FREQ_A_HZ : ALERT_FALL_FREQ_B_HZ;
+            p_out->buzzer_active = Fall_PulseOn((uint32_t)(now_ms - s_fall_start_time_ms));
+            p_out->generated_freq_hz = ALERT_FALL_FREQ_A_HZ;
             p_out->haptic_active = false; /* FR4: Inhibit haptics */
         }
         return;
@@ -124,7 +158,10 @@ void AlertManager_Arbitrate(Alert_Type_t requested_alert,
     if (requested_alert == ALERT_SENSOR_FAULT)
     {
         p_out->active_alert = ALERT_SENSOR_FAULT;
-        p_out->buzzer_active = true;
+        uint32_t t = (uint32_t)(now_ms - s_request_start_ms) % ALERT_FAULT_PERIOD_MS;
+        p_out->buzzer_active = (t < ALERT_FAULT_PULSE_MS) ||
+                              ((t >= (ALERT_FAULT_PULSE_MS + ALERT_FAULT_GAP_MS)) &&
+                               (t < ((2U * ALERT_FAULT_PULSE_MS) + ALERT_FAULT_GAP_MS)));
         p_out->generated_freq_hz = ALERT_FAULT_FREQ_HZ;
         return;
     }

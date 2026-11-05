@@ -20,7 +20,6 @@
 
 static BleComm_Config_t s_cfg;
 static uint16_t s_last_rx_seq = 0xFFFFU;
-static uint16_t s_tx_seq = 0U;
 
 #define BLECOMM_RX_QUEUE_SIZE 4U
 static Ble_AdvancedThreatPacket_t s_rx_queue[BLECOMM_RX_QUEUE_SIZE];
@@ -150,6 +149,26 @@ bool BleComm_CheckNewFall(uint8_t rx_fall_seq, uint8_t last_fall_seq)
     return (delta >= 1U) && (delta <= 7U);
 }
 
+bool BleComm_TrackPeerFall(BleComm_PeerFall_t * const p_tracker,
+                          const Ble_AdvancedThreatPacket_t * const p_packet)
+{
+    if ((p_tracker == NULL) || (p_packet == NULL))
+    {
+        return false;
+    }
+    bool active = ((p_packet->state_flags & BLE_FLAG_FALL_ALERT) != 0U);
+    uint8_t seq = (uint8_t)(p_packet->rolling_fall_seq & 0x0FU);
+    bool forward = BleComm_CheckNewFall(seq, p_tracker->fall_seq);
+    bool event = active && (!p_tracker->initialized || !p_tracker->active || forward);
+    if (!p_tracker->initialized || !p_tracker->active || forward)
+    {
+        p_tracker->fall_seq = seq;
+    }
+    p_tracker->initialized = true;
+    p_tracker->active = active;
+    return event;
+}
+
 #ifdef PICO_ON_DEVICE
 static btstack_packet_callback_registration_t hci_event_callback_registration;
 static uint8_t adv_data[31];
@@ -201,7 +220,9 @@ static void SetupAdvData(const Ble_AdvancedThreatPacket_t *p_pkt)
         local_pkt.nearest_dist_mm = 0xFFFFU;
         local_pkt.ttc_ms = 0xFFFFU;
     }
-    local_pkt.heartbeat_seq = (uint8_t)(s_tx_seq & 0x07U);
+    /* Preserve the sequence attached to this queued payload. Using the producer's
+     * current counter here can give different queued states the same sequence.
+     */
 
     Ble_RawPacket_t raw_pkt;
     BleComm_Encode(&local_pkt, &raw_pkt);
@@ -314,7 +335,6 @@ void BleComm_Init(const BleComm_Config_t * const p_cfg)
         s_cfg = *p_cfg;
     }
     s_last_rx_seq = 0xFFFFU;
-    s_tx_seq = 0U;
     s_rx_q_head = 0U;
     s_rx_q_tail = 0U;
     s_tx_q_head = 0U;
@@ -355,7 +375,6 @@ bool BleComm_SendPacket(const Ble_AdvancedThreatPacket_t * const p_pkt)
     s_tx_queue[s_tx_q_head] = *p_pkt;
     __dmb();
     s_tx_q_head = next_head;
-    s_tx_seq++;
     return true;
 }
 

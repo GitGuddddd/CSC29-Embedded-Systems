@@ -73,6 +73,7 @@ if (BUILD_FOR_PICO_TARGET)
     # Common Firmware Sources for Cane Node
     set(CANE_SOURCES
         src/app/Cane_Main.c
+        src/app/CaneMode/CaneMode.c
         src/app/FallDetection/FallDetection.c
         src/app/FallDetection/FallDetection_Lcfg.c
         src/app/GroundProjection/GroundProjection.c
@@ -95,6 +96,7 @@ if (BUILD_FOR_PICO_TARGET)
         src/services/BleComm/BleComm_Lcfg.c
         src/services/Watchdog/Watchdog.c
         src/services/Watchdog/Watchdog_Lcfg.c
+        src/services/ImuSupervisor/ImuSupervisor.c
         src/hal/Hal_I2c.c
         src/hal/Hal_Gpio.c
         src/hal/Hal_Pwm.c
@@ -152,6 +154,7 @@ if (BUILD_FOR_PICO_TARGET)
         src/services/BleComm/BleComm_Lcfg.c
         src/services/Watchdog/Watchdog.c
         src/services/Watchdog/Watchdog_Lcfg.c
+        src/services/ImuSupervisor/ImuSupervisor.c
         src/hal/Hal_I2c.c
         src/hal/Hal_Uart.c
         src/hal/Hal_Gpio.c
@@ -195,6 +198,35 @@ add_library(unity STATIC
 target_include_directories(unity PUBLIC soup/unity/src tests/harness)
 
 # ----------------- Unit Tests -----------------
+add_executable(test_CaneMode
+    tests/unit/test_CaneMode.c
+    src/app/CaneMode/CaneMode.c
+)
+target_link_libraries(test_CaneMode PRIVATE unity m)
+add_test(NAME Unit_CaneMode COMMAND test_CaneMode)
+
+add_executable(test_ImuSupervisor
+    tests/unit/test_ImuSupervisor.c
+    src/services/ImuSupervisor/ImuSupervisor.c
+)
+target_link_libraries(test_ImuSupervisor PRIVATE unity m)
+add_test(NAME Unit_ImuSupervisor COMMAND test_ImuSupervisor)
+
+add_executable(test_Mpu9250_Power
+    tests/unit/test_Mpu9250_Power.c
+    src/drivers/Mpu9250/Mpu9250.c
+)
+target_link_libraries(test_Mpu9250_Power PRIVATE unity)
+add_test(NAME Unit_Mpu9250_Power COMMAND test_Mpu9250_Power)
+
+add_executable(test_TouchSensor
+    tests/unit/test_TouchSensor.c
+    src/drivers/TouchSensor/TouchSensor.c
+    src/hal/Hal_Gpio.c
+)
+target_link_libraries(test_TouchSensor PRIVATE unity)
+add_test(NAME Unit_TouchSensor COMMAND test_TouchSensor)
+
 # 1. FallDetection Unit Test
 add_executable(test_FallDetection
     tests/unit/test_FallDetection.c
@@ -260,6 +292,21 @@ target_link_libraries(test_Ld2450_Parser PRIVATE unity)
 add_test(NAME Unit_Ld2450_Parser COMMAND test_Ld2450_Parser)
 
 # ----------------- Integration Tests -----------------
+add_executable(test_CaneRecoveryPipeline
+    tests/integration/test_CaneRecoveryPipeline.c
+    src/app/CaneMode/CaneMode.c
+    src/app/FallDetection/FallDetection.c
+    src/app/FallDetection/FallDetection_Lcfg.c
+    src/app/AlertManager/AlertManager.c
+    src/drivers/TouchSensor/TouchSensor.c
+    src/services/ImuSupervisor/ImuSupervisor.c
+    src/services/BleComm/BleComm.c
+    src/services/BleComm/BleComm_Lcfg.c
+    src/hal/Hal_Gpio.c
+)
+target_link_libraries(test_CaneRecoveryPipeline PRIVATE unity m)
+add_test(NAME Integration_CaneRecoveryPipeline COMMAND test_CaneRecoveryPipeline)
+
 # 1. Threat to Alert Pipeline
 add_executable(test_Threat_to_Alert_Pipeline
     tests/integration/test_Threat_to_Alert_Pipeline.c

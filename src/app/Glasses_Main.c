@@ -12,6 +12,8 @@
 #include "drivers/Ld2450/Ld2450.h"
 #include "drivers/Buzzer/Buzzer.h"
 #include "services/BleComm/BleComm.h"
+#include "services/BleComm/BleComm_Cfg.h"
+#include "services/ImuSupervisor/ImuSupervisor.h"
 #include "services/Watchdog/Watchdog.h"
 #include "services/Watchdog/Watchdog_Cfg.h"
 #include "app/FallDetection/FallDetection.h"
@@ -31,8 +33,8 @@ extern void vTaskCoreAffinitySet(TaskHandle_t xTask, UBaseType_t uxCoreAffinityM
 
 /*
  * \file Glasses_Main.c
- * \brief Smart Glasses FreeRTOS Dual-Core System Mode Manager (BswM / ComM)
- * Compliance: Barr-C:2018 / AUTOSAR Classical Mode Management / ISO 26262 ASIL-D
+ * \brief Glasses FreeRTOS SMP perception, supervised IMU and cane-status consumer
+ * Style: Barr-C:2018; head alarms remain offloaded to the cane.
  */
 
 static Sys_State_t s_glasses_mode = SYS_STATE_INIT;
@@ -42,7 +44,7 @@ static uint32_t GetCurrentTimeMs(void)
 #ifdef PICO_ON_DEVICE
     if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
     {
-        return (uint32_t)xTaskGetTickCount();
+        return (uint32_t)xTaskGetTickCount() * (uint32_t)portTICK_PERIOD_MS;
     }
     return to_ms_since_boot(get_absolute_time());
 #else
@@ -62,11 +64,18 @@ static void vTask_GlassesPerception(void *pvParameters)
     TickType_t xLastWakeTime = xTaskGetTickCount();
     const TickType_t xFrequency = pdMS_TO_TICKS(10); // 100 Hz loop
 
-    bool imu_ok = Mpu9250_Init(&Mpu9250_Config_Glasses);
-    uint32_t last_imu_retry_ms = 0U;
+    ImuSupervisor_t imu;
+    ImuSupervisor_Init(&imu, &Mpu9250_Config_Glasses,
+                        GLASSES_PIN_I2C1_SDA, GLASSES_PIN_I2C1_SCL, GetCurrentTimeMs());
+    bool sleep_requested = false;
+    uint32_t last_movement_ms = GetCurrentTimeMs();
+    uint32_t last_imu_sample_ms = last_movement_ms;
     uint32_t last_radar_ms = 0U;
     uint32_t last_btn_ms = 0U;
     uint32_t last_telemetry_ms = 0U;
+    uint8_t last_sent_flags = 0xFFU;
+    uint16_t buzzer_freq_hz = 0U;
+    bool ack_was_pressed = !Hal_Gpio_Read(GLASSES_PIN_ACK_BTN);
 
     bool head_fall_latched = false;
     uint8_t glasses_fall_count = 0U;
@@ -76,9 +85,11 @@ static void vTask_GlassesPerception(void *pvParameters)
 
     Grip_State_t cane_grip_telemetry = GRIP_STATE_UNKNOWN;
     uint32_t last_cane_pkt_ms = 0U;
-    uint32_t cane_release_start_ms = 0U;
+    bool cane_seen = false;
+    bool cane_standby = false;
+    uint8_t last_cane_flags = 0xFFU;
 
-    s_glasses_mode = SYS_STATE_ACTIVE;
+    s_glasses_mode = SYS_STATE_INIT;
     Sys_State_t prev_printed_mode = SYS_STATE_INIT;
 
     for (;;)
@@ -86,28 +97,14 @@ static void vTask_GlassesPerception(void *pvParameters)
         vTaskDelayUntil(&xLastWakeTime, xFrequency);
         uint32_t now_ms = GetCurrentTimeMs();
 
-        /* Auto-retry IMU initialization */
-        if (!imu_ok && ((now_ms - last_imu_retry_ms) >= 1000U))
-        {
-            last_imu_retry_ms = now_ms;
-            imu_ok = Mpu9250_Init(&Mpu9250_Config_Glasses);
-            if (imu_ok && (s_glasses_mode == SYS_STATE_HARD_FAULT))
-            {
-                s_glasses_mode = SYS_STATE_ACTIVE;
-            }
-            else if (!imu_ok)
-            {
-                s_glasses_mode = SYS_STATE_HARD_FAULT;
-            }
-        }
-
         /* Log System Mode State Transitions */
         if (s_glasses_mode != prev_printed_mode)
         {
             const char *mode_str = "ACTIVE";
             if (s_glasses_mode == SYS_STATE_WATCH)          mode_str = "WATCH (HAZARD)";
             if (s_glasses_mode == SYS_STATE_FALL_CONFIRMED) mode_str = "FALL_CONFIRMED";
-            if (s_glasses_mode == SYS_STATE_HARD_FAULT)     mode_str = "HARD_FAULT";
+            if (s_glasses_mode == SYS_STATE_INIT)          mode_str = "IMU STARTING";
+            if (s_glasses_mode == SYS_STATE_FAULT_DEGRADED) mode_str = "FAULT DEGRADED";
             if (s_glasses_mode == SYS_STATE_STANDBY)        mode_str = "STANDBY (DOCKED)";
             printf("[SYS MODE] Glasses State Transition -> %s\n", mode_str);
             prev_printed_mode = s_glasses_mode;
@@ -120,86 +117,82 @@ static void vTask_GlassesPerception(void *pvParameters)
             if (rx_pkt.device_id == 0x01U) /* 0x01 = Cane Node */
             {
                 last_cane_pkt_ms = now_ms;
-                Grip_State_t new_grip = ((rx_pkt.state_flags & BLE_FLAG_CANE_HELD) != 0U) ? GRIP_STATE_HELD : GRIP_STATE_RELEASED;
-                if ((cane_grip_telemetry != GRIP_STATE_RELEASED) && (new_grip == GRIP_STATE_RELEASED))
+                cane_seen = true;
+                cane_standby = ((rx_pkt.state_flags & BLE_FLAG_STANDBY) != 0U);
+                /* An override can park the cane with the touch pad still held. */
+                cane_grip_telemetry = !cane_standby && ((rx_pkt.state_flags & BLE_FLAG_CANE_HELD) != 0U) ?
+                                      GRIP_STATE_HELD : GRIP_STATE_RELEASED;
+                if (rx_pkt.state_flags != last_cane_flags)
                 {
-                    cane_release_start_ms = now_ms;
+                    printf("[CANE STATUS] fall=%u paused=%u standby=%u user_park=%u\n",
+                           (unsigned)((rx_pkt.state_flags & BLE_FLAG_FALL_ALERT) != 0U),
+                           (unsigned)((rx_pkt.state_flags & BLE_FLAG_ALARM_PAUSED) != 0U),
+                           (unsigned)cane_standby,
+                           (unsigned)((rx_pkt.state_flags & BLE_FLAG_PARKED_BY_USER) != 0U));
+                    last_cane_flags = rx_pkt.state_flags;
                 }
-                cane_grip_telemetry = new_grip;
             }
         }
 
-        if ((last_cane_pkt_ms == 0U) || ((now_ms - last_cane_pkt_ms) > 500U))
+        if (!cane_seen || ((now_ms - last_cane_pkt_ms) >= WATCHDOG_CFG_DEADMAN_TIMEOUT_MS))
         {
             cane_grip_telemetry = GRIP_STATE_UNKNOWN;
+            cane_standby = false;
         }
 
-        uint32_t last_movement_ms = now_ms;
+        /* The BLE receiver stays awake: a fresh cane wake or uncertain link restores
+         * head monitoring. The local acknowledgement button can also wake the glasses.
+         */
+        if (sleep_requested && (!cane_standby || !Hal_Gpio_Read(GLASSES_PIN_ACK_BTN) || head_fall_latched))
+        {
+            sleep_requested = false;
+            last_movement_ms = now_ms;
+            FallDetection_Reset();
+        }
+        ImuSupervisor_Step(&imu, sleep_requested, now_ms);
+        if (imu.fault)
+        {
+            sleep_requested = false;
+        }
 
         /* Sub-Task 1A: Head Fall Detection (100 Hz / Every Tick) */
-        if (s_glasses_mode != SYS_STATE_STANDBY)
+        bool new_head_fall = false;
+        if (imu.sample_valid)
         {
-            Imu_Sample_t imu_sample;
-            if (imu_ok && Mpu9250_ReadSample(&Mpu9250_Config_Glasses, &imu_sample))
+            if ((uint32_t)(now_ms - last_imu_sample_ms) > 50U)
             {
-                /* Evaluate Local Motion for Autonomous Standby (Glasses parked without Cane) */
-                float a_sq = (imu_sample.ax * imu_sample.ax) + (imu_sample.ay * imu_sample.ay) + (imu_sample.az * imu_sample.az);
-                float g_sq = (imu_sample.gx * imu_sample.gx) + (imu_sample.gy * imu_sample.gy) + (imu_sample.gz * imu_sample.gz);
-                
-                /* Perfect stillness (1.0g +/- 0.1g, < 5 deg/s) */
-                if ((a_sq < 0.81f) || (a_sq > 1.21f) || (g_sq > 25.0f))
-                {
-                    last_movement_ms = now_ms;
-                }
-
-                bool fall_detected = FallDetection_Step(&imu_sample, now_ms);
-                if (fall_detected)
-                {
-                    printf("[GLASSES ALERT] *** HEAD FALL DETECTED! ***\n");
-                    if (!head_fall_latched)
-                    {
-                        s_glasses_mode = SYS_STATE_FALL_CONFIRMED;
-                        head_fall_latched = true;
-                        glasses_fall_count = (uint8_t)((glasses_fall_count + 1U) & 0x0FU);
-                    }
-                    Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
-                }
+                last_movement_ms = now_ms;
             }
-            else
+            last_imu_sample_ms = now_ms;
+            const Imu_Sample_t * const p_s = &imu.sample;
+            float a_sq = (p_s->ax * p_s->ax) + (p_s->ay * p_s->ay) + (p_s->az * p_s->az);
+            float g_sq = (p_s->gx * p_s->gx) + (p_s->gy * p_s->gy) + (p_s->gz * p_s->gz);
+            if ((a_sq < 0.81f) || (a_sq > 1.21f) || (g_sq > 25.0f))
             {
-                imu_ok = false;
-                if ((now_ms % 1000U) < 500U)
-                {
-                    Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
-                }
-                else
-                {
-                    Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
-                }
+                last_movement_ms = now_ms;
+            }
+            if (!head_fall_latched && FallDetection_Step(&imu.sample, now_ms))
+            {
+                printf("[GLASSES ALERT] Head fall latched; offloading audio to cane.\n");
+                head_fall_latched = true;
+                new_head_fall = true;
+                glasses_fall_count = (uint8_t)((glasses_fall_count + 1U) & 0x0FU);
+                sleep_requested = false;
             }
         }
-
-        /* Check for Standby Mode (Linked to Cane's Grip Release Timer + No Motion) */
-        if (s_glasses_mode != SYS_STATE_STANDBY)
+        else if (imu.state != IMU_SUPERVISOR_ASLEEP)
         {
-            if (((cane_grip_telemetry == GRIP_STATE_RELEASED) && ((now_ms - cane_release_start_ms) > 60000U)) ||
-                ((now_ms - last_movement_ms) > 60000U))
-            {
-                printf("[STANDBY] Glasses parked (no motion or cane released). Entering Standby.\n");
-                s_glasses_mode = SYS_STATE_STANDBY;
-                BleComm_SetPowerMode(false);
-            }
+            last_movement_ms = now_ms;
+            FallDetection_Reset();
         }
-        else
+
+        /* Explicit cane parking plus local stillness, never an unresolved head fall. */
+        if (!sleep_requested && cane_standby && imu.sample_valid && !imu.fault &&
+            !head_fall_latched && (FallDetection_GetState() == FALL_STATE_IDLE) &&
+            ((uint32_t)(now_ms - last_movement_ms) >= 60000U))
         {
-            /* If the user moves the glasses (which re-triggers I2C IMU interrupts) or grips the cane */
-            /* In a true low-power mode, this would be an IMU Wake-On-Motion hardware interrupt. */
-            if ((cane_grip_telemetry == GRIP_STATE_HELD) || (cane_grip_telemetry == GRIP_STATE_UNKNOWN))
-            {
-                printf("[WAKEUP] Glasses waking up from Standby mode.\n");
-                s_glasses_mode = SYS_STATE_ACTIVE;
-                BleComm_SetPowerMode(true);
-            }
+            sleep_requested = true;
+            FallDetection_Reset();
         }
 
         /* Sub-Task 1B: Radar Parser & Threat Assessment (50 Hz / Every 20ms) */
@@ -210,38 +203,28 @@ static void vTask_GlassesPerception(void *pvParameters)
             uint32_t tail = Ld2450_Irq_GetTail();
             uint32_t head = Hal_Uart_GetDmaWriteIndex(256U);
 
-            if (head != tail)
+            uint32_t available = (head + 256U - tail) % 256U;
+            if (available >= 30U)
             {
                 Radar_Target_t targets[3];
                 uint8_t target_count = 0U;
 
-                if (Ld2450_ParseFrame(&p_circ_buf[tail], 30U, targets, &target_count))
+                uint8_t frame[30];
+                for (uint32_t i = 0U; i < sizeof(frame); ++i)
+                {
+                    frame[i] = p_circ_buf[(tail + i) % 256U];
+                }
+                if (Ld2450_ParseFrame(frame, sizeof(frame), targets, &target_count))
                 {
                     last_valid_radar_frame_ms = now_ms;
                     ThreatAssessment_ProcessTargets(targets, target_count, cane_grip_telemetry, &current_threat);
 
-                    if (current_threat.is_threat_active)
-                    {
-                        if (s_glasses_mode == SYS_STATE_ACTIVE)
-                        {
-                            s_glasses_mode = SYS_STATE_WATCH;
-                        }
-                        Alert_Output_t alert_out;
-                        AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, current_threat.nearest_distance_mm, now_ms, &alert_out);
-                        if (alert_out.buzzer_active)
-                        {
-                            Buzzer_PlayTone(alert_out.generated_freq_hz);
-                        }
-                    }
-                    else
-                    {
-                        if (s_glasses_mode == SYS_STATE_WATCH)
-                        {
-                            s_glasses_mode = SYS_STATE_ACTIVE;
-                        }
-                        Buzzer_Silence();
-                    }
                     Ld2450_Irq_SetTail((tail + 30U) % 256U);
+                }
+                else
+                {
+                    /* Resynchronize after dropped bytes or a partially overwritten frame. */
+                    Ld2450_Irq_SetTail((tail + 1U) % 256U);
                 }
             }
         }
@@ -250,19 +233,22 @@ static void vTask_GlassesPerception(void *pvParameters)
         if ((now_ms - last_btn_ms) >= 50U)
         {
             last_btn_ms = now_ms;
-            if (!Hal_Gpio_Read(GLASSES_PIN_ACK_BTN))
+            bool ack_pressed = !Hal_Gpio_Read(GLASSES_PIN_ACK_BTN);
+            if (ack_pressed && !ack_was_pressed && !new_head_fall)
             {
-                s_glasses_mode = SYS_STATE_ACTIVE;
                 head_fall_latched = false;
-                Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
+                sleep_requested = false;
+                last_movement_ms = now_ms;
+                FallDetection_Reset();
                 AlertManager_AcknowledgeReset();
             }
+            ack_was_pressed = ack_pressed;
 
             int ch = getchar_timeout_us(0);
             if ((ch == (int)'f') || (ch == (int)'F'))
             {
                 printf("[TEST TRIGGER] Simulating Confirmed Head Fall on Glasses!\n");
-                s_glasses_mode = SYS_STATE_FALL_CONFIRMED;
+                sleep_requested = false;
                 head_fall_latched = true;
                 glasses_fall_count = (uint8_t)((glasses_fall_count + 1U) & 0x0FU);
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, true);
@@ -270,32 +256,90 @@ static void vTask_GlassesPerception(void *pvParameters)
             else if ((ch == (int)'c') || (ch == (int)'C'))
             {
                 printf("[TEST TRIGGER] Clearing Head Fall on Glasses\n");
-                s_glasses_mode = SYS_STATE_ACTIVE;
+                sleep_requested = false;
                 head_fall_latched = false;
+                last_movement_ms = now_ms;
+                FallDetection_Reset();
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
                 AlertManager_AcknowledgeReset();
             }
         }
 
-        /* Sub-Task 1D: Adaptive Heartbeat Telemetry & BLE Advertisement */
-        /* Rate: 10 Hz (every 100ms) during active hazards/alarms. 2 Hz (every 500ms) when SAFE/IDLE. */
-        uint32_t active_telemetry_period_ms = 500U;
-        if ((s_glasses_mode == SYS_STATE_WATCH) || (s_glasses_mode == SYS_STATE_FALL_CONFIRMED) || (s_glasses_mode == SYS_STATE_HARD_FAULT))
+        bool radar_timeout = (now_ms - last_valid_radar_frame_ms) >= 500U;
+        bool standby = (imu.state == IMU_SUPERVISOR_ASLEEP) && sleep_requested;
+        bool obstacle = !standby && (cane_grip_telemetry != GRIP_STATE_RELEASED) &&
+                        current_threat.is_threat_active && !radar_timeout;
+        /* Derive the display mode once, so sensor recovery cannot overwrite a fall. */
+        if (head_fall_latched)
         {
-            active_telemetry_period_ms = 100U;
+            s_glasses_mode = SYS_STATE_FALL_CONFIRMED;
+        }
+        else if (standby)
+        {
+            s_glasses_mode = SYS_STATE_STANDBY;
+        }
+        else if (imu.fault)
+        {
+            s_glasses_mode = SYS_STATE_FAULT_DEGRADED;
+        }
+        else if (imu.state == IMU_SUPERVISOR_STARTING)
+        {
+            s_glasses_mode = SYS_STATE_INIT;
+        }
+        else
+        {
+            s_glasses_mode = obstacle ? SYS_STATE_WATCH : SYS_STATE_ACTIVE;
+        }
+        Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, head_fall_latched ||
+                       (imu.fault && ((now_ms % 1000U) < 500U)));
+
+        Alert_Type_t request = ALERT_NONE;
+        if (!head_fall_latched && !standby)
+        {
+            if (obstacle)
+            {
+                request = ALERT_OBSTACLE_PROXIMITY;
+            }
+            else if (imu.fault || radar_timeout)
+            {
+                request = ALERT_SENSOR_FAULT;
+            }
+        }
+        Alert_Output_t alert_out;
+        AlertManager_Arbitrate(request, current_threat.nearest_distance_mm, now_ms, &alert_out);
+        uint16_t next_freq_hz = alert_out.buzzer_active ? alert_out.generated_freq_hz : 0U;
+        if (next_freq_hz != buzzer_freq_hz)
+        {
+            Buzzer_PlayTone(next_freq_hz);
+            buzzer_freq_hz = next_freq_hz;
         }
 
-        if ((now_ms - last_telemetry_ms) >= active_telemetry_period_ms)
+        uint32_t active_telemetry_period_ms = BLECOMM_CFG_TELEMETRY_IDLE_MS;
+        if (obstacle || head_fall_latched || imu.fault)
         {
-            last_telemetry_ms = now_ms;
-            bool radar_timeout = (now_ms - last_valid_radar_frame_ms) > 500U;
+            active_telemetry_period_ms = BLECOMM_CFG_TELEMETRY_ALERT_MS;
+        }
 
-            uint8_t flags = 0;
-            if (head_fall_latched)                                 flags |= BLE_FLAG_FALL_ALERT;
-            if (radar_timeout)                                     flags |= BLE_FLAG_SENSOR_FAULT;
-            if (current_threat.is_threat_active && !radar_timeout) flags |= BLE_FLAG_OBSTACLE_ACTIVE;
-
-            uint16_t ttc = (radar_timeout || (current_threat.time_to_collision_ms == UINT16_MAX)) ?
+        uint8_t flags = 0U;
+        if (head_fall_latched)
+        {
+            flags |= BLE_FLAG_FALL_ALERT;
+        }
+        if (radar_timeout || imu.fault)
+        {
+            flags |= BLE_FLAG_SENSOR_FAULT;
+        }
+        if (obstacle)
+        {
+            flags |= BLE_FLAG_OBSTACLE_ACTIVE;
+        }
+        if (standby)
+        {
+            flags |= BLE_FLAG_STANDBY;
+        }
+        if ((flags != last_sent_flags) || ((now_ms - last_telemetry_ms) >= active_telemetry_period_ms))
+        {
+            uint16_t ttc = (radar_timeout || standby || (current_threat.time_to_collision_ms == UINT16_MAX)) ?
                             0xFFFFU : current_threat.time_to_collision_ms;
 
             Ble_AdvancedThreatPacket_t heartbeat_pkt = {
@@ -307,12 +351,16 @@ static void vTask_GlassesPerception(void *pvParameters)
                 .rolling_fall_seq = (uint8_t)(glasses_fall_count & 0x0FU),
                 .seq_num = glasses_tx_seq,
                 .state_flags = flags,
-                .nearest_dist_mm = radar_timeout ? 0xFFFFU : current_threat.nearest_distance_mm,
+                .nearest_dist_mm = (radar_timeout || standby) ? 0xFFFFU : current_threat.nearest_distance_mm,
                 .closing_speed_cms = 0,
                 .ttc_ms = ttc
             };
-            glasses_tx_seq++;
-            BleComm_SendPacket(&heartbeat_pkt);
+            if (BleComm_SendPacket(&heartbeat_pkt))
+            {
+                glasses_tx_seq++;
+                last_telemetry_ms = now_ms;
+                last_sent_flags = flags;
+            }
         }
 
         /* Token-Passing: Notify Core 1 that Core 0 safety loop is alive */
@@ -323,7 +371,7 @@ static void vTask_GlassesPerception(void *pvParameters)
 /*
  * =========================================================================
  * CORE 1: TASK 2 - Dedicated Glasses BLE Wireless Radio Server Task
- * Dedicated execution on Core 1 guarantees zero SPI radio jitter on Core 0!
+ * Radio work runs on Core 1; shared-bus and scheduling interference still apply.
  * =========================================================================
  */
 static void vTask_GlassesBleRadioServer(void *pvParameters)
@@ -360,12 +408,10 @@ int main(void)
     Ld2450_Init(&Ld2450_Config_Glasses);
     BleComm_Init(&BleComm_Config_Glasses);
 
-    bool imu_ok = Mpu9250_Init(&Mpu9250_Config_Glasses);
-    printf("[IMU INIT] Glasses MPU6500 Status -> %s\n", imu_ok ? "OK" : "FAILED (will retry)");
-
     FallDetection_Init(&FallConfig_Head);
     ThreatAssessment_Init();
     AlertManager_Init();
+    Watchdog_Init(&Watchdog_Config_Default);
 
     printf("\n==================================================\n");
     printf("  EchoGuard Glasses FreeRTOS Dual-Core System     \n");

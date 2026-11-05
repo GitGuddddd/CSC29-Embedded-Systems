@@ -157,11 +157,60 @@ void test_BleComm_WrapSafe_RollingFallCount(void)
     TEST_ASSERT_FALSE(BleComm_CheckNewFall(14U, 1U));
 }
 
+void test_PeerFall_IsDetectedOnFirstContact_AndNotReplayedAfterAcknowledgement(void)
+{
+    BleComm_PeerFall_t tracker = {0};
+    Ble_AdvancedThreatPacket_t packet = {
+        .rolling_fall_seq = 15U,
+        .state_flags = BLE_FLAG_FALL_ALERT
+    };
+    TEST_ASSERT_TRUE(BleComm_TrackPeerFall(&tracker, &packet));
+    TEST_ASSERT_FALSE(BleComm_TrackPeerFall(&tracker, &packet));
+    packet.state_flags |= BLE_FLAG_ALARM_PAUSED;
+    TEST_ASSERT_FALSE(BleComm_TrackPeerFall(&tracker, &packet));
+    packet.state_flags = BLE_FLAG_FALL_ALERT;
+    TEST_ASSERT_FALSE(BleComm_TrackPeerFall(&tracker, &packet));
+    /* Stale incident counters must not move the baseline backwards. */
+    packet.rolling_fall_seq = 14U;
+    TEST_ASSERT_FALSE(BleComm_TrackPeerFall(&tracker, &packet));
+    packet.rolling_fall_seq = 15U;
+    TEST_ASSERT_FALSE(BleComm_TrackPeerFall(&tracker, &packet));
+    packet.rolling_fall_seq = 0U;
+    TEST_ASSERT_TRUE(BleComm_TrackPeerFall(&tracker, &packet));
+    packet.state_flags = 0U;
+    TEST_ASSERT_FALSE(BleComm_TrackPeerFall(&tracker, &packet));
+    packet.state_flags = BLE_FLAG_FALL_ALERT;
+    TEST_ASSERT_TRUE(BleComm_TrackPeerFall(&tracker, &packet));
+}
+
+void test_PausedAndParkedStatus_RoundTripsWithoutChangingPacketSize(void)
+{
+    Ble_AdvancedThreatPacket_t packet = {
+        .node_type = BLE_NODE_TYPE_CANE,
+        .pair_id = BLE_DEFAULT_PAIR_ID,
+        .state_flags = BLE_FLAG_FALL_ALERT | BLE_FLAG_ALARM_PAUSED,
+        .nearest_dist_mm = 0xFFFFU,
+        .ttc_ms = 0xFFFFU
+    };
+    Ble_RawPacket_t raw;
+    Ble_AdvancedThreatPacket_t decoded;
+    BleComm_Encode(&packet, &raw);
+    TEST_ASSERT_TRUE(BleComm_Decode(&raw, BLE_DEFAULT_PAIR_ID, &decoded));
+    TEST_ASSERT_BITS_HIGH(BLE_FLAG_FALL_ALERT | BLE_FLAG_ALARM_PAUSED, decoded.state_flags);
+    packet.state_flags = BLE_FLAG_STANDBY | BLE_FLAG_PARKED_BY_USER | BLE_FLAG_CANE_HELD;
+    BleComm_Encode(&packet, &raw);
+    TEST_ASSERT_TRUE(BleComm_Decode(&raw, BLE_DEFAULT_PAIR_ID, &decoded));
+    TEST_ASSERT_EQUAL_HEX8(packet.state_flags, decoded.state_flags);
+    TEST_ASSERT_EQUAL_UINT32(6U, sizeof(raw));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_Integration_FallToBleDispatch);
     RUN_TEST(test_BleComm_EncodeDecode_6ByteRawPacket);
     RUN_TEST(test_BleComm_WrapSafe_RollingFallCount);
+    RUN_TEST(test_PeerFall_IsDetectedOnFirstContact_AndNotReplayedAfterAcknowledgement);
+    RUN_TEST(test_PausedAndParkedStatus_RoundTripsWithoutChangingPacketSize);
     return UNITY_END();
 }

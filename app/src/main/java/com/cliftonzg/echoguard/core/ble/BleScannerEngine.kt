@@ -1,13 +1,16 @@
 package com.cliftonzg.echoguard.core.ble
 
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanRecord
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
+import android.os.SystemClock
 import android.util.Log
 import com.cliftonzg.echoguard.core.ble.model.DiscoveredBleDevice
-import com.cliftonzg.echoguard.core.ble.model.LinkState
+import com.cliftonzg.echoguard.core.ble.model.MonitoringState
 import com.cliftonzg.echoguard.core.ble.model.SystemPacket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,264 +22,220 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.time.Duration.Companion.milliseconds
 
 @Singleton
 class BleScannerEngine @Inject constructor(
     bluetoothAdapter: BluetoothAdapter?,
 ) {
     private val adapter = bluetoothAdapter
-    private val scanner get() = adapter?.bluetoothLeScanner
-
+    private val lock = Any()
     private val engineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var watchdogJob: Job? = null
-
-    private val _packets = MutableStateFlow<SystemPacket?>(null)
-    val packets = _packets.asStateFlow()
-
-    private val _canePacket = MutableStateFlow<SystemPacket?>(null)
-    val canePacket = _canePacket.asStateFlow()
-
-    private val _glassesPacket = MutableStateFlow<SystemPacket?>(null)
-    val glassesPacket = _glassesPacket.asStateFlow()
-
-    private val _isScanning = MutableStateFlow(value = false)
-    val isScanning = _isScanning.asStateFlow()
-
-    private val _linkState = MutableStateFlow(LinkState.DISCONNECTED)
-    val linkState = _linkState.asStateFlow()
-
+    private val session = TelemetrySession()
+    private val _monitoringState = MutableStateFlow(MonitoringState())
+    val monitoringState = _monitoringState.asStateFlow()
     private val _discoveredDevices = MutableStateFlow<List<DiscoveredBleDevice>>(emptyList())
     val discoveredDevices = _discoveredDevices.asStateFlow()
-
-    private val _selectedDevice = MutableStateFlow<DiscoveredBleDevice?>(null)
-    val selectedDevice = _selectedDevice.asStateFlow()
-
+    private val _scanError = MutableStateFlow<String?>(null)
+    val scanError = _scanError.asStateFlow()
     private val deviceMap = mutableMapOf<String, DiscoveredBleDevice>()
+    private var scanGeneration = 0L
+    private var scanRequested = false
+    private var activeScanner: BluetoothLeScanner? = null
+    private var activeCallback: ScanCallback? = null
 
-    private var lastSeqNum: Int = -1
-    @Volatile private var lastPacketTimeMs: Long = 0L
-
-    private val scanCallback = object : ScanCallback() {
+    private fun callbackFor(generation: Long) = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            val record = result.scanRecord ?: return
-            val address = result.device.address ?: return
-            val rawName = try {
-                result.device.name
-            } catch (_: SecurityException) {
-                null
-            } ?: record.deviceName
+            handleResult(generation, result)
+        }
 
-            val data = extractManufacturerData(record)
-            val packet = data?.let { SystemPacket.parse(it) }
-
-            // Strict EchoGuard Verification: Must have valid packet (preamble 0xAA) or explicit EchoGuard name
-            val isEchoGuard = (packet != null && packet.isValid()) || 
-                              (rawName?.contains("EchoGuard", ignoreCase = true) == true)
-
-            // Accurate Friendly Naming
-            val name = when {
-                packet?.deviceId == 0x01 -> "EchoGuard Smart Cane"
-                packet?.deviceId == 0x02 -> "EchoGuard Glasses Node"
-                !rawName.isNullOrBlank() && rawName != "null" -> rawName
-                packet != null && isEchoGuard -> "EchoGuard Node"
-                else -> "Unknown Device ($address)"
-            }
-
-            val now = System.currentTimeMillis()
-            val device = DiscoveredBleDevice(
-                name = name,
-                address = address,
-                rssi = result.rssi,
-                isEchoGuardNode = isEchoGuard,
-                lastSeenMs = now,
-            )
-
-            synchronized(deviceMap) {
-                deviceMap[address] = device
-                _discoveredDevices.value = deviceMap.values.sortedByDescending { it.isEchoGuardNode }
-            }
-
-            if (packet != null && packet.isValid()) {
-                if (packet.deviceId == 0x01) {
-                    _canePacket.value = packet
-                } else if (packet.deviceId == 0x02) {
-                    _glassesPacket.value = packet
-                }
-
-                // When NO device is paired/selected, allow telemetry to update if an EchoGuard node is active
-                val currentSelected = _selectedDevice.value
-                if (currentSelected != null && currentSelected.address != address) {
-                    return
-                }
-
-                val isNewer = packet.isNewerThan(lastSeqNum)
-                Log.d("EchoGuardBLE", "ScanResult from device ($address): seqNum=${packet.seqNum}, devId=0x%02X, isNewer=$isNewer".format(packet.deviceId))
-                if (isNewer) {
-                    lastSeqNum = packet.seqNum
-                    lastPacketTimeMs = now
-                    _packets.value = packet
-                    if (_linkState.value != LinkState.ACTIVE) {
-                        Log.i("EchoGuardBLE", "LinkState transitioned to ACTIVE for $address")
-                        _linkState.value = LinkState.ACTIVE
-                    }
-                }
-            }
+        override fun onBatchScanResults(results: MutableList<ScanResult>) {
+            results.sortedBy { it.timestampNanos }.forEach { handleResult(generation, it) }
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Log.e("EchoGuardBLE", "BLE Scan Failed with errorCode=$errorCode")
-            _isScanning.value = false
-            _linkState.value = LinkState.DISCONNECTED
-            stopWatchdog()
+            synchronized(lock) {
+                if (generation != scanGeneration) return
+                activeScanner = null
+                activeCallback = null
+                watchdogJob?.cancel()
+                session.setScanning(false, SystemClock.elapsedRealtime())
+                publishLocked()
+                _scanError.value = "Bluetooth scan failed (code $errorCode). Try starting the scan again."
+            }
+            Log.w("EchoGuardBLE", "Scan failed: $errorCode")
+        }
+    }
+
+    private fun handleResult(generation: Long, result: ScanResult) {
+        val now = SystemClock.elapsedRealtime()
+        val capturedMs = result.timestampNanos / 1_000_000L
+        if (capturedMs > now || now - capturedMs >= DISCOVERY_TIMEOUT_MS) return
+        val record = result.scanRecord ?: return
+        val data = extractManufacturerData(record) ?: return
+        val packet = SystemPacket.parse(data, capturedMs) ?: return
+        val address = try {
+            result.device.address
+        } catch (_: SecurityException) {
+            return
+        }
+        val device = DiscoveredBleDevice(
+            name = "EchoGuard ${packet.nodeType.label}",
+            address = address,
+            rssi = result.rssi,
+            isEchoGuardNode = true,
+            lastSeenMs = capturedMs,
+            nodeType = packet.nodeType,
+            pairId = packet.pairId.takeIf { packet.compactFormat },
+        )
+        synchronized(lock) {
+            if (generation != scanGeneration || !_monitoringState.value.isScanning) return
+            if (capturedMs >= (deviceMap[address]?.lastSeenMs ?: -1L)) {
+                deviceMap[address] = device
+                publishDiscoveryLocked()
+            }
+            if (session.receive(address, packet, now)) publishLocked(now)
         }
     }
 
     fun selectDevice(device: DiscoveredBleDevice) {
-        Log.i("EchoGuardBLE", "selectDevice: address=${device.address}, name=${device.name}")
-        _selectedDevice.value = device
-        lastSeqNum = -1
-        lastPacketTimeMs = System.currentTimeMillis()
-        _linkState.value = LinkState.ACTIVE
+        synchronized(lock) {
+            session.select(device, SystemClock.elapsedRealtime())
+            publishLocked()
+        }
     }
 
     fun disconnectSelectedDevice() {
-        Log.i("EchoGuardBLE", "disconnectSelectedDevice")
-        _selectedDevice.value = null
-        _packets.value = null
-        _linkState.value = LinkState.DISCONNECTED
+        synchronized(lock) {
+            session.select(null, SystemClock.elapsedRealtime())
+            publishLocked()
+        }
     }
 
     private fun extractManufacturerData(record: ScanRecord): ByteArray? {
-        val sparse = record.manufacturerSpecificData
-        if (sparse != null && sparse.size() > 0) {
-            // Strictly match EchoGuard Company ID 0x0029 or 0x2900
-            val known = sparse[0x0029] ?: sparse[0x2900]
-            if (known != null) {
-                return known
-            }
-        }
-
-        val raw = record.bytes ?: return null
-        var index = 0
-        while (index < (raw.size - 2)) {
-            val length = raw[index].toInt() and 0xFF
-            if (length == 0 || index + length >= raw.size) break
-            val type = raw[index + 1].toInt() and 0xFF
-            if (type == 0xFF && length >= 9) {
-                val companyId = (raw[index + 2].toInt() and 0xFF) or ((raw[index + 3].toInt() and 0xFF) shl 8)
-                if (companyId == 0x0029 || companyId == 0x2900) {
-                    val dataLen = length - 3
-                    val data = ByteArray(dataLen)
-                    System.arraycopy(raw, index + 4, data, 0, dataLen)
-                    return data
-                }
-            }
-            index += length + 1
-        }
-        return null
+        return record.getManufacturerSpecificData(ManufacturerData.COMPANY_ID)
+            ?: record.getManufacturerSpecificData(ManufacturerData.LEGACY_COMPANY_ID)
+            ?: record.bytes?.let(ManufacturerData::extract)
     }
 
     fun startScanning(): Boolean {
-        Log.i("EchoGuardBLE", "startScanning requested")
-        if (adapter == null || !adapter.isEnabled) {
-            Log.e("EchoGuardBLE", "BluetoothAdapter is disabled or null!")
-            _isScanning.value = false
-            _linkState.value = LinkState.DISCONNECTED
-            return false
+        synchronized(lock) {
+            scanRequested = true
+            if (_monitoringState.value.isScanning) return true
         }
-
-        if (_isScanning.value) {
-            Log.d("EchoGuardBLE", "Already scanning")
-            return true
-        }
-
-        val currentScanner = scanner ?: return false
-
-        synchronized(deviceMap) {
-            deviceMap.clear()
-            _discoveredDevices.value = emptyList()
-        }
-
         return try {
+            if (adapter == null || !adapter.isEnabled) {
+                _scanError.value = "Bluetooth is unavailable or turned off."
+                return false
+            }
+            val currentScanner = adapter.bluetoothLeScanner ?: run {
+                _scanError.value = "Bluetooth scanning is unavailable."
+                return false
+            }
             val settings = ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                .setReportDelay(0L)
                 .build()
-
-            try {
-                currentScanner.startScan(null, settings, scanCallback)
-            } catch (_: SecurityException) {
-                Log.e("EchoGuardBLE", "SecurityException during startScan - Bluetooth permission missing!")
+            val filters = listOf(ManufacturerData.COMPANY_ID, ManufacturerData.LEGACY_COMPANY_ID).map { id ->
+                ScanFilter.Builder().setManufacturerData(id, byteArrayOf()).build()
             }
-            _isScanning.value = true
-            _linkState.value = if (_selectedDevice.value != null) LinkState.ACTIVE else LinkState.DISCONNECTED
-            Log.i("EchoGuardBLE", "BLE Low-Latency Scan started successfully")
-            startWatchdog()
-            true
-        } catch (e: Exception) {
-            Log.e("EchoGuardBLE", "Exception during startScan: ${e.message}")
-            _isScanning.value = false
-            _linkState.value = LinkState.DISCONNECTED
+            val callback: ScanCallback
+            val generation: Long
+            synchronized(lock) {
+                generation = ++scanGeneration
+                callback = callbackFor(generation)
+                activeScanner = currentScanner
+                activeCallback = callback
+                session.setScanning(true, SystemClock.elapsedRealtime())
+                _scanError.value = null
+                deviceMap.clear()
+                publishDiscoveryLocked()
+                publishLocked()
+            }
+            currentScanner.startScan(filters, settings, callback)
+            synchronized(lock) {
+                if (generation == scanGeneration && _monitoringState.value.isScanning) {
+                    startWatchdogLocked(generation)
+                }
+                _monitoringState.value.isScanning
+            }
+        } catch (_: SecurityException) {
+            stopScanningInternal(clearRequest = false)
+            _scanError.value = "Bluetooth permission is required to scan."
+            false
+        } catch (error: RuntimeException) {
+            stopScanningInternal(clearRequest = false)
+            Log.w("EchoGuardBLE", "Could not start scan", error)
+            _scanError.value = "Could not start Bluetooth scanning. Try again."
             false
         }
     }
 
-    fun stopScanning() {
-        Log.i("EchoGuardBLE", "stopScanning requested")
-        val currentScanner = scanner ?: return
-        try {
-            currentScanner.stopScan(scanCallback)
-        } catch (e: Exception) {
-            Log.w("EchoGuardBLE", "Exception during stopScan: ${e.message}")
-        } finally {
-            _isScanning.value = false
-            if (_selectedDevice.value == null) {
-                _linkState.value = LinkState.DISCONNECTED
-            }
-            stopWatchdog()
+    fun stopScanning() = stopScanningInternal(clearRequest = true)
+
+    fun onBluetoothStateChanged(enabled: Boolean) {
+        if (enabled) {
+            _scanError.value = null
+            if (synchronized(lock) { scanRequested }) startScanning()
+        } else {
+            stopScanningInternal(clearRequest = false)
+            _scanError.value = "Bluetooth is turned off."
         }
     }
 
-    private fun startWatchdog() {
-        stopWatchdog()
-        lastPacketTimeMs = System.currentTimeMillis()
+    private fun stopScanningInternal(clearRequest: Boolean) {
+        val currentScanner: BluetoothLeScanner?
+        val callback: ScanCallback?
+        synchronized(lock) {
+            if (clearRequest) scanRequested = false
+            ++scanGeneration // Ignore callbacks/batches from the previous native scan.
+            currentScanner = activeScanner
+            callback = activeCallback
+            activeScanner = null
+            activeCallback = null
+            watchdogJob?.cancel()
+            watchdogJob = null
+            session.setScanning(false, SystemClock.elapsedRealtime())
+            publishLocked()
+        }
+        try {
+            if (callback != null) currentScanner?.stopScan(callback)
+        } catch (_: SecurityException) {
+            // Runtime Bluetooth permission can be revoked while a scan is active.
+        } catch (error: RuntimeException) {
+            Log.w("EchoGuardBLE", "Native scan already unavailable", error)
+        }
+    }
+
+    private fun startWatchdogLocked(generation: Long) {
+        watchdogJob?.cancel()
         watchdogJob = engineScope.launch {
             while (true) {
-                delay(500.milliseconds)
-                val now = System.currentTimeMillis()
-
-                // Prune stale devices from discovery list if last seen > 3000 ms
-                synchronized(deviceMap) {
-                    val initialSize = deviceMap.size
-                    deviceMap.entries.removeAll { (_, dev) ->
-                        (now - dev.lastSeenMs) > 3000L
+                delay(100L)
+                synchronized(lock) {
+                    if (generation != scanGeneration) return@launch
+                    val now = SystemClock.elapsedRealtime()
+                    if (deviceMap.entries.removeAll { now - it.value.lastSeenMs >= DISCOVERY_TIMEOUT_MS }) {
+                        publishDiscoveryLocked()
                     }
-                    if (deviceMap.size != initialSize) {
-                        _discoveredDevices.value = deviceMap.values.sortedByDescending { it.isEchoGuardNode }
-                    }
-                }
-
-                val currentSelected = _selectedDevice.value
-                if (currentSelected == null) {
-                    if (_linkState.value != LinkState.DISCONNECTED) {
-                        _linkState.value = LinkState.DISCONNECTED
-                    }
-                } else if (_isScanning.value) {
-                    val elapsed = now - lastPacketTimeMs
-                    if (elapsed >= 500 && lastPacketTimeMs > 0) {
-                        if (_linkState.value != LinkState.LINK_LOSS) {
-                            Log.w("EchoGuardBLE", "Watchdog: LINK_LOSS triggered for selected device ${currentSelected.address}! Elapsed=$elapsed ms")
-                            _linkState.value = LinkState.LINK_LOSS
-                        }
-                    }
+                    publishLocked(now)
                 }
             }
         }
     }
 
-    private fun stopWatchdog() {
-        watchdogJob?.cancel()
-        watchdogJob = null
+    private fun publishLocked(nowMs: Long = SystemClock.elapsedRealtime()) {
+        _monitoringState.value = session.snapshot(nowMs)
+    }
+
+    private fun publishDiscoveryLocked() {
+        _discoveredDevices.value = deviceMap.values.sortedWith(
+            compareBy<DiscoveredBleDevice> { it.pairId ?: Int.MAX_VALUE }.thenBy { it.name },
+        )
+    }
+
+    companion object {
+        private const val DISCOVERY_TIMEOUT_MS = 3_000L
     }
 }

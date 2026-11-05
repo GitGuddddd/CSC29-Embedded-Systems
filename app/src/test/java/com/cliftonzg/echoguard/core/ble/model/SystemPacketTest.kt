@@ -179,4 +179,61 @@ class SystemPacketTest {
         val packetWrap3Bit = SystemPacket(magic = 0xAA, seqNum = 0, radarDistMm = 500, checksum = 0, compactFormat = true)
         assertTrue(packetWrap3Bit.isNewerThan(7))
     }
+
+    private fun compact(flags: Int, distanceRaw: Int = 0xFFF, cane: Boolean = true): SystemPacket {
+        val bytes = byteArrayOf(
+            0xA1.toByte(), (if (cane) 0xB5 else 0x35).toByte(), flags.toByte(),
+            distanceRaw.toByte(), (((distanceRaw shr 8) shl 4) or 0x0F).toByte(), 0xFF.toByte(),
+        )
+        return requireNotNull(SystemPacket.parse(bytes, 123L))
+    }
+
+    @Test fun `firmware paused packet retains incident and acknowledgement metadata`() {
+        val packet = compact(0x19) // FALL + PAUSED + HELD
+        assertTrue(packet.hasLatchedFall)
+        assertTrue(packet.isAlarmPaused)
+        assertTrue(packet.isCaneHeld)
+        assertFalse(packet.isStandby)
+        assertEquals(TelemetryStatus.FALL_PAUSED, packet.status)
+        assertEquals(ThreatLevel.CRITICAL, packet.threatLevel)
+        assertEquals(5, packet.rollingFallSeq)
+        assertEquals(123L, packet.receivedAt)
+    }
+
+    @Test fun `standby overrides held grip and absent range without hiding fault flag`() {
+        val packet = compact(0x72) // SENSOR_FAULT + HELD + STANDBY + PARKED_BY_USER
+        assertTrue(packet.isStandby)
+        assertTrue(packet.isParkedByUser)
+        assertTrue(packet.isSensorFault)
+        assertEquals(TelemetryStatus.STANDBY, packet.status)
+        assertEquals(ThreatLevel.UNKNOWN, packet.threatLevel)
+        assertEquals(-1, packet.radarDistMm)
+    }
+
+    @Test fun `modern cane uses calibrated hazard flags instead of a hardcoded ground distance`() {
+        assertEquals(ThreatLevel.SAFE, compact(0x10, 1000).threatLevel) // 2000 mm ground baseline
+        assertEquals(TelemetryStatus.GROUND_HAZARD, compact(0x14, 100).status) // Explicit hazard at 200 mm
+        assertEquals(TelemetryStatus.GRIP_RELEASED, compact(0x00).status)
+        assertEquals(TelemetryStatus.NO_READING, compact(0x10).status)
+    }
+
+    @Test fun `glasses respect firmware threat filtering and do not invent compact speed`() {
+        assertEquals(ThreatLevel.SAFE, compact(0x00, 200, cane = false).threatLevel)
+        assertEquals(ThreatLevel.CRITICAL, compact(0x04, 200, cane = false).threatLevel)
+        assertFalse(compact(0x00, cane = false).hasClosingSpeed)
+        assertEquals(TelemetryStatus.SENSOR_FAULT, compact(0x02, cane = false).status)
+    }
+
+    @Test fun `legacy advanced sentinels and missing TTC are unavailable rather than zero`() {
+        val bytes = byteArrayOf(0xAA.toByte(), 2, 1, 0, 0, 0xFF.toByte(), 0xFF.toByte(), 0, 0, 0xFF.toByte(), 0xFF.toByte())
+        val full = requireNotNull(SystemPacket.parse(bytes))
+        assertEquals(-1, full.radarDistMm)
+        assertEquals(-1, full.ttcMs)
+        assertEquals(-1, SystemPacket.parse(bytes.copyOf(10))?.ttcMs)
+    }
+
+    @Test fun `unsupported payload sizes do not fall through to legacy checksum parsing`() {
+        val validBasic = byteArrayOf(0xAA.toByte(), 1, 2, 3, (0xAA xor 1 xor 2 xor 3).toByte())
+        for (length in listOf(7, 8, 9, 12, 20)) assertNull(SystemPacket.parse(validBasic.copyOf(length)))
+    }
 }

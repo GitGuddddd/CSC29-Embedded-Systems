@@ -12,8 +12,8 @@ class BleViewModelTest {
         val scannerEngine = BleScannerEngine(null)
         val viewModel = BleViewModel(scannerEngine)
 
-        assertNull(viewModel.latestPacket.value)
-        assertFalse(viewModel.isScanning.value)
+        assertNull(viewModel.monitoringState.value.latestPacket)
+        assertFalse(viewModel.monitoringState.value.isScanning)
     }
 
     @Test
@@ -23,6 +23,6 @@ class BleViewModelTest {
 
         val started = viewModel.startScan()
         assertFalse(started)
-        assertFalse(viewModel.isScanning.value)
+        assertFalse(viewModel.monitoringState.value.isScanning)
     }
 }

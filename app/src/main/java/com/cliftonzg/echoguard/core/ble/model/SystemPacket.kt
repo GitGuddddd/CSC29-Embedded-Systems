@@ -1,12 +1,30 @@
 package com.cliftonzg.echoguard.core.ble.model
 
-import android.util.Log
-
 enum class ThreatLevel {
-    CRITICAL, // < 800 mm or Sensor Fault / Fall Alert
-    WARNING,  // 800 mm .. 1500 mm
-    SAFE,     // > 1500 mm
+    CRITICAL,
+    WARNING,
+    SAFE,
     UNKNOWN
+}
+
+enum class NodeType(val deviceId: Int, val label: String) {
+    CANE(0x01, "Smart Cane"),
+    GLASSES(0x02, "Smart Glasses"),
+    LEGACY(0x00, "Legacy Node"),
+}
+
+/** Observable telemetry states, not the complete firmware Sys_State_t (which is not transmitted). */
+enum class TelemetryStatus {
+    FALL_ALARM,
+    FALL_PAUSED,
+    STANDBY,
+    SENSOR_FAULT,
+    GROUND_HAZARD,
+    OBSTACLE_CRITICAL,
+    OBSTACLE_WARNING,
+    GRIP_RELEASED,
+    MONITORING,
+    NO_READING,
 }
 
 /**
@@ -22,24 +40,51 @@ data class SystemPacket(
     val deviceId: Int = 0,
     val stateFlags: Int = 0,
     val closingSpeedCms: Int = 0,
-    val ttcMs: Int = 0,
+    val ttcMs: Int = -1,
     val isAdvanced: Boolean = false,
     val compactFormat: Boolean = false,
     val rollingFallSeq: Int = 0,
     val pairId: Int = 0,
-    val receivedAt: Long = System.currentTimeMillis(),
+    // Monotonic capture time: ScanResult.timestampNanos / 1_000_000, not wall-clock time.
+    val receivedAt: Long = 0L,
 ) {
     val isFallAlert: Boolean get() = (stateFlags and FLAG_FALL_ALERT) != 0
-    val isRadarFault: Boolean get() = (stateFlags and FLAG_RADAR_FAULT) != 0
+    val isAlarmPaused: Boolean get() = (stateFlags and FLAG_ALARM_PAUSED) != 0
+    val hasLatchedFall: Boolean get() = isFallAlert || isAlarmPaused
+    val isSensorFault: Boolean get() = (stateFlags and FLAG_SENSOR_FAULT) != 0
+    val isRadarFault: Boolean get() = isSensorFault // Compatibility with legacy callers.
     val isObstacleActive: Boolean get() = (stateFlags and FLAG_OBSTACLE_ACTIVE) != 0
+    val isStandby: Boolean get() = (stateFlags and FLAG_STANDBY) != 0
+    val isParkedByUser: Boolean get() = (stateFlags and FLAG_PARKED_BY_USER) != 0
+    val hasGripTelemetry: Boolean get() = compactFormat && nodeType == NodeType.CANE
+    val isCaneHeld: Boolean get() = nodeType == NodeType.CANE && (stateFlags and FLAG_CANE_HELD) != 0
+    val hasDistance: Boolean get() = radarDistMm >= 0
+    val hasClosingSpeed: Boolean get() = isAdvanced && !compactFormat
+    val nodeType: NodeType
+        get() = when (deviceId) {
+            0x01 -> NodeType.CANE
+            0x02 -> NodeType.GLASSES
+            else -> NodeType.LEGACY
+        }
 
     val threatLevel: ThreatLevel
         get() = when {
-            isFallAlert || isRadarFault -> ThreatLevel.CRITICAL
+            hasLatchedFall -> ThreatLevel.CRITICAL
+            isStandby || isSensorFault -> ThreatLevel.UNKNOWN
+            (isAdvanced || compactFormat) && nodeType == NodeType.CANE -> when {
+                isObstacleActive -> ThreatLevel.CRITICAL
+                hasGripTelemetry && !isCaneHeld -> ThreatLevel.UNKNOWN
+                radarDistMm <= 0 -> ThreatLevel.UNKNOWN
+                else -> ThreatLevel.SAFE // Firmware classifies against its calibrated ground plane.
+            }
+            (isAdvanced || compactFormat) && nodeType == NodeType.GLASSES -> when {
+                isObstacleActive && radarDistMm in 1..799 -> ThreatLevel.CRITICAL
+                isObstacleActive -> ThreatLevel.WARNING
+                radarDistMm == 0 -> ThreatLevel.UNKNOWN
+                else -> ThreatLevel.SAFE // Distance alone must not undo the firmware's threat filtering.
+            }
             deviceId == 0x01 -> {
-                // Cane ToF (Downward ground sensor):
-                // Small distances (1..1500 mm) = Solid ground under cane -> SAFE (Green)
-                // Large distances (> 1500 mm or -1 / 0xFFFF) = Cliff / hole / drop-off -> CRITICAL (Red)
+                // Legacy distance-only data has no calibrated hazard flag.
                 when {
                     radarDistMm in 1..1500 -> ThreatLevel.SAFE
                     radarDistMm > 1500 || radarDistMm < 0 -> ThreatLevel.CRITICAL
@@ -73,9 +118,24 @@ data class SystemPacket(
         return calculated == (checksum and 0xFF)
     }
 
+    val status: TelemetryStatus
+        get() = when {
+            hasLatchedFall && isAlarmPaused -> TelemetryStatus.FALL_PAUSED
+            hasLatchedFall -> TelemetryStatus.FALL_ALARM
+            isStandby -> TelemetryStatus.STANDBY
+            isSensorFault -> TelemetryStatus.SENSOR_FAULT
+            nodeType == NodeType.CANE && threatLevel == ThreatLevel.CRITICAL -> TelemetryStatus.GROUND_HAZARD
+            hasGripTelemetry && !isCaneHeld -> TelemetryStatus.GRIP_RELEASED
+            threatLevel == ThreatLevel.CRITICAL -> TelemetryStatus.OBSTACLE_CRITICAL
+            threatLevel == ThreatLevel.WARNING -> TelemetryStatus.OBSTACLE_WARNING
+            threatLevel == ThreatLevel.SAFE -> TelemetryStatus.MONITORING
+            else -> TelemetryStatus.NO_READING
+        }
+
     private fun isCompactValid(): Boolean {
         // Compact 6-byte packed schema: deviceId derived from node type (0x01=Cane, 0x02=Glasses)
-        return (deviceId == 0x01 || deviceId == 0x02) && pairId in 0 until 16
+        return magic == 0xAA && (deviceId == 0x01 || deviceId == 0x02) &&
+            pairId in 0 until 16 && seqNum in 0 until 8 && rollingFallSeq in 0 until 16
     }
 
     /**
@@ -94,23 +154,44 @@ data class SystemPacket(
         return diff in 1..(maxSeq / 2)
     }
 
+    /** Matches firmware short-counter rebasing, while rejecting out-of-order Android batches. */
+    fun isFreshAfter(previous: SystemPacket?): Boolean {
+        if (previous == null) return true
+        if (receivedAt <= previous.receivedAt) return false
+        if (compactFormat != previous.compactFormat || isAdvanced != previous.isAdvanced) return true
+        if (!compactFormat) return isNewerThan(previous.seqNum)
+        val delta = (seqNum - previous.seqNum) and 0x07
+        val statusChanged = stateFlags != previous.stateFlags || rollingFallSeq != previous.rollingFallSeq
+        if (delta == 0) return statusChanged
+        return delta <= 4 || receivedAt - previous.receivedAt >= SEQUENCE_REBASE_MS
+    }
+
     companion object {
         const val FLAG_FALL_ALERT = 0x01
-        const val FLAG_RADAR_FAULT = 0x02
+        const val FLAG_SENSOR_FAULT = 0x02
+        const val FLAG_RADAR_FAULT = FLAG_SENSOR_FAULT
         const val FLAG_OBSTACLE_ACTIVE = 0x04
+        const val FLAG_ALARM_PAUSED = 0x08
+        const val FLAG_CANE_HELD = 0x10
+        const val FLAG_STANDBY = 0x20
+        const val FLAG_PARKED_BY_USER = 0x40
+        const val LINK_TIMEOUT_MS = 500L
+        const val SEQUENCE_REBASE_MS = 250L
 
-        fun parse(data: ByteArray, timestamp: Long = System.currentTimeMillis()): SystemPacket? {
+        fun parse(data: ByteArray, timestamp: Long = 0L): SystemPacket? {
             return when {
-                data.size >= 10 -> {
+                data.size == 10 || data.size == 11 -> {
                     // AdvancedThreatPacket Schema (10 to 11 bytes):
                     // [Preamble(1B), DeviceID(1B), SeqNum(2B), StateFlags(1B), TargetDist(2B), TargetSpeed(2B), TTC(2B)]
                     val preamble = data[0].toInt() and 0xFF
                     val devId = data[1].toInt() and 0xFF
                     val seq = (data[2].toInt() and 0xFF) or ((data[3].toInt() and 0xFF) shl 8)
                     val flags = data[4].toInt() and 0xFF
-                    val dist = (data[5].toInt() and 0xFF) or ((data[6].toInt() and 0xFF) shl 8)
+                    val rawDist = (data[5].toInt() and 0xFF) or ((data[6].toInt() and 0xFF) shl 8)
+                    val dist = if (rawDist == 0xFFFF) -1 else rawDist
                     val speed = (data[7].toInt() and 0xFF) or (data[8].toInt() shl 8)
-                    val ttc = if (data.size >= 11) (data[9].toInt() and 0xFF) or ((data[10].toInt() and 0xFF) shl 8) else 0
+                    val rawTtc = if (data.size == 11) (data[9].toInt() and 0xFF) or ((data[10].toInt() and 0xFF) shl 8) else 0xFFFF
+                    val ttc = if (rawTtc == 0xFFFF) -1 else rawTtc
 
                     val packet = SystemPacket(
                         magic = preamble,
@@ -124,12 +205,7 @@ data class SystemPacket(
                         isAdvanced = true,
                         receivedAt = timestamp,
                     )
-                    if (packet.isValid()) {
-                        Log.i("EchoGuardBLE", "Parsed VALID Advanced Packet: devId=0x%02X, seq=$seq, dist=$dist mm, flags=0x%02X".format(devId, flags))
-                        packet
-                    } else {
-                        null
-                    }
+                    packet.takeIf { it.isValid() }
                 }
                 data.size == 6 -> {
                     // Compact 6-byte Packed Schema (minimum-bit curveball response):
@@ -182,17 +258,13 @@ data class SystemPacket(
                         pairId = pairId,
                         receivedAt = timestamp,
                     )
-                    if (packet.isValid()) {
-                        Log.i("EchoGuardBLE", "Parsed VALID Compact Packet: devId=0x%02X, hbSeq=$heartbeatSeq, fallSeq=$rollingFallSeq, dist=$nearestDistMm mm, ttc=$ttcMsVal ms, flags=0x%02X".format(deviceId, stateFlags))
-                        packet
-                    } else {
-                        null
-                    }
+                    packet.takeIf { it.isValid() }
                 }
-                data.size >= 5 -> {
+                data.size == 5 -> {
                     val magic = data[0].toInt() and 0xFF
                     val seq = data[1].toInt() and 0xFF
-                    val dist = (data[2].toInt() and 0xFF) or ((data[3].toInt() and 0xFF) shl 8)
+                    val rawDist = (data[2].toInt() and 0xFF) or ((data[3].toInt() and 0xFF) shl 8)
+                    val dist = if (rawDist == 0xFFFF) -1 else rawDist
                     val chk = data[4].toInt() and 0xFF
 
                     val packet = SystemPacket(
@@ -203,12 +275,7 @@ data class SystemPacket(
                         isAdvanced = false,
                         receivedAt = timestamp,
                     )
-                    if (packet.isValid()) {
-                        Log.i("EchoGuardBLE", "Parsed VALID 5B Packet: magic=0x%02X, seq=$seq, dist=$dist mm".format(magic))
-                        packet
-                    } else {
-                        null
-                    }
+                    packet.takeIf { it.isValid() }
                 }
                 else -> null
             }

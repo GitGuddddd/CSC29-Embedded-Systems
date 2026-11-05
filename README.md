@@ -165,14 +165,20 @@ make -j$(nproc) Cane_Node Glasses_Node
 
 ### 2. Building & Deploying the Android Companion Mobile App
 
-The Android companion application (`app/`) connects to the EchoGuard system to display real-time telemetry, threat alerts, and fall notifications.
+The Android companion (`app/`) observes EchoGuard broadcasts. Select either compact node
+to monitor its pair, with separate cane/glasses heartbeat and incident status. The UI
+distinguishes paused falls, deliberate parking, sensor sleep, generic faults and stale
+telemetry. See [Android telemetry behavior](docs/android-telemetry.md).
 
 ```bash
-# Build debug APK via Gradle wrapper
-./gradlew :app:assembleDebug
+# Use JDK 17; validate and build via the Gradle wrapper
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
 # Deploy debug build to connected Android device
 ./gradlew :app:installDebug
+
+# UI regression tests on a connected device/emulator
+./gradlew :app:connectedDebugAndroidTest
 ```
 
 ---

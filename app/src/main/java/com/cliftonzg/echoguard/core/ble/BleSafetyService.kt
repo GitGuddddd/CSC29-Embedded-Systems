@@ -1,6 +1,5 @@
 package com.cliftonzg.echoguard.core.ble
 
-import android.R
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -11,11 +10,13 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.core.app.NotificationCompat
-import com.cliftonzg.echoguard.core.ble.model.LinkState
-import com.cliftonzg.echoguard.core.ble.model.ThreatLevel
+import androidx.core.content.ContextCompat
+import com.cliftonzg.echoguard.core.ble.model.TelemetryPresentation
+import com.cliftonzg.echoguard.core.ble.model.presentation
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,9 @@ class BleSafetyService : Service() {
     @Inject lateinit var vibrator: Vibrator
 
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    private val hapticPolicy = SafetyHapticPolicy()
+    private var started = false
+    private var lastPresentation: TelemetryPresentation? = null
 
     private val bluetoothReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -38,8 +42,9 @@ class BleSafetyService : Service() {
                     BluetoothAdapter.EXTRA_STATE,
                     BluetoothAdapter.ERROR,
                 )
-                if (state == BluetoothAdapter.STATE_ON) {
-                    scannerEngine.startScanning()
+                when (state) {
+                    BluetoothAdapter.STATE_ON -> scannerEngine.onBluetoothStateChanged(true)
+                    BluetoothAdapter.STATE_OFF, BluetoothAdapter.STATE_TURNING_OFF -> scannerEngine.onBluetoothStateChanged(false)
                 }
             }
         }
@@ -48,55 +53,70 @@ class BleSafetyService : Service() {
     override fun onCreate() {
         super.onCreate()
         val filter = IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED)
-        registerReceiver(bluetoothReceiver, filter)
+        ContextCompat.registerReceiver(this, bluetoothReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createNotificationChannel()
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("EchoGuard: Head-Zone Shield")
-            .setContentText("Monitoring for head-height hazards...")
-            .setSmallIcon(R.drawable.ic_dialog_info)
-            .setOngoing(true)
-            .build()
+        val notification = notificationFor(scannerEngine.monitoringState.value.presentation())
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        scannerEngine.startScanning()
-
-        serviceScope.launch {
-            scannerEngine.packets.collect { packet ->
-                if (packet == null) return@collect
-                when {
-                    packet.isFallAlert -> triggerFallHaptic()
-                    packet.isRadarFault -> triggerFaultHaptic()
-                    packet.threatLevel == ThreatLevel.CRITICAL -> triggerHaptic(durationMs = 250)
-                    packet.threatLevel == ThreatLevel.WARNING -> triggerHaptic(durationMs = 120)
+        // onResume/permission changes can start this service repeatedly. Collect only once.
+        if (!started) {
+            started = true
+            scannerEngine.startScanning()
+            serviceScope.launch {
+                scannerEngine.monitoringState.collect { state ->
+                    when (hapticPolicy.update(state, SystemClock.elapsedRealtime())) {
+                        HapticCue.STOP -> cancelHaptic()
+                        HapticCue.FALL -> triggerFallHaptic()
+                        HapticCue.SENSOR_FAULT -> triggerFaultHaptic()
+                        HapticCue.LINK_LOSS -> triggerLinkLossHaptic()
+                        HapticCue.CRITICAL -> triggerHaptic(durationMs = 250L)
+                        HapticCue.WARNING -> triggerHaptic(durationMs = 120L)
+                        null -> Unit
+                    }
+                    val presentation = state.presentation()
+                    if (presentation != lastPresentation) {
+                        getSystemService(NotificationManager::class.java)?.notify(
+                            NOTIFICATION_ID, notificationFor(presentation),
+                        )
+                        lastPresentation = presentation
+                    }
                 }
-            }
-        }
-
-        serviceScope.launch {
-            var previousState = LinkState.DISCONNECTED
-            scannerEngine.linkState.collect { state ->
-                if ((state == LinkState.LINK_LOSS) && (previousState == LinkState.ACTIVE)) {
-                    triggerLinkLossHaptic()
-                }
-                previousState = state
             }
         }
 
         return START_STICKY
     }
 
+    private fun notificationFor(presentation: TelemetryPresentation) = NotificationCompat.Builder(this, CHANNEL_ID)
+        .setContentTitle("EchoGuard: ${presentation.title}")
+        .setContentText(presentation.detail)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(presentation.detail))
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setOngoing(true)
+        .setOnlyAlertOnce(true)
+        .setSilent(true) // Explicit haptic policy owns alerts; notification updates must not buzz too.
+        .build()
+
     private fun triggerHaptic(durationMs: Long = 150) {
         try {
             vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
         } catch (_: SecurityException) {
             // Permission missing
+        }
+    }
+
+    private fun cancelHaptic() {
+        try {
+            vibrator.cancel()
+        } catch (_: SecurityException) {
+            // Permission may have changed while the service was running.
         }
     }
 
@@ -112,8 +132,8 @@ class BleSafetyService : Service() {
 
     private fun triggerFaultHaptic() {
         try {
-            val timings = longArrayOf(0, 300, 100, 300, 100, 300)
-            val amplitudes = intArrayOf(0, 255, 0, 255, 0, 255)
+            val timings = longArrayOf(0, 150, 200, 150)
+            val amplitudes = intArrayOf(0, 180, 0, 180)
             vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
         } catch (_: SecurityException) {
             // Permission missing
@@ -122,8 +142,8 @@ class BleSafetyService : Service() {
 
     private fun triggerLinkLossHaptic() {
         try {
-            val timings = longArrayOf(0, 200, 150, 200, 150, 200)
-            val amplitudes = intArrayOf(0, 200, 0, 200, 0, 200)
+            val timings = longArrayOf(0, 250, 150, 250)
+            val amplitudes = intArrayOf(0, 200, 0, 200)
             vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
         } catch (_: SecurityException) {
             // Permission missing
@@ -142,6 +162,7 @@ class BleSafetyService : Service() {
             // Receiver not registered
         }
         scannerEngine.stopScanning()
+        cancelHaptic()
         serviceScope.cancel()
         super.onDestroy()
     }

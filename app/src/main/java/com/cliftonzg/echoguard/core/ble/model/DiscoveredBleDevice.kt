@@ -5,5 +5,7 @@ data class DiscoveredBleDevice(
     val address: String,
     val rssi: Int,
     val isEchoGuardNode: Boolean,
-    val lastSeenMs: Long = System.currentTimeMillis(),
+    val lastSeenMs: Long = 0L, // Android elapsed-realtime capture timestamp.
+    val nodeType: NodeType? = null,
+    val pairId: Int? = null,
 )

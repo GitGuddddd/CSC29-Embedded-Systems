@@ -442,6 +442,9 @@ static void vTask_SafetyPerception(void *pvParameters)
             cane_status.tx_seq = (uint16_t)((cane_status.tx_seq + 1U) & 0x07U);
             BleComm_SendPacket(&cane_pkt);
         }
+
+        /* Token-Passing: Notify Core 1 that Core 0 safety loop is alive */
+        Watchdog_SetCore0Alive();
     }
 }
 
@@ -478,6 +481,10 @@ static void vTask_BleRadioServer(void *pvParameters)
     for (;;)
     {
         BleComm_Core1_Task();
+
+        /* Token-Passing: Feed HW Watchdog only if Core 0 is actively setting the token */
+        Watchdog_FeedHardware();
+
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

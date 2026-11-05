@@ -12,6 +12,8 @@
 #include "drivers/Ld2450/Ld2450.h"
 #include "drivers/Buzzer/Buzzer.h"
 #include "services/BleComm/BleComm.h"
+#include "services/Watchdog/Watchdog.h"
+#include "services/Watchdog/Watchdog_Cfg.h"
 #include "app/FallDetection/FallDetection.h"
 #include "app/ThreatAssessment/ThreatAssessment.h"
 #include "app/AlertManager/AlertManager.h"
@@ -295,6 +297,9 @@ static void vTask_GlassesPerception(void *pvParameters)
             glasses_tx_seq++;
             BleComm_SendPacket(&heartbeat_pkt);
         }
+
+        /* Token-Passing: Notify Core 1 that Core 0 safety loop is alive */
+        Watchdog_SetCore0Alive();
     }
 }
 
@@ -312,6 +317,10 @@ static void vTask_GlassesBleRadioServer(void *pvParameters)
     for (;;)
     {
         BleComm_Core1_Task();
+
+        /* Token-Passing: Feed HW Watchdog only if Core 0 is actively setting the token */
+        Watchdog_FeedHardware();
+
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

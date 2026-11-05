@@ -1,9 +1,18 @@
 #include "Watchdog.h"
 #include "Watchdog_Cfg.h"
 #include <stddef.h>
+#include <stdio.h>
+
+#ifdef PICO_ON_DEVICE
+#include "hardware/watchdog.h"
+#include "hardware/sync.h"
+#else
+#define __dmb() do { __asm__ __volatile__("" : : : "memory"); } while (0)
+#endif
 
 static uint32_t s_last_kick_ms = 0U;
 static uint32_t s_timeout_ms = WATCHDOG_CFG_DEADMAN_TIMEOUT_MS;
+static volatile bool s_core0_alive_flag = false;
 
 void Watchdog_Init(const Watchdog_Config_t * const p_cfg)
 {
@@ -12,6 +21,13 @@ void Watchdog_Init(const Watchdog_Config_t * const p_cfg)
         s_timeout_ms = p_cfg->deadman_timeout_ms;
     }
     s_last_kick_ms = 0U;
+    s_core0_alive_flag = false;
+
+#ifdef PICO_ON_DEVICE
+    /* Initialize RP2040 Hardware Watchdog timer */
+    watchdog_enable(WATCHDOG_CFG_HW_TIMEOUT_MS, 1);
+    printf("[WATCHDOG] RP2040 Silicon Hardware Watchdog Armed (%u ms)\n", (unsigned int)WATCHDOG_CFG_HW_TIMEOUT_MS);
+#endif
 }
 
 void Watchdog_KickBleDeadman(uint32_t now_ms)
@@ -26,4 +42,23 @@ bool Watchdog_CheckBleLinkLoss(uint32_t now_ms)
         return true;
     }
     return false;
+}
+
+void Watchdog_SetCore0Alive(void)
+{
+    s_core0_alive_flag = true;
+    __dmb();
+}
+
+void Watchdog_FeedHardware(void)
+{
+#ifdef PICO_ON_DEVICE
+    /* Token-passing: Only feed the HW watchdog if Core 0 is actively setting the flag */
+    if (s_core0_alive_flag)
+    {
+        s_core0_alive_flag = false;
+        __dmb();
+        watchdog_update();
+    }
+#endif
 }

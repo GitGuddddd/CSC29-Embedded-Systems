@@ -1,6 +1,5 @@
 #include "Ld2450.h"
 #include "Ld2450_Cfg.h"
-#include "hal/Hal_Uart.h"
 #include <string.h>
 
 /*
@@ -9,18 +8,11 @@
  * Compliance: Barr-C:2018
  */
 
-extern uint8_t * Ld2450_Irq_GetBuffer(void);
-extern uint32_t Ld2450_Irq_GetTail(void);
-extern void Ld2450_Irq_SetTail(uint32_t tail);
-
-bool Ld2450_Init(const Ld2450_Config_t * const p_cfg)
+static int16_t Decode_SignedMagnitude(uint16_t raw)
 {
-    if (p_cfg == NULL)
-    {
-        return false;
-    }
-    Hal_Uart_Init(p_cfg->uart_port, p_cfg->tx_pin, p_cfg->rx_pin, LD2450_CFG_BAUDRATE);
-    return Hal_Uart_DmaInit(p_cfg->uart_port, Ld2450_Irq_GetBuffer(), LD2450_CFG_CIRC_BUF_SIZE);
+    int16_t magnitude = (int16_t)(raw & 0x7FFFU);
+    /* The masked magnitude is at most 32767; its negation also fits int16_t. */
+    return ((raw & 0x8000U) != 0U) ? (int16_t)(-magnitude) : magnitude;
 }
 
 bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target_t * const p_targets, uint8_t * const p_count)
@@ -50,13 +42,13 @@ bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target
         uint32_t offset = 4U + (i * 8U);
 
         uint16_t x_raw = (uint16_t)(((uint16_t)p_frame[offset + 1U] << 8) | p_frame[offset]);
-        int16_t x = (x_raw & 0x8000U) ? -(int16_t)(x_raw & 0x7FFFU) : (int16_t)(x_raw & 0x7FFFU);
+        int16_t x = Decode_SignedMagnitude(x_raw);
 
         uint16_t y_raw = (uint16_t)(((uint16_t)p_frame[offset + 3U] << 8) | p_frame[offset + 2U]);
-        int16_t y = (y_raw & 0x8000U) ? -(int16_t)(y_raw & 0x7FFFU) : (int16_t)(y_raw & 0x7FFFU);
+        int16_t y = Decode_SignedMagnitude(y_raw);
 
         uint16_t speed_raw = (uint16_t)(((uint16_t)p_frame[offset + 5U] << 8) | p_frame[offset + 4U]);
-        int16_t speed = (speed_raw & 0x8000U) ? -(int16_t)(speed_raw & 0x7FFFU) : (int16_t)(speed_raw & 0x7FFFU);
+        int16_t speed = Decode_SignedMagnitude(speed_raw);
 
         uint16_t dist_res = (uint16_t)(((uint16_t)p_frame[offset + 7U] << 8) | p_frame[offset + 6U]);
 
@@ -75,13 +67,4 @@ bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target
 
     *p_count = count;
     return true;
-}
-
-void Ld2450_ProcessStream(Radar_Target_t * const p_targets, uint8_t * const p_count)
-{
-    if ((p_targets == NULL) || (p_count == NULL))
-    {
-        return;
-    }
-    *p_count = 0U;
 }

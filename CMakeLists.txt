@@ -38,7 +38,8 @@ if (NOT BUILD_TESTS AND PICO_SDK_PATH AND EXISTS "${PICO_SDK_PATH}/pico_sdk_init
     FetchContent_Declare(
         FreeRTOS_Kernel
         GIT_REPOSITORY https://github.com/FreeRTOS/FreeRTOS-Kernel.git
-        GIT_TAG        smp
+        # Audited SMP port / exception and FIFO handlers; avoid a moving branch.
+        GIT_TAG        81c623212a8746c4b5ebc29891b91228591040cc
     )
     FetchContent_MakeAvailable(FreeRTOS_Kernel)
 
@@ -69,6 +70,10 @@ include_directories(
 if (BUILD_FOR_PICO_TARGET)
     add_compile_definitions(PICO_ON_DEVICE=1)
     include_directories(${FREERTOS_KERNEL_INCLUDE_DIRS})
+    include_directories(SYSTEM
+        ${freertos_kernel_SOURCE_DIR}/include
+        ${freertos_kernel_SOURCE_DIR}/portable/ThirdParty/GCC/RP2040/include
+    )
 
     # Common Firmware Sources for Cane Node
     set(CANE_SOURCES
@@ -94,6 +99,9 @@ if (BUILD_FOR_PICO_TARGET)
         src/drivers/Buzzer/Buzzer_Lcfg.c
         src/services/BleComm/BleComm.c
         src/services/BleComm/BleComm_Lcfg.c
+        src/services/BleComm/BleComm_Policy.c
+        src/drivers/BleRadio/BleRadio.c
+        src/services/Diagnostics/Diagnostics.c
         src/services/Watchdog/Watchdog.c
         src/services/Watchdog/Watchdog_Lcfg.c
         src/services/ImuSupervisor/ImuSupervisor.c
@@ -147,11 +155,14 @@ if (BUILD_FOR_PICO_TARGET)
         src/drivers/Mpu9250/Mpu9250_Lcfg.c
         src/drivers/Ld2450/Ld2450.c
         src/drivers/Ld2450/Ld2450_Lcfg.c
-        src/drivers/Ld2450/Ld2450_Irq.c
+        src/drivers/Ld2450/Ld2450_Stream.c
         src/drivers/Buzzer/Buzzer.c
         src/drivers/Buzzer/Buzzer_Lcfg.c
         src/services/BleComm/BleComm.c
         src/services/BleComm/BleComm_Lcfg.c
+        src/services/BleComm/BleComm_Policy.c
+        src/drivers/BleRadio/BleRadio.c
+        src/services/Diagnostics/Diagnostics.c
         src/services/Watchdog/Watchdog.c
         src/services/Watchdog/Watchdog_Lcfg.c
         src/services/ImuSupervisor/ImuSupervisor.c
@@ -185,11 +196,38 @@ if (BUILD_FOR_PICO_TARGET)
     pico_add_extra_outputs(Glasses_Node)
     pico_set_program_name(Glasses_Node "EchoGuard Glasses Node")
     pico_set_program_version(Glasses_Node "1.0.0")
+
+    foreach(node Cane_Node Glasses_Node)
+        target_compile_definitions(${node} PRIVATE
+            PICO_STDIO_USB_ENABLE_IRQ_BACKGROUND_TASK=0
+            PICO_STDIO_USB_STDOUT_TIMEOUT_US=1000
+            PICO_STDIO_DEADLOCK_TIMEOUT_MS=1
+        )
+    endforeach()
 endif()
 
+# Application-owned realtime paths: strict C diagnostics, without imposing project
+# naming/format rules on imported SDK and FreeRTOS implementations.
+set_source_files_properties(
+    src/services/BleComm/BleComm.c
+    src/services/BleComm/BleComm_Policy.c
+    src/drivers/BleRadio/BleRadio.c
+    src/services/Diagnostics/Diagnostics.c
+    src/services/Watchdog/Watchdog.c
+    src/hal/Hal_Uart.c
+    src/hal/Hal_I2c.c
+    src/drivers/Ld2450/Ld2450.c
+    src/drivers/Ld2450/Ld2450_Stream.c
+    PROPERTIES COMPILE_OPTIONS
+    "-Wall;-Wextra;-Werror;-Wconversion;-Wshadow;-Wstrict-prototypes;-Wmissing-prototypes;-Wvla"
+)
+set_property(SOURCE src/services/BleComm/BleComm_Policy.c APPEND PROPERTY
+    COMPILE_OPTIONS -Wswitch-enum -Werror=switch-enum)
+
 # =============================================================
-# 2. Host Unit, Integration, and Fuzz Tests (CTest)
+# 2. Native Host Unit, Integration, and Fuzz Tests (CTest)
 # =============================================================
+if (NOT BUILD_FOR_PICO_TARGET)
 enable_testing()
 
 add_library(unity STATIC
@@ -285,7 +323,7 @@ add_executable(test_Ld2450_Parser
     tests/unit/test_Ld2450_Parser.c
     src/drivers/Ld2450/Ld2450.c
     src/drivers/Ld2450/Ld2450_Lcfg.c
-    src/drivers/Ld2450/Ld2450_Irq.c
+    src/drivers/Ld2450/Ld2450_Stream.c
     src/hal/Hal_Uart.c
 )
 target_link_libraries(test_Ld2450_Parser PRIVATE unity)
@@ -342,11 +380,30 @@ add_executable(test_System_FailureScenarios
     src/services/Watchdog/Watchdog_Lcfg.c
     src/drivers/Ld2450/Ld2450.c
     src/drivers/Ld2450/Ld2450_Lcfg.c
-    src/drivers/Ld2450/Ld2450_Irq.c
+    src/drivers/Ld2450/Ld2450_Stream.c
     src/hal/Hal_Uart.c
 )
 target_link_libraries(test_System_FailureScenarios PRIVATE unity m)
 add_test(NAME Integration_SystemFailureScenarios COMMAND test_System_FailureScenarios)
+
+foreach(test_target test_CaneRecoveryPipeline test_Fall_to_Ble_Dispatch test_System_FailureScenarios)
+    target_sources(${test_target} PRIVATE
+        src/services/BleComm/BleComm_Policy.c
+        tests/harness/mock_BleRadio.c
+    )
+endforeach()
+
+add_executable(test_BleComm
+    tests/unit/test_BleComm.c
+    tests/harness/mock_BleRadio.c
+    src/services/BleComm/BleComm.c
+    src/services/BleComm/BleComm_Lcfg.c
+    src/services/BleComm/BleComm_Policy.c
+    src/services/Watchdog/Watchdog.c
+    src/services/Watchdog/Watchdog_Lcfg.c
+)
+target_link_libraries(test_BleComm PRIVATE unity)
+add_test(NAME Unit_BleComm COMMAND test_BleComm)
 
 # ----------------- Fuzz Tests -----------------
 # 1. FallDetection Fuzzer
@@ -363,7 +420,12 @@ add_executable(fuzz_RadarFrames
     tests/fuzz/fuzz_RadarFrames.c
     src/drivers/Ld2450/Ld2450.c
     src/drivers/Ld2450/Ld2450_Lcfg.c
-    src/drivers/Ld2450/Ld2450_Irq.c
+    src/drivers/Ld2450/Ld2450_Stream.c
     src/hal/Hal_Uart.c
 )
 add_test(NAME Fuzz_RadarFrames COMMAND fuzz_RadarFrames)
+
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_test(NAME Realtime_SourceContracts
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_realtime_contracts.py)
+endif()

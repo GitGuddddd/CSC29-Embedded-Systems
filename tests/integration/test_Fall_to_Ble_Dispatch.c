@@ -73,13 +73,13 @@ void test_Integration_FallToBleDispatch(void)
 
     /* Verify packet can be popped from RX queue */
     Ble_AdvancedThreatPacket_t popped_pkt;
-    bool pop_ok = BleComm_PopReceivedPacket(&popped_pkt);
+    bool pop_ok = BleComm_PopReceivedPacket(&popped_pkt, NULL);
     TEST_ASSERT_TRUE(pop_ok);
     TEST_ASSERT_EQUAL_HEX8(0x02U, popped_pkt.device_id);
     TEST_ASSERT_EQUAL_HEX8(0x01U, popped_pkt.state_flags & 0x01U);
 
     /* Queue should now be empty */
-    TEST_ASSERT_FALSE(BleComm_PopReceivedPacket(&popped_pkt));
+    TEST_ASSERT_FALSE(BleComm_PopReceivedPacket(&popped_pkt, NULL));
 }
 
 void test_BleComm_EncodeDecode_6ByteRawPacket(void)

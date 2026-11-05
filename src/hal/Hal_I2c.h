@@ -11,6 +11,7 @@
  */
 
 #define HAL_I2C_TIMEOUT_US (5000U)
+#define HAL_I2C_MAX_WRITE_BYTES (32U)
 
 void Hal_I2c_Init(uint8_t port, uint8_t sda_pin, uint8_t scl_pin, uint32_t baudrate_hz);
 void Hal_I2c_BusReset(uint8_t sda_pin, uint8_t scl_pin);

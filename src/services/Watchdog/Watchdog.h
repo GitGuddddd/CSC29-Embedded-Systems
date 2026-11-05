@@ -22,6 +22,6 @@ void Watchdog_KickBleDeadman(uint32_t now_ms);
 bool Watchdog_CheckBleLinkLoss(uint32_t now_ms);
 
 void Watchdog_SetCore0Alive(void);
-void Watchdog_FeedHardware(void);
+bool Watchdog_FeedHardware(void);
 
 #endif /* WATCHDOG_H */

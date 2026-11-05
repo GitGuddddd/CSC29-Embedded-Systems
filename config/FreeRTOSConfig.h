@@ -24,7 +24,6 @@
 #define configUSE_COUNTING_SEMAPHORES           1
 #define configQUEUE_REGISTRY_SIZE               8
 #define configUSE_QUEUE_SETS                    0
-#define configUSE_TIME_SLICING                  1
 
 /* Memory Allocation: Dynamic Allocation with Heap4 */
 #define configSUPPORT_STATIC_ALLOCATION         1
@@ -61,13 +60,16 @@
 #define configUSE_PASSIVE_IDLE_HOOK             0
 
 /* RP2040 Pico SDK FreeRTOS compatibility options */
-#define configUSE_MUTEXES                       1
-#define configUSE_RECURSIVE_MUTEXES             1
-#define configUSE_COUNTING_SEMAPHORES           1
-#define configSUPPORT_STATIC_ALLOCATION         1
-#define configSUPPORT_DYNAMIC_ALLOCATION        1
 #define INCLUDE_xSemaphoreGetMutexHolder        1
-#define configASSERT( x )                       if( ( x ) == 0 ) { portDISABLE_INTERRUPTS(); for( ;; ); }
+#define configASSERT(x)                         \
+    do                                         \
+    {                                          \
+        if ((x) == 0)                          \
+        {                                      \
+            portDISABLE_INTERRUPTS();          \
+            for (;;) { }                       \
+        }                                      \
+    } while (0)
 
 /* Set the following definitions to 1 to include the API function, or zero
 to exclude the API function. */
@@ -84,8 +86,9 @@ to exclude the API function. */
 #define INCLUDE_eTaskGetState                   1
 #define INCLUDE_xTimerPendFunctionCall          1
 
-/* Interrupt nesting behaviour configuration. */
-#define configKERNEL_INTERRUPT_PRIORITY         ( 255 )
-#define configMAX_SYSCALL_INTERRUPT_PRIORITY     ( 191 )
+/* This RP2040 Cortex-M0+ port uses PRIMASK, not a BASEPRI syscall ceiling.
+ * The port assigns SysTick/PendSV/SIO priorities; driver IRQ priorities belong
+ * to their owning SDK/HAL modules. Our UART DMA ISR calls no FreeRTOS API.
+ */
 
 #endif /* FREERTOS_CONFIG_H */

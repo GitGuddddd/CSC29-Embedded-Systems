@@ -17,6 +17,7 @@
 #include "services/BleComm/BleComm.h"
 #include "services/BleComm/BleComm_Cfg.h"
 #include "services/ImuSupervisor/ImuSupervisor.h"
+#include "services/Diagnostics/Diagnostics.h"
 #include "services/Watchdog/Watchdog.h"
 #include "services/Watchdog/Watchdog_Cfg.h"
 #include "app/FallDetection/FallDetection.h"
@@ -51,10 +52,7 @@ static Sys_State_t s_sys_mode = SYS_STATE_INIT;
 static uint32_t GetCurrentTimeMs(void)
 {
 #ifdef PICO_ON_DEVICE
-    if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
-    {
-        return (uint32_t)xTaskGetTickCount() * (uint32_t)portTICK_PERIOD_MS;
-    }
+    /* Same monotonic epoch as radio receive timestamps, before and after RTOS start. */
     return to_ms_since_boot(get_absolute_time());
 #else
     return 0U;
@@ -124,6 +122,8 @@ static void vTask_SafetyPerception(void *pvParameters)
     BleComm_PeerFall_t peer_fall = {0};
     bool prev_link_lost = false;
     uint8_t last_sent_flags = 0xFFU;
+    Sys_State_t last_sent_state = SYS_STATE_COUNT;
+    BleComm_ProfileId_t last_sent_profile = BLECOMM_PROFILE_FAST;
     uint16_t buzzer_freq_hz = 0U;
 
     Cane_CompactStatus_t cane_status = {
@@ -165,11 +165,17 @@ static void vTask_SafetyPerception(void *pvParameters)
 
         bool remote_fall = false;
         Ble_AdvancedThreatPacket_t rx_pkt;
-        while (BleComm_PopReceivedPacket(&rx_pkt))
+        uint32_t received_ms;
+        for (uint32_t i = 0U; i < BLECOMM_CFG_RX_QUEUE_SIZE; ++i)
         {
-            if (rx_pkt.device_id == 0x02U)
+            if (!BleComm_PopReceivedPacket(&rx_pkt, &received_ms))
             {
-                Watchdog_KickBleDeadman(now_ms);
+                break;
+            }
+            if ((rx_pkt.device_id == 0x02U) &&
+                ((uint32_t)(now_ms - received_ms) < WATCHDOG_CFG_DEADMAN_TIMEOUT_MS))
+            {
+                Watchdog_KickBleDeadman(received_ms);
                 if (BleComm_TrackPeerFall(&peer_fall, &rx_pkt))
                 {
                     remote_fall = true;
@@ -374,21 +380,15 @@ static void vTask_SafetyPerception(void *pvParameters)
         }
         Haptic_Request(HAPTIC_SRC_LINK, is_link_lost ? ALERT_LINK_LOSS : ALERT_NONE);
 
-        /* Keep BLE available during IMU sleep for peer alarms and explicit parked status.
-         * Payload freshness has margin below the link deadline; this is not an RF interval.
-         */
-        uint32_t active_telemetry_period_ms = BLECOMM_CFG_TELEMETRY_IDLE_MS;
-        if ((s_sys_mode == SYS_STATE_WATCH) || mode_out.fall_latched || mode_out.degraded)
-        {
-            active_telemetry_period_ms = BLECOMM_CFG_TELEMETRY_ALERT_MS;
-        }
-
         uint8_t flags = mode_out.status_flags;
         if (mode_out.ground_enabled && mode_in.ground_hazard)
         {
             flags |= BLE_FLAG_OBSTACLE_ACTIVE;
         }
-        if ((flags != last_sent_flags) || ((now_ms - last_telemetry_ms) >= active_telemetry_period_ms))
+        BleComm_ProfileId_t profile = BleComm_SelectProfile(s_sys_mode, flags, is_link_lost);
+        uint32_t telemetry_period_ms = BleComm_GetProfile(profile)->payload_period_ms;
+        if ((flags != last_sent_flags) || (s_sys_mode != last_sent_state) ||
+            (profile != last_sent_profile) || ((now_ms - last_telemetry_ms) >= telemetry_period_ms))
         {
             Ble_AdvancedThreatPacket_t cane_pkt = {
                 .preamble = 0xAAU,
@@ -403,11 +403,13 @@ static void vTask_SafetyPerception(void *pvParameters)
                 .closing_speed_cms = 0,
                 .ttc_ms = 0xFFFFU
             };
-            if (BleComm_SendPacket(&cane_pkt))
+            if (BleComm_Publish(&cane_pkt, s_sys_mode, is_link_lost))
             {
                 cane_status.tx_seq = (uint16_t)((cane_status.tx_seq + 1U) & 0x07U);
                 last_telemetry_ms = now_ms;
                 last_sent_flags = flags;
+                last_sent_state = s_sys_mode;
+                last_sent_profile = profile;
             }
         }
 
@@ -448,12 +450,12 @@ static void vTask_BleRadioServer(void *pvParameters)
 
     for (;;)
     {
-        BleComm_Core1_Task();
-
-        /* Token-Passing: Feed HW Watchdog only if Core 0 is actively setting the token */
-        Watchdog_FeedHardware();
-
-        vTaskDelay(pdMS_TO_TICKS(10));
+        if (BleComm_Core1_Task())
+        {
+            /* A running polling task alone cannot hide a stalled BTstack worker. */
+            (void)Watchdog_FeedHardware();
+        }
+        vTaskDelay(pdMS_TO_TICKS(BLECOMM_CFG_RADIO_TASK_MS));
     }
 }
 #endif
@@ -495,18 +497,26 @@ int main(void)
     TaskHandle_t xSafetyHandle = NULL;
     TaskHandle_t xActuatorHandle = NULL;
     TaskHandle_t xRadioHandle = NULL;
+    TaskHandle_t xDiagnosticsHandle = NULL;
 
     /* Task 1: Safety & Perception Task -> Pinned to Core 0 (Priority 3 - High) */
-    xTaskCreate(vTask_SafetyPerception, "SafetyTask", 1024, NULL, 3, &xSafetyHandle);
+    BaseType_t created = xTaskCreate(vTask_SafetyPerception, "SafetyTask", 1024U, NULL, 3U, &xSafetyHandle);
+    configASSERT(created == pdPASS);
     vTaskCoreAffinitySet(xSafetyHandle, (1U << 0));
 
     /* Task 2: Alert Actuator Task -> Pinned to Core 0 (Priority 2 - Medium) */
-    xTaskCreate(vTask_AlertActuator, "ActuatorTask", 512, NULL, 2, &xActuatorHandle);
+    created = xTaskCreate(vTask_AlertActuator, "ActuatorTask", 512U, NULL, 2U, &xActuatorHandle);
+    configASSERT(created == pdPASS);
     vTaskCoreAffinitySet(xActuatorHandle, (1U << 0));
 
     /* Task 3: Dedicated BLE Radio Task -> Pinned to Core 1 (Priority 1 - Standard) */
-    xTaskCreate(vTask_BleRadioServer, "RadioTask", 1024, NULL, 1, &xRadioHandle);
+    created = xTaskCreate(vTask_BleRadioServer, "RadioTask", 1024U, NULL, 1U, &xRadioHandle);
+    configASSERT(created == pdPASS);
     vTaskCoreAffinitySet(xRadioHandle, (1U << 1));
+
+    created = xTaskCreate(Diagnostics_Task, "Diagnostics", 768U, NULL, 1U, &xDiagnosticsHandle);
+    configASSERT(created == pdPASS);
+    vTaskCoreAffinitySet(xDiagnosticsHandle, (1U << 0));
 
     /* Start FreeRTOS Scheduler */
     vTaskStartScheduler();

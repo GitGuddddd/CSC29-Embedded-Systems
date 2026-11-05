@@ -35,18 +35,22 @@ Uses **FreeRTOS SMP with task affinity** across the RP2040's dual ARM Cortex-M0+
 
 See [cane mode manager behaviour and verification](src/app/CaneMode/README.md) for transitions, mounting configuration and telemetry flags. Alarm timing is a prototype configuration, not an IEC/ASIL certification claim.
 
-### 4. BLE Advertising Telemetry
-- **Compact Status**: Manufacturer data (company ID `0x0029`) carries a 6-byte packet with incident sequence, grip, fall, audio-pause, standby and deliberate-parking flags. Payloads refresh every 200 ms normally and 100 ms for hazards/alarms, with immediate state-change updates. The controller advertising interval remains 100 ms.
-- **Fast Recovery**: Provides $\sim 72\,\text{ms}$ average recovery from human body shadowing ($\approx 22\times$ faster than GATT reconnection timeouts).
-- **Monotonic Sequence Filtering**: Rejects delayed, duplicate, or stale packets escaping RF baseband buffers during interference bursts.
+### 4. Context-Aware BLE Advertising
+- **All-State Policy**: Manufacturer data (company ID `0x0029`) carries a 6-byte status packet. The controller advertising interval is 150 ms in ACTIVE, 200 ms in IDLE/STANDBY, and 100 ms during initialization, release-watch, hazards, either fall state and faults. Fault flags or link loss override any state to the fast profile. Payloads refresh every 50 ms (fast/active) or 100 ms (quiet); state changes publish immediately. Downshifts wait 1 s to avoid controller reconfiguration chatter.
+- **Radio Ownership**: The Core 1 BTstack worker owns GAP/HCI operations and its host-wake GPIO IRQ. Task callbacks perform parsing/configuration; the hardware IRQ only signals deferred work. Passive scanning stays available during IMU standby.
+- **Link Recovery**: Link loss requests the fast advertising/full-scan profile. Actual recovery latency depends on RF conditions and is a bench-validation item.
+- **Freshness Filtering**: Rejects identical repeated snapshots and stale application-queue entries; short heartbeat sequences rebase after a reception gap. The audit documents the ordering limits.
 
 ### 5. Link-Loss Deadman Watchdog
 - **Safety Degradation**: If the Cane scanner misses periodic broadcast packets from the Glasses for $> 500\,\text{ms}$, a software watchdog triggers a localized 2 long-pulse haptic warning (`500ms ON / 200ms OFF`), informing the user that head-level obstacle tracking is offline while keeping local ground sensing active.
 
 ### 6. mmWave Radar Head-Level Threat Assessment
-- **HLK-LD2450 Processing**: Ingests 24GHz mmWave radar telemetry over UART at 256,000 baud via RP2040 hardware DMA directly into a circular buffer.
+- **HLK-LD2450 Processing**: UART at 256,000 baud feeds an aligned 1024-byte DMA ring. A private completion ISR acknowledges and re-arms each 30-byte block; the 20 ms task parses committed data with bounded work, partial-frame resynchronization and overrun detection.
 - **Target Tracking**: Tracks up to 3 targets, calculates closing speed and Time-To-Collision (TTC), and ignores departing targets ($> 10\,\text{cm/s}$ moving away).
 - **Pitch-Modulated Beeping**: Maps threat proximity ($2000\,\text{mm}$ to $300\,\text{mm}$) with $100\,\text{mm}$ hysteresis to a frequency-modulated beep pattern ($1500\,\text{Hz}$ to $3500\,\text{Hz}$).
+
+See [BLE and interrupt design audit](docs/ble-interrupt-audit.md) for the complete state table,
+polling/DMA/IRQ rationale, ISR and IVT ownership, BARR-C checks and measurement boundaries.
 
 ---
 
@@ -68,7 +72,7 @@ See [cane mode manager behaviour and verification](src/app/CaneMode/README.md) f
 | Peripheral / Module | Pin / Interface | Signal Name | Description / Owner SWC |
 |---------------------|-----------------|-------------|--------------------------|
 | **MPU6500 IMU** | I2C1 (GP2 SDA / GP3 SCL) | `I2C1_SDA` / `SCL` | Head IMU for head-drop detection (`FallDetection`) |
-| **HLK-LD2450 Radar** | UART0 (GP0 RX / GP1 TX) | `UART0_RX` / `TX` | 24GHz mmWave radar @ 256k baud + DMA (`Ld2450`) |
+| **HLK-LD2450 Radar** | UART0 (GP0 TX / GP1 RX) | `UART0_TX` / `RX` | 24GHz mmWave radar @ 256k baud + DMA (`Ld2450`) |
 | **Passive Buzzer** | PWM GP18 (Slice 1 Ch A) | `BUZZER_PWM` | Proximity & fault audio beeps (`AlertManager`) |
 
 ---
@@ -96,7 +100,7 @@ See [cane mode manager behaviour and verification](src/app/CaneMode/README.md) f
 │   │   ├── Buzzer/                 # Piezo buzzer PWM frequency driver
 │   │   ├── CalButton/              # Cane calibration button (GP20) debounce & 2 s hold
 │   │   ├── Haptic/                 # Vibration motor pulse pattern driver & non-blocking arbiter
-│   │   ├── Ld2450/                 # HLK-LD2450 mmWave radar driver & UART stream buffer
+│   │   ├── Ld2450/                 # Radar frame parser and task-level DMA stream consumer
 │   │   ├── Mpu9250/                # MPU9250 / MPU6500 IMU I2C driver
 │   │   ├── TouchSensor/            # Capacitive touch sensor debouncer
 │   │   ├── Vl53l0x/                # VL53L0X ToF laser distance driver

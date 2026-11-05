@@ -1,4 +1,5 @@
 #include "Hal_I2c.h"
+#include <stddef.h>
 
 #ifdef PICO_ON_DEVICE
 #include "pico/stdlib.h"
@@ -128,17 +129,22 @@ bool Hal_I2c_WriteReg16(uint8_t port, uint8_t addr, uint16_t reg, uint8_t val)
 
 bool Hal_I2c_WriteRegs16(uint8_t port, uint8_t addr, uint16_t reg, const uint8_t * p_src, uint32_t len)
 {
+    if ((port > 1U) || (addr > 0x7FU) || (p_src == NULL) || (len == 0U) ||
+        (len > HAL_I2C_MAX_WRITE_BYTES) || (len > (0x10000U - (uint32_t)reg)))
+    {
+        return false;
+    }
 #ifdef PICO_ON_DEVICE
     i2c_inst_t * p_i2c = (port == 0U) ? i2c0 : i2c1;
-    uint8_t buf[len + 2];
-    buf[0] = (uint8_t)((reg >> 8) & 0xFF);
-    buf[1] = (uint8_t)(reg & 0xFF);
+    uint8_t buf[HAL_I2C_MAX_WRITE_BYTES + 2U];
+    buf[0] = (uint8_t)((reg >> 8) & 0xFFU);
+    buf[1] = (uint8_t)(reg & 0xFFU);
     for (uint32_t i = 0U; i < len; i++)
     {
-        buf[2 + i] = p_src[i];
+        buf[2U + i] = p_src[i];
     }
-    int ret = i2c_write_timeout_us(p_i2c, addr, buf, len + 2, false, HAL_I2C_TIMEOUT_US);
-    return (ret == (int)(len + 2));
+    int ret = i2c_write_timeout_us(p_i2c, addr, buf, len + 2U, false, HAL_I2C_TIMEOUT_US);
+    return (ret == (int)(len + 2U));
 #else
     (void)port;
     (void)addr;

@@ -1,16 +1,8 @@
 #include "BleComm.h"
 #include "BleComm_Cfg.h"
+#include "drivers/BleRadio/BleRadio.h"
+#include <stdatomic.h>
 #include <string.h>
-#include <stdio.h>
-
-#ifdef PICO_ON_DEVICE
-#include "pico/stdlib.h"
-#include "pico/cyw43_arch.h"
-#include "hardware/sync.h"
-#include "btstack.h"
-#else
-#define __dmb() do { __asm__ __volatile__("" : : : "memory"); } while (0)
-#endif
 
 /*
  * \file BleComm.c
@@ -20,16 +12,46 @@
 
 static BleComm_Config_t s_cfg;
 static uint16_t s_last_rx_seq = 0xFFFFU;
+static uint32_t s_last_rx_ms;
+static uint8_t s_last_rx_flags;
+static uint8_t s_last_rx_fall;
 
-#define BLECOMM_RX_QUEUE_SIZE 4U
-static Ble_AdvancedThreatPacket_t s_rx_queue[BLECOMM_RX_QUEUE_SIZE];
-static volatile uint8_t s_rx_q_head = 0U;
-static volatile uint8_t s_rx_q_tail = 0U;
+typedef struct
+{
+    Ble_AdvancedThreatPacket_t packet;
+    BleComm_ProfileId_t profile;
+} BleComm_Tx_t;
 
-#define BLECOMM_TX_QUEUE_SIZE 4U
-static Ble_AdvancedThreatPacket_t s_tx_queue[BLECOMM_TX_QUEUE_SIZE];
-static volatile uint8_t s_tx_q_head = 0U;
-static volatile uint8_t s_tx_q_tail = 0U;
+typedef struct
+{
+    Ble_AdvancedThreatPacket_t packet;
+    uint32_t received_ms;
+} BleComm_Rx_t;
+
+/* SPSC: Core 0 -> BTstack worker for TX; BTstack worker -> Core 0 for RX.
+ * Acquire/release indices publish complete snapshots. SDK atomics on RP2040 may
+ * use short spinlocks: no claim that volatile alone, or every atomic, is lock-free.
+ * These queues are used by tasks, not by ISRs.
+ */
+static BleComm_Rx_t s_rx_queue[BLECOMM_CFG_RX_QUEUE_SIZE];
+static _Atomic(uint32_t) s_rx_q_head;
+static _Atomic(uint32_t) s_rx_q_tail;
+static BleComm_Tx_t s_tx_queue[BLECOMM_CFG_TX_QUEUE_SIZE];
+static _Atomic(uint32_t) s_tx_q_head;
+static _Atomic(uint32_t) s_tx_q_tail;
+static BleComm_Tx_t s_current_tx;
+static bool s_have_tx;
+static BleComm_Policy_t s_policy;
+static _Atomic(uint32_t) s_worker_generation;
+static uint32_t s_observed_generation;
+static bool s_start_attempted;
+static bool s_radio_started;
+static bool s_profile_programmed;
+static uint8_t s_adv_data[BLECOMM_CFG_ADV_MAX_BYTES];
+static uint8_t s_adv_data_len;
+
+_Static_assert(BLECOMM_CFG_RX_QUEUE_SIZE > 1U, "RX queue needs a sentinel slot");
+_Static_assert(BLECOMM_CFG_TX_QUEUE_SIZE > 1U, "TX queue needs a sentinel slot");
 
 void BleComm_Encode(const Ble_AdvancedThreatPacket_t * const p_in, Ble_RawPacket_t * const p_out)
 {
@@ -169,76 +191,45 @@ bool BleComm_TrackPeerFall(BleComm_PeerFall_t * const p_tracker,
     return event;
 }
 
-#ifdef PICO_ON_DEVICE
-static btstack_packet_callback_registration_t hci_event_callback_registration;
-static uint8_t adv_data[31];
-static uint8_t adv_data_len = 0;
-
-static uint8_t scan_resp_data[31];
-static uint8_t scan_resp_data_len = 0;
-
-static void SetupScanRespData(void)
+static void SetupAdvData(const Ble_AdvancedThreatPacket_t * const p_pkt)
 {
-    const char *dev_name = (s_cfg.role == BLE_ROLE_BROADCASTER_GLASSES) ?
-                            BLECOMM_CFG_DEVICE_NAME_GLASSES : BLECOMM_CFG_DEVICE_NAME_CANE;
-    uint8_t name_len = (uint8_t)strlen(dev_name);
-    scan_resp_data[0] = name_len + 1;
-    scan_resp_data[1] = 0x09; /* Complete Local Name */
-    memcpy(&scan_resp_data[2], dev_name, name_len);
-    scan_resp_data_len = name_len + 2;
-}
-
-static void SetupAdvData(const Ble_AdvancedThreatPacket_t *p_pkt)
-{
-    const char *dev_name = (s_cfg.role == BLE_ROLE_BROADCASTER_GLASSES) ?
+    const char * const p_dev_name = (s_cfg.role == BLE_ROLE_BROADCASTER_GLASSES) ?
                             "EG-Glasses" : "EG-Cane";
-    uint8_t name_len = (uint8_t)strlen(dev_name);
+    uint8_t name_len = (uint8_t)strlen(p_dev_name);
+    _Static_assert((sizeof("EG-Glasses") + 14U) <= BLECOMM_CFG_ADV_MAX_BYTES,
+                   "Advertising name leaves no room for manufacturer data");
 
     /* 1. Flags AD: LE General Discoverable Mode, BR/EDR Not Supported */
-    adv_data[0] = 0x02;
-    adv_data[1] = 0x01;
-    adv_data[2] = 0x06;
+    s_adv_data[0] = 0x02U;
+    s_adv_data[1] = 0x01U;
+    s_adv_data[2] = 0x06U;
 
     /* 2. Short Local Name AD */
-    adv_data[3] = name_len + 1;
-    adv_data[4] = 0x08; /* Shortened Local Name */
-    memcpy(&adv_data[5], dev_name, name_len);
+    s_adv_data[3] = (uint8_t)(name_len + 1U);
+    s_adv_data[4] = 0x08U;
+    memcpy(&s_adv_data[5], p_dev_name, name_len);
 
-    uint8_t idx = 5 + name_len;
-
-    Ble_AdvancedThreatPacket_t local_pkt;
-    if (p_pkt != NULL)
-    {
-        local_pkt = *p_pkt;
-    }
-    else
-    {
-        memset(&local_pkt, 0, sizeof(local_pkt));
-        local_pkt.node_type = (s_cfg.role == BLE_ROLE_BROADCASTER_GLASSES) ?
-                              BLE_NODE_TYPE_GLASSES : BLE_NODE_TYPE_CANE;
-        local_pkt.pair_id = s_cfg.pair_id;
-        local_pkt.nearest_dist_mm = 0xFFFFU;
-        local_pkt.ttc_ms = 0xFFFFU;
-    }
-    /* Preserve the sequence attached to this queued payload. Using the producer's
-     * current counter here can give different queued states the same sequence.
-     */
+    uint8_t idx = (uint8_t)(5U + name_len);
 
     Ble_RawPacket_t raw_pkt;
-    BleComm_Encode(&local_pkt, &raw_pkt);
+    BleComm_Encode(p_pkt, &raw_pkt);
 
     /* 3. Manufacturer Data AD: 1B Type + 2B Company ID + 6B Raw Packet = 9 bytes */
-    adv_data[idx]      = 9U;   /* AD length = 9 bytes */
-    adv_data[idx + 1]  = 0xFF; /* Manufacturer Specific */
-    adv_data[idx + 2]  = 0x29; /* Company ID Low */
-    adv_data[idx + 3]  = 0x00; /* Company ID High */
-    memcpy(&adv_data[idx + 4], &raw_pkt, sizeof(Ble_RawPacket_t));
+    s_adv_data[idx]       = 9U;
+    s_adv_data[idx + 1U]  = 0xFFU;
+    s_adv_data[idx + 2U]  = 0x29U;
+    s_adv_data[idx + 3U]  = 0x00U;
+    memcpy(&s_adv_data[idx + 4U], &raw_pkt, sizeof(Ble_RawPacket_t));
 
-    adv_data_len = idx + 10U;
+    s_adv_data_len = (uint8_t)(idx + 10U);
 }
 
-static void ParseAdvReport(const uint8_t * adv_report_data, uint8_t adv_report_len)
+static void ParseAdvReport(const uint8_t * adv_report_data, uint8_t adv_report_len, uint32_t now_ms)
 {
+    if ((adv_report_data == NULL) || (adv_report_len > BLECOMM_CFG_ADV_MAX_BYTES))
+    {
+        return;
+    }
     uint8_t i = 0U;
     while ((i + 1U) < adv_report_len)
     {
@@ -257,128 +248,118 @@ static void ParseAdvReport(const uint8_t * adv_report_data, uint8_t adv_report_l
         /* Check for Manufacturer Specific Data (0xFF) */
         if ((ad_type == 0xFFU) && (ad_len >= 9U)) /* 1B type + 2B Company ID + 6B raw packet */
         {
-            uint16_t company_id = (uint16_t)adv_report_data[i + 2U] | ((uint16_t)adv_report_data[i + 3U] << 8);
+            uint16_t company_id = (uint16_t)((uint16_t)adv_report_data[i + 2U] |
+                                             ((uint16_t)adv_report_data[i + 3U] << 8));
             if (company_id == 0x0029U)
             {
                 Ble_RawPacket_t raw;
                 memcpy(&raw, &adv_report_data[i + 4U], sizeof(Ble_RawPacket_t));
 
                 Ble_AdvancedThreatPacket_t pkt;
-                if (BleComm_Decode(&raw, s_cfg.pair_id, &pkt))
+                Ble_NodeType_t own_type = (s_cfg.role == BLE_ROLE_BROADCASTER_GLASSES) ?
+                                           BLE_NODE_TYPE_GLASSES : BLE_NODE_TYPE_CANE;
+                if (BleComm_Decode(&raw, s_cfg.pair_id, &pkt) && (pkt.node_type != own_type))
                 {
-                    (void)BleComm_ReceivePacket(&pkt);
+                    (void)BleComm_ReceivePacketAt(&pkt, now_ms);
                 }
             }
         }
 
-        i += (ad_len + 1U);
+        i = (uint8_t)(i + ad_len + 1U);
     }
 }
 
-static void packet_handler(uint8_t packet_type, uint16_t channel, uint8_t *packet, uint16_t size)
+static void Radio_Work(bool restarted, uint32_t now_ms)
 {
-    (void)channel;
-    (void)size;
-
-    if (packet_type != HCI_EVENT_PACKET)
+    bool updated = false;
+    /* Coalesce only a bounded number of snapshots; never replay a long stale FIFO. */
+    for (uint32_t i = 0U; i < (BLECOMM_CFG_TX_QUEUE_SIZE - 1U); ++i)
     {
-        return;
-    }
-
-    uint8_t event = hci_event_packet_get_type(packet);
-    if (event == BTSTACK_EVENT_STATE)
-    {
-        if (btstack_event_state_get_state(packet) == HCI_STATE_WORKING)
+        uint32_t tail = atomic_load_explicit(&s_tx_q_tail, memory_order_relaxed);
+        if (tail == atomic_load_explicit(&s_tx_q_head, memory_order_acquire))
         {
-            const char *display_name = (s_cfg.role == BLE_ROLE_BROADCASTER_GLASSES) ?
-                                       BLECOMM_CFG_DEVICE_NAME_GLASSES : BLECOMM_CFG_DEVICE_NAME_CANE;
-            printf("[BLE] BTstack controller working. Enabling BLE Advertising & Passive Scanning...\n");
-
-            /* Set 100ms (10 Hz per NFR13) advertising interval: 160 * 0.625ms = 100ms */
-            gap_advertisements_set_params(0x00A0, 0x00A0, 0x00, 0x00, NULL, 0x07, 0x00);
-
-            SetupAdvData(NULL);
-            gap_advertisements_set_data(adv_data_len, adv_data);
-
-            SetupScanRespData();
-            gap_scan_response_set_data(scan_resp_data_len, scan_resp_data);
-
-            gap_advertisements_enable(1);
-
-            /* Enable Continuous Passive Scanning (NFR13: 80ms scan window / 100ms interval) */
-            gap_set_scan_parameters(0, 0x00A0, 0x0080);
-            gap_start_scan();
-
-            printf("[BLE] Active as '%s' (Advertising & Scanning started)\n", display_name);
+            break;
         }
+        s_current_tx = s_tx_queue[tail];
+        atomic_store_explicit(&s_tx_q_tail, (tail + 1U) % BLECOMM_CFG_TX_QUEUE_SIZE, memory_order_release);
+        s_have_tx = true;
+        updated = true;
     }
-    else if (event == GAP_EVENT_ADVERTISING_REPORT)
+    BleComm_ProfileId_t previous = s_policy.effective;
+    BleComm_ProfileId_t desired = s_have_tx ? s_current_tx.profile : BLECOMM_PROFILE_FAST;
+    BleComm_ProfileId_t effective = BleComm_PolicyStep(&s_policy, desired, now_ms);
+    if (BleRadio_IsReady())
     {
-        uint8_t event_data_len = gap_event_advertising_report_get_data_length(packet);
-        const uint8_t * event_data = gap_event_advertising_report_get_data(packet);
-        if ((event_data != NULL) && (event_data_len > 0U))
+        bool configure = restarted || !s_profile_programmed || (previous != effective);
+        if (configure)
         {
-            ParseAdvReport(event_data, event_data_len);
+            BleRadio_Configure(&BleComm_GetProfile(effective)->radio);
+            s_profile_programmed = true;
         }
-    }
-    else
-    {
-        /* Other HCI events ignored */
+        if ((updated || configure) && s_have_tx)
+        {
+            SetupAdvData(&s_current_tx.packet);
+            BleRadio_SetAdvertisingData(s_adv_data, s_adv_data_len);
+        }
+        uint32_t generation = atomic_load_explicit(&s_worker_generation, memory_order_relaxed);
+        atomic_store_explicit(&s_worker_generation, generation + 1U, memory_order_release);
     }
 }
-#endif
 
 void BleComm_Init(const BleComm_Config_t * const p_cfg)
 {
-    if (p_cfg != NULL)
-    {
-        s_cfg = *p_cfg;
-    }
+    s_cfg = (p_cfg != NULL) ? *p_cfg : BleComm_Config_Cane;
     s_last_rx_seq = 0xFFFFU;
-    s_rx_q_head = 0U;
-    s_rx_q_tail = 0U;
-    s_tx_q_head = 0U;
-    s_tx_q_tail = 0U;
-
-#ifdef PICO_ON_DEVICE
-    if (cyw43_arch_init())
-    {
-        printf("[BLE ERROR] Failed to initialize CYW43 Bluetooth hardware\n");
-        return;
-    }
-
-    l2cap_init();
-    sm_init();
-
-    hci_event_callback_registration.callback = &packet_handler;
-    hci_add_event_handler(&hci_event_callback_registration);
-
-    hci_power_control(HCI_POWER_ON);
-    printf("[BLE] CYW43439 Bluetooth Hardware Initialized on Core 1\n");
-#endif
+    s_last_rx_ms = 0U;
+    s_last_rx_flags = 0U;
+    s_last_rx_fall = 0U;
+    atomic_store_explicit(&s_rx_q_head, 0U, memory_order_relaxed);
+    atomic_store_explicit(&s_rx_q_tail, 0U, memory_order_relaxed);
+    atomic_store_explicit(&s_tx_q_head, 0U, memory_order_relaxed);
+    atomic_store_explicit(&s_tx_q_tail, 0U, memory_order_relaxed);
+    atomic_store_explicit(&s_worker_generation, 0U, memory_order_relaxed);
+    s_observed_generation = 0U;
+    s_start_attempted = false;
+    s_radio_started = false;
+    s_profile_programmed = false;
+    s_have_tx = false;
+    BleComm_PolicyInit(&s_policy);
 }
 
 bool BleComm_SendPacket(const Ble_AdvancedThreatPacket_t * const p_pkt)
+{
+    return BleComm_Publish(p_pkt, SYS_STATE_ACTIVE, false);
+}
+
+bool BleComm_Publish(const Ble_AdvancedThreatPacket_t * const p_pkt, Sys_State_t state, bool link_lost)
 {
     if (p_pkt == NULL)
     {
         return false;
     }
 
-    /* Core 0 Producer: push into lock-free SPSC TX queue */
-    uint8_t next_head = (uint8_t)((s_tx_q_head + 1U) % BLECOMM_TX_QUEUE_SIZE);
-    if (next_head == s_tx_q_tail)
+    uint32_t head = atomic_load_explicit(&s_tx_q_head, memory_order_relaxed);
+    uint32_t next_head = (head + 1U) % BLECOMM_CFG_TX_QUEUE_SIZE;
+    if (next_head == atomic_load_explicit(&s_tx_q_tail, memory_order_acquire))
     {
         return false; /* Queue full: drop packet without blocking */
     }
 
-    s_tx_queue[s_tx_q_head] = *p_pkt;
-    __dmb();
-    s_tx_q_head = next_head;
+    s_tx_queue[head].packet = *p_pkt;
+    s_tx_queue[head].profile = BleComm_SelectProfile(state, p_pkt->state_flags, link_lost);
+    atomic_store_explicit(&s_tx_q_head, next_head, memory_order_release);
     return true;
 }
 
+#ifndef PICO_ON_DEVICE
 bool BleComm_ReceivePacket(const Ble_AdvancedThreatPacket_t * const p_pkt)
+{
+    /* Compatibility entry for host injection; the real transport always timestamps RX. */
+    return BleComm_ReceivePacketAt(p_pkt, 0U);
+}
+#endif
+
+bool BleComm_ReceivePacketAt(const Ble_AdvancedThreatPacket_t * const p_pkt, uint32_t now_ms)
 {
     if (p_pkt == NULL)
     {
@@ -390,7 +371,10 @@ bool BleComm_ReceivePacket(const Ble_AdvancedThreatPacket_t * const p_pkt)
         if ((p_pkt->seq_num <= 7U) && (s_last_rx_seq <= 7U))
         {
             uint8_t delta = (uint8_t)((p_pkt->seq_num - s_last_rx_seq) & 0x07U);
-            if ((delta == 0U) || (delta > 4U))
+            bool state_changed = (p_pkt->state_flags != s_last_rx_flags) ||
+                                 (p_pkt->rolling_fall_seq != s_last_rx_fall);
+            if (((delta == 0U) && !state_changed) ||
+                ((delta > 4U) && ((uint32_t)(now_ms - s_last_rx_ms) < BLECOMM_CFG_RX_REBASE_MS)))
             {
                 return false;
             }
@@ -403,95 +387,68 @@ bool BleComm_ReceivePacket(const Ble_AdvancedThreatPacket_t * const p_pkt)
             }
         }
     }
-    s_last_rx_seq = p_pkt->seq_num;
-
-    /* Push into reception queue with memory barrier */
-    uint8_t next_head = (uint8_t)((s_rx_q_head + 1U) % BLECOMM_RX_QUEUE_SIZE);
-    if (next_head != s_rx_q_tail)
+    uint32_t head = atomic_load_explicit(&s_rx_q_head, memory_order_relaxed);
+    uint32_t next_head = (head + 1U) % BLECOMM_CFG_RX_QUEUE_SIZE;
+    if (next_head == atomic_load_explicit(&s_rx_q_tail, memory_order_acquire))
     {
-        s_rx_queue[s_rx_q_head] = *p_pkt;
-        __dmb();
-        s_rx_q_head = next_head;
+        return false;
     }
-
+    s_rx_queue[head].packet = *p_pkt;
+    s_rx_queue[head].received_ms = now_ms;
+    atomic_store_explicit(&s_rx_q_head, next_head, memory_order_release);
+    /* Only accepted snapshots advance replay/freshness bookkeeping. */
+    s_last_rx_seq = p_pkt->seq_num;
+    s_last_rx_ms = now_ms;
+    s_last_rx_flags = p_pkt->state_flags;
+    s_last_rx_fall = p_pkt->rolling_fall_seq;
     return true;
 }
 
-bool BleComm_PopReceivedPacket(Ble_AdvancedThreatPacket_t * const p_pkt)
+bool BleComm_PopReceivedPacket(Ble_AdvancedThreatPacket_t * const p_pkt, uint32_t * const p_received_ms)
 {
     if (p_pkt == NULL)
     {
         return false;
     }
 
-    if (s_rx_q_tail == s_rx_q_head)
+    uint32_t tail = atomic_load_explicit(&s_rx_q_tail, memory_order_relaxed);
+    if (tail == atomic_load_explicit(&s_rx_q_head, memory_order_acquire))
     {
         return false;
     }
 
-    *p_pkt = s_rx_queue[s_rx_q_tail];
-    __dmb();
-    s_rx_q_tail = (uint8_t)((s_rx_q_tail + 1U) % BLECOMM_RX_QUEUE_SIZE);
+    *p_pkt = s_rx_queue[tail].packet;
+    if (p_received_ms != NULL)
+    {
+        *p_received_ms = s_rx_queue[tail].received_ms;
+    }
+    atomic_store_explicit(&s_rx_q_tail, (tail + 1U) % BLECOMM_CFG_RX_QUEUE_SIZE, memory_order_release);
     return true;
 }
 
+#ifndef PICO_ON_DEVICE
 void BleComm_InjectRxPacket(const Ble_AdvancedThreatPacket_t * const p_pkt)
 {
     (void)BleComm_ReceivePacket(p_pkt);
 }
-
-static bool s_ble_power_active = true;
-static volatile bool s_power_change_requested = false;
-static volatile bool s_target_power_state = true;
-
-void BleComm_SetPowerMode(bool enable)
-{
-    s_target_power_state = enable;
-    __dmb();
-    s_power_change_requested = true;
-}
-
-void BleComm_Core1_Task(void)
-{
-#ifdef PICO_ON_DEVICE
-    if (s_power_change_requested)
-    {
-        s_power_change_requested = false;
-        __dmb();
-        bool enable = s_target_power_state;
-
-        if (enable && !s_ble_power_active)
-        {
-            hci_power_control(HCI_POWER_ON);
-            gap_advertisements_enable(1);
-            gap_start_scan();
-            s_ble_power_active = true;
-            printf("[BLE POWER] Radio Resumed (ON)\n");
-        }
-        else if (!enable && s_ble_power_active)
-        {
-            gap_advertisements_enable(0);
-            gap_stop_scan();
-            hci_power_control(HCI_POWER_OFF);
-            s_ble_power_active = false;
-            printf("[BLE POWER] Radio Suspended (OFF Low-Power Mode)\n");
-        }
-    }
-
-    if (s_ble_power_active)
-    {
-        cyw43_arch_poll();
-
-        /* Core 1 Consumer: process pending outbound packets from Core 0 */
-        if (s_tx_q_tail != s_tx_q_head)
-        {
-            Ble_AdvancedThreatPacket_t pkt_to_send = s_tx_queue[s_tx_q_tail];
-            __dmb();
-            s_tx_q_tail = (uint8_t)((s_tx_q_tail + 1U) % BLECOMM_TX_QUEUE_SIZE);
-
-            SetupAdvData(&pkt_to_send);
-            gap_advertisements_set_data(adv_data_len, adv_data);
-        }
-    }
 #endif
+
+bool BleComm_Core1_Task(void)
+{
+    if (!s_start_attempted)
+    {
+        s_start_attempted = true;
+        const char * const p_name = (s_cfg.role == BLE_ROLE_BROADCASTER_GLASSES) ?
+                                    BLECOMM_CFG_DEVICE_NAME_GLASSES : BLECOMM_CFG_DEVICE_NAME_CANE;
+        s_radio_started = BleRadio_Start(p_name, Radio_Work, ParseAdvReport);
+    }
+    if (!s_radio_started)
+    {
+        return false;
+    }
+    BleRadio_RequestWork();
+    uint32_t generation = atomic_load_explicit(&s_worker_generation, memory_order_acquire);
+    bool progressed = (generation != s_observed_generation);
+    s_observed_generation = generation;
+    return progressed && BleRadio_IsReady();
 }

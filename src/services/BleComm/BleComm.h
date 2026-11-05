@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "Rte_Type.h"
+#include "BleComm_Policy.h"
 
 /*
  * \file BleComm.h
@@ -44,10 +45,15 @@ bool BleComm_Decode(const Ble_RawPacket_t * const p_in, uint8_t expected_pair_id
 bool BleComm_CheckNewFall(uint8_t rx_fall_seq, uint8_t last_fall_seq);
 
 bool BleComm_SendPacket(const Ble_AdvancedThreatPacket_t * const p_pkt);
+/* Enqueue payload and state together. False means retry; never wait for queue space. */
+bool BleComm_Publish(const Ble_AdvancedThreatPacket_t * const p_pkt, Sys_State_t state, bool link_lost);
+bool BleComm_ReceivePacketAt(const Ble_AdvancedThreatPacket_t * const p_pkt, uint32_t now_ms);
+bool BleComm_PopReceivedPacket(Ble_AdvancedThreatPacket_t * const p_pkt, uint32_t * const p_received_ms);
+#ifndef PICO_ON_DEVICE
 bool BleComm_ReceivePacket(const Ble_AdvancedThreatPacket_t * const p_pkt);
-bool BleComm_PopReceivedPacket(Ble_AdvancedThreatPacket_t * const p_pkt);
 void BleComm_InjectRxPacket(const Ble_AdvancedThreatPacket_t * const p_pkt);
-void BleComm_SetPowerMode(bool enable);
-void BleComm_Core1_Task(void);
+#endif
+/* True only when the BTstack worker has progressed while its controller is ready. */
+bool BleComm_Core1_Task(void);
 
 #endif /* BLECOMM_H */

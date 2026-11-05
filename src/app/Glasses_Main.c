@@ -14,6 +14,7 @@
 #include "services/BleComm/BleComm.h"
 #include "services/BleComm/BleComm_Cfg.h"
 #include "services/ImuSupervisor/ImuSupervisor.h"
+#include "services/Diagnostics/Diagnostics.h"
 #include "services/Watchdog/Watchdog.h"
 #include "services/Watchdog/Watchdog_Cfg.h"
 #include "app/FallDetection/FallDetection.h"
@@ -42,10 +43,7 @@ static Sys_State_t s_glasses_mode = SYS_STATE_INIT;
 static uint32_t GetCurrentTimeMs(void)
 {
 #ifdef PICO_ON_DEVICE
-    if (xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED)
-    {
-        return (uint32_t)xTaskGetTickCount() * (uint32_t)portTICK_PERIOD_MS;
-    }
+    /* Use the radio's monotonic boot-time epoch for receive freshness. */
     return to_ms_since_boot(get_absolute_time());
 #else
     return 0U;
@@ -71,9 +69,12 @@ static void vTask_GlassesPerception(void *pvParameters)
     uint32_t last_movement_ms = GetCurrentTimeMs();
     uint32_t last_imu_sample_ms = last_movement_ms;
     uint32_t last_radar_ms = 0U;
+    uint32_t last_radar_retry_ms = 0U;
     uint32_t last_btn_ms = 0U;
     uint32_t last_telemetry_ms = 0U;
     uint8_t last_sent_flags = 0xFFU;
+    Sys_State_t last_sent_state = SYS_STATE_COUNT;
+    BleComm_ProfileId_t last_sent_profile = BLECOMM_PROFILE_FAST;
     uint16_t buzzer_freq_hz = 0U;
     bool ack_was_pressed = !Hal_Gpio_Read(GLASSES_PIN_ACK_BTN);
 
@@ -112,11 +113,17 @@ static void vTask_GlassesPerception(void *pvParameters)
 
         /* Process incoming BLE packets from Cane Node */
         Ble_AdvancedThreatPacket_t rx_pkt;
-        while (BleComm_PopReceivedPacket(&rx_pkt))
+        uint32_t received_ms;
+        for (uint32_t i = 0U; i < BLECOMM_CFG_RX_QUEUE_SIZE; ++i)
         {
-            if (rx_pkt.device_id == 0x01U) /* 0x01 = Cane Node */
+            if (!BleComm_PopReceivedPacket(&rx_pkt, &received_ms))
             {
-                last_cane_pkt_ms = now_ms;
+                break;
+            }
+            if ((rx_pkt.device_id == 0x01U) &&
+                ((uint32_t)(now_ms - received_ms) < WATCHDOG_CFG_DEADMAN_TIMEOUT_MS))
+            {
+                last_cane_pkt_ms = received_ms;
                 cane_seen = true;
                 cane_standby = ((rx_pkt.state_flags & BLE_FLAG_STANDBY) != 0U);
                 /* An override can park the cane with the touch pad still held. */
@@ -199,33 +206,19 @@ static void vTask_GlassesPerception(void *pvParameters)
         if ((now_ms - last_radar_ms) >= 20U)
         {
             last_radar_ms = now_ms;
-            uint8_t * p_circ_buf = Ld2450_Irq_GetBuffer();
-            uint32_t tail = Ld2450_Irq_GetTail();
-            uint32_t head = Hal_Uart_GetDmaWriteIndex(256U);
-
-            uint32_t available = (head + 256U - tail) % 256U;
-            if (available >= 30U)
+            Radar_Target_t targets[3];
+            uint8_t target_count = 0U;
+            if (Ld2450_ProcessStream(targets, &target_count, now_ms))
             {
-                Radar_Target_t targets[3];
-                uint8_t target_count = 0U;
-
-                uint8_t frame[30];
-                for (uint32_t i = 0U; i < sizeof(frame); ++i)
-                {
-                    frame[i] = p_circ_buf[(tail + i) % 256U];
-                }
-                if (Ld2450_ParseFrame(frame, sizeof(frame), targets, &target_count))
-                {
-                    last_valid_radar_frame_ms = now_ms;
-                    ThreatAssessment_ProcessTargets(targets, target_count, cane_grip_telemetry, &current_threat);
-
-                    Ld2450_Irq_SetTail((tail + 30U) % 256U);
-                }
-                else
-                {
-                    /* Resynchronize after dropped bytes or a partially overwritten frame. */
-                    Ld2450_Irq_SetTail((tail + 1U) % 256U);
-                }
+                last_valid_radar_frame_ms = now_ms;
+                ThreatAssessment_ProcessTargets(targets, target_count, cane_grip_telemetry, &current_threat);
+            }
+            if (Ld2450_HasRxFault() && ((uint32_t)(now_ms - last_radar_retry_ms) >= 1000U))
+            {
+                last_radar_retry_ms = now_ms;
+                (void)Ld2450_Init(&Ld2450_Config_Glasses);
+                /* Do not reuse the old threat after restarting the DMA stream. */
+                current_threat.is_threat_active = false;
             }
         }
 
@@ -265,7 +258,7 @@ static void vTask_GlassesPerception(void *pvParameters)
             }
         }
 
-        bool radar_timeout = (now_ms - last_valid_radar_frame_ms) >= 500U;
+        bool radar_timeout = ((now_ms - last_valid_radar_frame_ms) >= 500U) || Ld2450_HasRxFault();
         bool standby = (imu.state == IMU_SUPERVISOR_ASLEEP) && sleep_requested;
         bool obstacle = !standby && (cane_grip_telemetry != GRIP_STATE_RELEASED) &&
                         current_threat.is_threat_active && !radar_timeout;
@@ -278,7 +271,7 @@ static void vTask_GlassesPerception(void *pvParameters)
         {
             s_glasses_mode = SYS_STATE_STANDBY;
         }
-        else if (imu.fault)
+        else if (imu.fault || radar_timeout)
         {
             s_glasses_mode = SYS_STATE_FAULT_DEGRADED;
         }
@@ -314,12 +307,6 @@ static void vTask_GlassesPerception(void *pvParameters)
             buzzer_freq_hz = next_freq_hz;
         }
 
-        uint32_t active_telemetry_period_ms = BLECOMM_CFG_TELEMETRY_IDLE_MS;
-        if (obstacle || head_fall_latched || imu.fault)
-        {
-            active_telemetry_period_ms = BLECOMM_CFG_TELEMETRY_ALERT_MS;
-        }
-
         uint8_t flags = 0U;
         if (head_fall_latched)
         {
@@ -337,7 +324,11 @@ static void vTask_GlassesPerception(void *pvParameters)
         {
             flags |= BLE_FLAG_STANDBY;
         }
-        if ((flags != last_sent_flags) || ((now_ms - last_telemetry_ms) >= active_telemetry_period_ms))
+        bool link_lost = (cane_grip_telemetry == GRIP_STATE_UNKNOWN);
+        BleComm_ProfileId_t profile = BleComm_SelectProfile(s_glasses_mode, flags, link_lost);
+        uint32_t telemetry_period_ms = BleComm_GetProfile(profile)->payload_period_ms;
+        if ((flags != last_sent_flags) || (s_glasses_mode != last_sent_state) ||
+            (profile != last_sent_profile) || ((now_ms - last_telemetry_ms) >= telemetry_period_ms))
         {
             uint16_t ttc = (radar_timeout || standby || (current_threat.time_to_collision_ms == UINT16_MAX)) ?
                             0xFFFFU : current_threat.time_to_collision_ms;
@@ -355,11 +346,13 @@ static void vTask_GlassesPerception(void *pvParameters)
                 .closing_speed_cms = 0,
                 .ttc_ms = ttc
             };
-            if (BleComm_SendPacket(&heartbeat_pkt))
+            if (BleComm_Publish(&heartbeat_pkt, s_glasses_mode, link_lost))
             {
                 glasses_tx_seq++;
                 last_telemetry_ms = now_ms;
                 last_sent_flags = flags;
+                last_sent_state = s_glasses_mode;
+                last_sent_profile = profile;
             }
         }
 
@@ -381,12 +374,11 @@ static void vTask_GlassesBleRadioServer(void *pvParameters)
 
     for (;;)
     {
-        BleComm_Core1_Task();
-
-        /* Token-Passing: Feed HW Watchdog only if Core 0 is actively setting the token */
-        Watchdog_FeedHardware();
-
-        vTaskDelay(pdMS_TO_TICKS(10));
+        if (BleComm_Core1_Task())
+        {
+            (void)Watchdog_FeedHardware();
+        }
+        vTaskDelay(pdMS_TO_TICKS(BLECOMM_CFG_RADIO_TASK_MS));
     }
 }
 #endif
@@ -405,7 +397,7 @@ int main(void)
     Hal_Gpio_Init(GLASSES_PIN_ACK_BTN, HAL_GPIO_DIR_IN, true);
 
     Buzzer_Init(&Buzzer_Config_Glasses);
-    Ld2450_Init(&Ld2450_Config_Glasses);
+    (void)Ld2450_Init(&Ld2450_Config_Glasses); /* Task-level fault/retry handles failure. */
     BleComm_Init(&BleComm_Config_Glasses);
 
     FallDetection_Init(&FallConfig_Head);
@@ -420,14 +412,22 @@ int main(void)
     /* Create FreeRTOS Tasks with Explicit Core Affinity */
     TaskHandle_t xGlassesPerceptionHandle = NULL;
     TaskHandle_t xGlassesRadioHandle = NULL;
+    TaskHandle_t xDiagnosticsHandle = NULL;
 
     /* Task 1: Glasses Perception Task -> Pinned to Core 0 (Priority 3 - High) */
-    xTaskCreate(vTask_GlassesPerception, "GlassesPerception", 1024, NULL, 3, &xGlassesPerceptionHandle);
+    BaseType_t created = xTaskCreate(vTask_GlassesPerception, "GlassesPerception", 1024U, NULL, 3U,
+                                    &xGlassesPerceptionHandle);
+    configASSERT(created == pdPASS);
     vTaskCoreAffinitySet(xGlassesPerceptionHandle, (1U << 0));
 
     /* Task 2: Dedicated BLE Radio Task -> Pinned to Core 1 (Priority 1 - Standard) */
-    xTaskCreate(vTask_GlassesBleRadioServer, "GlassesRadio", 1024, NULL, 1, &xGlassesRadioHandle);
+    created = xTaskCreate(vTask_GlassesBleRadioServer, "GlassesRadio", 1024U, NULL, 1U, &xGlassesRadioHandle);
+    configASSERT(created == pdPASS);
     vTaskCoreAffinitySet(xGlassesRadioHandle, (1U << 1));
+
+    created = xTaskCreate(Diagnostics_Task, "Diagnostics", 768U, NULL, 1U, &xDiagnosticsHandle);
+    configASSERT(created == pdPASS);
+    vTaskCoreAffinitySet(xDiagnosticsHandle, (1U << 0));
 
     /* Start FreeRTOS Scheduler */
     vTaskStartScheduler();

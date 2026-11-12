@@ -200,12 +200,13 @@ rte_write_grip_state (rte_grip_state_t grip)
 }
 
 void
-rte_write_audio_msg (rte_audio_msg_type_t type, uint16_t d_mm)
+rte_write_audio_msg (rte_audio_msg_type_t type, uint16_t d_mm, uint8_t cue)
 {
     if (g_audio_count < MOCK_LOG_CAPACITY)
     {
         g_audio_log[g_audio_count].type = type;
         g_audio_log[g_audio_count].d_mm = d_mm;
+        g_audio_log[g_audio_count].cue = cue;
         g_audio_count++;
     }
 }
@@ -220,6 +221,32 @@ rte_write_ble_obstacle (bool b_active, uint16_t d_mm, uint16_t ttc_ms)
         g_ble_log[g_ble_count].ttc_ms = ttc_ms;
         g_ble_count++;
     }
+}
+
+// Bench-debug only (OPEN-19): a print on the real target, so the host
+// build has nothing to assert on here.
+void
+rte_write_mio_debug (bool b_present, size_t track_slot, uint32_t d_mm,
+                     uint32_t risk_mm, bool b_collision)
+{
+    (void) b_present;
+    (void) track_slot;
+    (void) d_mm;
+    (void) risk_mm;
+    (void) b_collision;
+}
+
+// Bench-debug only (OPEN-20): a print on the real target, so the host
+// build has nothing to assert on here.
+void
+rte_write_dir_debug (bool b_left_blocked, bool b_middle_blocked,
+                     bool b_right_blocked, bool b_active, uint8_t cue)
+{
+    (void) b_left_blocked;
+    (void) b_middle_blocked;
+    (void) b_right_blocked;
+    (void) b_active;
+    (void) cue;
 }
 
 /*** end of file ***/

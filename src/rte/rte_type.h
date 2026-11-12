@@ -20,18 +20,35 @@
 #define RTE_RADAR_NUM_TARGETS    (3u)
 
 /**
+ * Which side of the walking path a target is on (FR9 cue byte). Decided by
+ * radar_monitor_apply_corridor() from x_mm, before x_mm itself is dropped.
+ * CENTER for an empty slot. Code 3 is reserved (an unpacked corrupt slot
+ * reads as CENTER, the safe value: no direction is suggested).
+ */
+typedef enum
+{
+    RTE_SIDE_CENTER = 0,
+    RTE_SIDE_LEFT   = 1,
+    RTE_SIDE_RIGHT  = 2
+} rte_cue_side_t;
+
+/**
  * One radar target slot. An empty slot has b_valid set to false.
  * x_mm and y_mm exist only between the driver and the debug print; they are
- * not in the radar queue message. d_mm is the straight-line distance worked
- * out by the driver (at most 46339).
+ * not in the radar queue message. side IS in the message (2 bits): the
+ * geometry it needs is already gone by the time Glasses_Threat sees the
+ * target, so radar_monitor works it out first and only the small verdict
+ * travels. d_mm is the straight-line distance worked out by the driver (at
+ * most 46339).
  */
 typedef struct
 {
-    bool     b_valid;
-    int16_t  x_mm;
-    int16_t  y_mm;
-    uint16_t d_mm;
-    int16_t  speed_cms;
+    bool           b_valid;
+    int16_t        x_mm;
+    int16_t        y_mm;
+    uint16_t       d_mm;
+    int16_t        speed_cms;
+    rte_cue_side_t side;
 } rte_radar_target_t;
 
 /**
@@ -55,8 +72,12 @@ typedef enum
     RTE_RADAR_MSG_GRIP  = 2
 } rte_radar_msg_type_t;
 
-/** Size of one packed radar queue message (102 bits, see rte_pack.h). */
-#define RTE_RADAR_MSG_BYTES    (13u)
+/**
+ * Size of one packed radar queue message (108 bits used of 112, see
+ * rte_pack.h). 13 bytes (102 bits) until the FR9 cue byte work (8 Nov): a
+ * side field was added to each of the 3 target slots.
+ */
+#define RTE_RADAR_MSG_BYTES    (14u)
 
 /**
  * Item of the radar queue (to Glasses_Threat): the packed bytes, copied whole
@@ -91,12 +112,29 @@ typedef enum
     RTE_AUDIO_RADAR_OK       = 3
 } rte_audio_msg_type_t;
 
-/** Item of the Audio Alert queue (radar related variants only). */
+/**
+ * Item of the Audio Alert queue (radar related variants only). cue is
+ * meaningful for RTE_AUDIO_OBSTACLE only; every other type sends 0.
+ */
 typedef struct
 {
     rte_audio_msg_type_t type;
     uint16_t             d_mm;
+    uint8_t              cue;
 } rte_audio_msg_t;
+
+/**
+ * FR9 cue byte (prof feedback, 7 Nov 2026): tells Audio Alert what to do,
+ * not just how close. Bit 0 is STOP (the alerting target is inside the stop
+ * cue band, see THREAT_ASSESSMENT_STOP_CUE_ON_MM); bits 1-2 are the side
+ * (rte_cue_side_t) of the target Glasses_Threat is alerting on. Bits 3-7 are
+ * always 0. A bit-flag byte describing the obstacle, not a reject mask
+ * (OPEN-4): there is nothing here to reject, every bit says something true
+ * about the alert that is already active.
+ */
+#define RTE_CUE_STOP        (0x01u)
+#define RTE_CUE_SIDE_SHIFT  (1u)
+#define RTE_CUE_SIDE_MASK   (0x03u)
 
 /** Item of the BLE obstacle queue. ttc_ms is RTE_TTC_NONE_MS if unknown. */
 typedef struct

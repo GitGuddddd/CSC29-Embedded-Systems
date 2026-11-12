@@ -32,6 +32,9 @@
 /** Largest speed magnitude that is sent; larger values are clamped. */
 #define RTE_PACK_SPEED_MAX_CMS       ((1 << (RTE_PACK_SPEED_BITS - 1u)) - 1)
 
+/** Side field width: rte_cue_side_t (center/left/right); code 3 unused. */
+#define RTE_PACK_SIDE_BITS           (2u)
+
 void rte_pack_put_bits (uint8_t * p_buf, uint32_t offset, uint32_t width,
                    uint32_t value);
 uint32_t rte_pack_get_bits (const uint8_t * p_buf, uint32_t offset,

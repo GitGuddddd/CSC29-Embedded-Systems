@@ -22,6 +22,7 @@ static bool radar_monitor_is_settling (const radar_monitor_t * p_monitor,
                                        uint32_t now_ms);
 static void radar_monitor_apply_corridor (
     const rte_radar_target_t * p_in, rte_radar_target_t * p_out);
+static rte_cue_side_t radar_monitor_classify_side (int32_t x_mm);
 
 /*!
  * @brief Start in INIT, with no delay pending.
@@ -152,7 +153,7 @@ radar_monitor_on_frame (radar_monitor_t * p_monitor,
 
     if (p_monitor->b_fault_reported)
     {
-        rte_write_audio_msg(RTE_AUDIO_RADAR_OK, 0u);
+        rte_write_audio_msg(RTE_AUDIO_RADAR_OK, 0u, 0u);
         p_monitor->b_fault_reported = false;
     }
 
@@ -182,7 +183,10 @@ radar_monitor_is_settling (const radar_monitor_t * p_monitor, uint32_t now_ms)
  * @brief Corridor gate: empty every slot that is outside the walking path.
  *
  * Decided on this frame alone, so it adds no delay. A slot with
- * |x| <= RADAR_MONITOR_CORRIDOR_HALF_MM is copied unchanged.
+ * |x| <= RADAR_MONITOR_CORRIDOR_HALF_MM is copied unchanged, and also gets
+ * its side classified (FR9 cue byte) while x_mm is still available: it is
+ * the last point in the pipeline that has it (docs/radar_message_layout.md:
+ * x_mm and y_mm do not reach the radar queue message).
  *
  * @param[in]  p_in   The three decoded target slots.
  * @param[out] p_out  The three slots to send.
@@ -196,6 +200,7 @@ radar_monitor_apply_corridor (const rte_radar_target_t * p_in,
         int32_t x_mm = p_in[idx].x_mm;
 
         p_out[idx] = p_in[idx];
+        p_out[idx].side = RTE_SIDE_CENTER;
 
         if (p_in[idx].b_valid &&
             ((x_mm > RADAR_MONITOR_CORRIDOR_HALF_MM) ||
@@ -207,7 +212,44 @@ radar_monitor_apply_corridor (const rte_radar_target_t * p_in,
             p_out[idx].d_mm = 0u;
             p_out[idx].speed_cms = 0;
         }
+        else if (p_in[idx].b_valid)
+        {
+            p_out[idx].side = radar_monitor_classify_side(x_mm);
+        }
+        else
+        {
+            // Already an empty slot; CENTER (set above) is unused.
+        }
     }
+}
+
+/*!
+ * @brief Classify which side of the corridor a target is on (FR9 cue byte).
+ *
+ * @param[in] x_mm  Side-to-side position; only called for a target already
+ *                  known to be inside the corridor.
+ *
+ * @return CENTER within the deadzone, else LEFT or RIGHT by the sign of x_mm.
+ */
+static rte_cue_side_t
+radar_monitor_classify_side (int32_t x_mm)
+{
+    rte_cue_side_t side = RTE_SIDE_CENTER;
+
+    if (x_mm < -RADAR_MONITOR_SIDE_DEADZONE_MM)
+    {
+        side = RTE_SIDE_LEFT;
+    }
+    else if (x_mm > RADAR_MONITOR_SIDE_DEADZONE_MM)
+    {
+        side = RTE_SIDE_RIGHT;
+    }
+    else
+    {
+        // Inside the deadzone: straight ahead.
+    }
+
+    return (side);
 }
 
 /*!
@@ -262,7 +304,7 @@ radar_monitor_enter_fault (radar_monitor_t * p_monitor)
 
     if (!p_monitor->b_fault_reported)
     {
-        rte_write_audio_msg(RTE_AUDIO_RADAR_FAULT, 0u);
+        rte_write_audio_msg(RTE_AUDIO_RADAR_FAULT, 0u, 0u);
         p_monitor->b_fault_reported = true;
     }
 

@@ -8,6 +8,7 @@
 void mock_buzzer_reset (void);
 uint32_t mock_buzzer_last_tone_hz (void);
 uint32_t mock_buzzer_tone_calls (void);
+uint32_t mock_buzzer_last_duty_pct (void);
 
 #endif /* MOCK_BUZZER_H */
 

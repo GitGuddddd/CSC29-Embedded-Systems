@@ -153,11 +153,12 @@ rte_write_grip_state (rte_grip_state_t grip)
  *
  * @param[in] type   Kind of message.
  * @param[in] d_mm   Distance, used by RTE_AUDIO_OBSTACLE only.
+ * @param[in] cue    FR9 cue byte, used by RTE_AUDIO_OBSTACLE only.
  */
 void
-rte_write_audio_msg (rte_audio_msg_type_t type, uint16_t d_mm)
+rte_write_audio_msg (rte_audio_msg_type_t type, uint16_t d_mm, uint8_t cue)
 {
-    rte_audio_msg_t msg = { .type = type, .d_mm = d_mm };
+    rte_audio_msg_t msg = { .type = type, .d_mm = d_mm, .cue = cue };
     uint32_t wait_ms = 0u;
 
     if (RTE_AUDIO_OBSTACLE != type)
@@ -184,6 +185,119 @@ rte_write_ble_obstacle (bool b_active, uint16_t d_mm, uint16_t ttc_ms)
 
     // Local alerts never depend on BLE, so a full queue is not an error.
     (void) osal_queue_send(&g_ble_queue, &msg, 0u);
+}
+
+/*!
+ * @brief Bench-debug line: which target MIO selection picked this frame,
+ *        and why (OPEN-19). No-op unless FEATURE_DEBUG_LOGS and
+ *        FEATURE_DEBUG_LOG_MIO are both 1.
+ *
+ * @param[in] b_present   A target was selected this frame.
+ * @param[in] track_slot  Its track slot id (OPEN-18), or RTE_RADAR_NUM_
+ *                        TARGETS if the track was new or lost this frame.
+ * @param[in] d_mm        Its real distance.
+ * @param[in] risk_mm     Risk-adjusted selection distance (OPEN-17); equal
+ *                        to d_mm unless a collision course was predicted.
+ * @param[in] b_collision A collision course was predicted this frame.
+ */
+void
+rte_write_mio_debug (bool b_present, size_t track_slot, uint32_t d_mm,
+                     uint32_t risk_mm, bool b_collision)
+{
+#if (1 == FEATURE_DEBUG_LOGS)
+    if ((1 == FEATURE_DEBUG_LOGS) && (1 == FEATURE_DEBUG_LOG_MIO))
+    {
+        if (b_present)
+        {
+            if (RTE_RADAR_NUM_TARGETS == track_slot)
+            {
+                gr_printf("[MIO] track=- d=%" PRIu32 "mm risk=%" PRIu32
+                          "mm collision=%" PRIu32 "\n", d_mm, risk_mm,
+                          (uint32_t) b_collision);
+            }
+            else
+            {
+                gr_printf("[MIO] track=%" PRIu32 " d=%" PRIu32 "mm risk=%"
+                          PRIu32 "mm collision=%" PRIu32 "\n",
+                          (uint32_t) track_slot, d_mm, risk_mm,
+                          (uint32_t) b_collision);
+            }
+        }
+        else
+        {
+            gr_printf("[MIO] CLEAR\n");
+        }
+    }
+#else
+    (void) b_present;
+    (void) track_slot;
+    (void) d_mm;
+    (void) risk_mm;
+    (void) b_collision;
+#endif
+}
+
+/*!
+ * @brief Bench-debug line: the FR9 direction cue in plain language (OPEN-20).
+ *        No-op unless FEATURE_DEBUG_LOGS and FEATURE_DEBUG_LOG_MIO are both
+ *        1 (same flag as rte_write_mio_debug(), this is the same bench
+ *        session's output, just a second line). One full gr_printf() per
+ *        case rather than building a string, so no `char *` is ever
+ *        declared here (Barr-C 5.2.a bans the raw type).
+ *
+ * @param[in] b_left_blocked    Left side occupied within range this frame.
+ * @param[in] b_middle_blocked  Middle occupied within range this frame.
+ * @param[in] b_right_blocked   Right side occupied within range this frame.
+ * @param[in] b_active          Whether an alert is active this frame; cue
+ *                              is only meaningful when this is true.
+ * @param[in] cue               The cue byte as sent to Audio Alert.
+ */
+void
+rte_write_dir_debug (bool b_left_blocked, bool b_middle_blocked,
+                     bool b_right_blocked, bool b_active, uint8_t cue)
+{
+#if (1 == FEATURE_DEBUG_LOGS)
+    if ((1 == FEATURE_DEBUG_LOGS) && (1 == FEATURE_DEBUG_LOG_MIO))
+    {
+        uint32_t l = (uint32_t) b_left_blocked;
+        uint32_t m = (uint32_t) b_middle_blocked;
+        uint32_t r = (uint32_t) b_right_blocked;
+        uint8_t side = (uint8_t) ((cue >> RTE_CUE_SIDE_SHIFT) &
+                                  RTE_CUE_SIDE_MASK);
+
+        if (!b_active)
+        {
+            gr_printf("[DIR] L=%" PRIu32 " M=%" PRIu32 " R=%" PRIu32
+                      " -> no alert\n", l, m, r);
+        }
+        else if (0u != (cue & RTE_CUE_STOP))
+        {
+            gr_printf("[DIR] L=%" PRIu32 " M=%" PRIu32 " R=%" PRIu32
+                      " -> STOP\n", l, m, r);
+        }
+        else if (RTE_SIDE_LEFT == side)
+        {
+            gr_printf("[DIR] L=%" PRIu32 " M=%" PRIu32 " R=%" PRIu32
+                      " -> go left\n", l, m, r);
+        }
+        else if (RTE_SIDE_RIGHT == side)
+        {
+            gr_printf("[DIR] L=%" PRIu32 " M=%" PRIu32 " R=%" PRIu32
+                      " -> go right\n", l, m, r);
+        }
+        else
+        {
+            gr_printf("[DIR] L=%" PRIu32 " M=%" PRIu32 " R=%" PRIu32
+                      " -> stay middle\n", l, m, r);
+        }
+    }
+#else
+    (void) b_left_blocked;
+    (void) b_middle_blocked;
+    (void) b_right_blocked;
+    (void) b_active;
+    (void) cue;
+#endif
 }
 
 /*!
@@ -270,8 +384,9 @@ rte_debug_print_rx_stats (bool b_timeout, uint32_t frames)
 /*!
  * @brief Print the three target slots of one frame (debug only).
  *
- * Format: [T] t=<ms> <slot0> <slot1> <slot2>, each slot x,y,speed in mm and
- * cm/s, or "-" when the slot is empty.
+ * Format: [T] t=<ms> s1(x,y,v) s2(x,y,v) s3(x,y,v), each slot's x, y in mm
+ * and speed in cm/s, numbered 1-3 so it reads at a glance how many of the
+ * three slots are populated; an empty slot prints as "s<n>(-)".
  *
  * @param[in] p_targets  The three decoded target slots.
  * @param[in] now_ms     Time the frame was received.
@@ -285,12 +400,13 @@ rte_debug_print_targets (const rte_radar_target_t * p_targets, uint32_t now_ms)
     {
         if (p_targets[idx].b_valid)
         {
-            gr_printf(" %d,%d,%d", p_targets[idx].x_mm, p_targets[idx].y_mm,
+            gr_printf(" s%" PRIu32 "(%d,%d,%d)", (uint32_t) (idx + 1u),
+                   p_targets[idx].x_mm, p_targets[idx].y_mm,
                    p_targets[idx].speed_cms);
         }
         else
         {
-            gr_printf(" -");
+            gr_printf(" s%" PRIu32 "(-)", (uint32_t) (idx + 1u));
         }
     }
 

@@ -23,10 +23,11 @@
 #include <bsp/libbsp.h>
 
 // buzzer.h is NOT included on purpose: it pulls in the Pico SDK pico/types.h,
-// whose size_t clashes with the template's tkernel.h. The two prototypes below
-// match buzzer.h (uint is unsigned int); alert.c sees the real header.
+// whose size_t clashes with the template's tkernel.h. The three prototypes
+// below match buzzer.h (uint is unsigned int); alert.c sees the real header.
 void buzzer_init (unsigned int pin);
 void buzzer_tone (uint32_t freq_hz);
+void buzzer_tone_vol (uint32_t freq_hz, uint8_t duty_pct);
 
 #define BUZZER_UTK_SYS_CLOCK_HZ    (125000000u)
 #define BUZZER_UTK_COUNTER_HZ      (1000000u)
@@ -82,9 +83,28 @@ buzzer_init (unsigned int pin)
 void
 buzzer_tone (uint32_t freq_hz)
 {
+    // 50 % duty is the loudest on a passive buzzer.
+    buzzer_tone_vol(freq_hz, 50u);
+}
+
+/*!
+ * @brief Play a tone at a given loudness, or stop.
+ *
+ * @par
+ * BRING-UP EDIT (Putra, 8 Nov): FR9's distance-as-loudness cue needs duty
+ * control; buzzer.h previously only exposed the fixed 50 % (loudest) tone.
+ * Brian owns the final driver; this keeps the original wrap/cc math and
+ * only parameterises the duty that used to be hardcoded.
+ *
+ * @param[in] freq_hz   Tone in Hz; below 20 Hz means silent.
+ * @param[in] duty_pct  0-50; 0 is silent, 50 is loudest (see buzzer_tone).
+ */
+void
+buzzer_tone_vol (uint32_t freq_hz, uint8_t duty_pct)
+{
     uint32_t wrap;
 
-    if (freq_hz < BUZZER_UTK_OFF_BELOW_HZ)
+    if ((freq_hz < BUZZER_UTK_OFF_BELOW_HZ) || (0u == duty_pct))
     {
         (void) pwm_set_cc(s_pin, 0u);
         return;
@@ -92,8 +112,7 @@ buzzer_tone (uint32_t freq_hz)
 
     wrap = (BUZZER_UTK_COUNTER_HZ / freq_hz) - 1u;
     (void) pwm_set_wrap(s_pin, wrap);
-    // 50 % duty is the loudest on a passive buzzer.
-    (void) pwm_set_cc(s_pin, (wrap + 1u) / 2u);
+    (void) pwm_set_cc(s_pin, ((wrap + 1u) * (uint32_t) duty_pct) / 100u);
 }
 
 /*** end of file ***/

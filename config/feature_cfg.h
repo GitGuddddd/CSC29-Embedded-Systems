@@ -24,6 +24,16 @@
 // about 11 lines per second.
 #define FEATURE_DEBUG_LOG_TARGETS           (0)
 
+// 1 = print which target the MIO (Most Important Object) selection picked
+// each frame it posts an obstacle: its track slot (OPEN-18, "-" if the
+// track was new/lost this frame), real distance, risk-adjusted selection
+// distance (OPEN-17; equal to the real distance unless a collision course
+// was predicted), and whether a collision course was predicted. For bench-
+// verifying which target the tie-break/collision logic actually picked,
+// without having to cross-reference the raw [T] target line by hand. Only
+// has an effect when NDEBUG is not defined and FEATURE_DEBUG_LOGS is 1.
+#define FEATURE_DEBUG_LOG_MIO               (0)
+
 // 1 = Brian's alert.c plays the obstacle beep (radar bring-up). Brian owns the
 // final value: his file defaults to 0 when this is not defined.
 #define ENABLE_OBSTACLE_BEEP                (1)

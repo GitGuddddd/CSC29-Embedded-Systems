@@ -94,8 +94,11 @@ main_glasses_stub_audio_task (void * p_arg)
             switch (msg.type)
             {
                 case RTE_AUDIO_OBSTACLE:
-                    gr_printf(">>> Audio Alert <- OBSTACLE(%" PRIu32 "mm)\n",
-                              d_mm);
+                    // cue: bit 0 STOP, bits 1-2 side (0 center, 1 left,
+                    // 2 right). See rte_type.h RTE_CUE_*.
+                    gr_printf(">>> Audio Alert <- OBSTACLE(%" PRIu32
+                              "mm) cue=0x%02" PRIX32 "\n",
+                              d_mm, (uint32_t) msg.cue);
                     break;
 
                 case RTE_AUDIO_OBSTACLE_CLEAR:

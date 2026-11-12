@@ -19,9 +19,10 @@
 /*!
  * @brief Hand one radar message to the alert code.
  *
- * OBSTACLE(d) sets the distance, CLEAR silences the obstacle tone,
- * RADAR_FAULT and RADAR_OK set and clear the radar fault bit. The tone itself
- * is made later by alert_update(), which the caller runs regularly.
+ * OBSTACLE(d, cue) sets the distance and the FR9 cue byte, CLEAR silences
+ * the obstacle tone and clears the cue, RADAR_FAULT and RADAR_OK set and
+ * clear the radar fault bit. The tone itself is made later by
+ * alert_update(), which the caller runs regularly.
  *
  * @param[in] p_msg  Message from the Audio Alert queue; NULL is ignored.
  */
@@ -37,10 +38,12 @@ audio_alert_bridge_apply (const rte_audio_msg_t * p_msg)
     {
         case RTE_AUDIO_OBSTACLE:
             alert_set_obstacle((int32_t) p_msg->d_mm);
+            alert_set_cue(p_msg->cue);
             break;
 
         case RTE_AUDIO_OBSTACLE_CLEAR:
             alert_set_obstacle(AUDIO_ALERT_BRIDGE_SILENT);
+            alert_set_cue(0u);
             break;
 
         case RTE_AUDIO_RADAR_FAULT:

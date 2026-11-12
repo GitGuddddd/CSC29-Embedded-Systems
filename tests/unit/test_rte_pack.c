@@ -44,6 +44,7 @@ make_data (rte_radar_msg_type_t type)
         data.targets[idx].y_mm = 0;
         data.targets[idx].d_mm = 0u;
         data.targets[idx].speed_cms = 0;
+        data.targets[idx].side = RTE_SIDE_CENTER;
     }
 
     return (data);
@@ -62,9 +63,9 @@ round_trip (const rte_radar_data_t * p_in)
 }
 
 static void
-test_message_is_13_bytes (void)
+test_message_is_14_bytes (void)
 {
-    TEST_ASSERT_EQUAL_UINT(13u, sizeof(rte_radar_msg_t));
+    TEST_ASSERT_EQUAL_UINT(14u, sizeof(rte_radar_msg_t));
 }
 
 static void
@@ -217,10 +218,63 @@ test_spare_bits_are_zero (void)
         in.targets[idx].b_valid = true;
         in.targets[idx].d_mm = 0xFFFFu;
         in.targets[idx].speed_cms = -1;
+        in.targets[idx].side = RTE_SIDE_RIGHT;
     }
 
     rte_pack_radar(&in, &msg);
-    TEST_ASSERT_EQUAL_UINT32(0u, rte_pack_get_bits(msg.bytes, 102u, 2u));
+    // 108 bits used of 112 (14 bytes): 4 spare bits at the top.
+    TEST_ASSERT_EQUAL_UINT32(0u, rte_pack_get_bits(msg.bytes, 108u, 4u));
+}
+
+static void
+test_side_round_trips_for_every_target (void)
+{
+    const rte_cue_side_t sides[] = { RTE_SIDE_CENTER, RTE_SIDE_LEFT,
+                                     RTE_SIDE_RIGHT };
+
+    for (size_t idx = 0u; idx < RTE_RADAR_NUM_TARGETS; idx++)
+    {
+        rte_radar_data_t in = make_data(RTE_RADAR_MSG_FRAME);
+        rte_radar_data_t out;
+
+        in.targets[idx].b_valid = true;
+        in.targets[idx].d_mm = 500u;
+        in.targets[idx].side = sides[idx];
+
+        out = round_trip(&in);
+        TEST_ASSERT_EQUAL(sides[idx], out.targets[idx].side);
+    }
+}
+
+static void
+test_empty_slot_side_is_center_even_if_set (void)
+{
+    rte_radar_data_t in = make_data(RTE_RADAR_MSG_FRAME);
+    rte_radar_data_t out;
+
+    // An invalid slot is packed all-zero regardless of its other fields
+    // (rte_pack_slot only looks at them when b_valid is true).
+    in.targets[0].side = RTE_SIDE_RIGHT;
+    out = round_trip(&in);
+    TEST_ASSERT_FALSE(out.targets[0].b_valid);
+    TEST_ASSERT_EQUAL(RTE_SIDE_CENTER, out.targets[0].side);
+}
+
+static void
+test_side_reserved_code_reads_as_center (void)
+{
+    rte_radar_msg_t msg = { { 0u } };
+    rte_radar_data_t out;
+
+    // Slot 0: valid bit (offset 36) set, side field (offset 58, 2 bits) set
+    // to the reserved code 3. No path in rte_pack_radar ever writes 3 (side
+    // only ever holds 0 to 2), but a corrupt frame could; CENTER must be the
+    // reading, same as the reserved type and grip codes.
+    rte_pack_put_bits(msg.bytes, 36u, 1u, 1u);
+    rte_pack_put_bits(msg.bytes, 58u, 2u, 3u);
+    rte_pack_unpack_radar(&msg, &out);
+    TEST_ASSERT_TRUE(out.targets[0].b_valid);
+    TEST_ASSERT_EQUAL(RTE_SIDE_CENTER, out.targets[0].side);
 }
 
 // Packed distance feeds Threat: the 2 mm step moves the stop edge by 1 mm.
@@ -284,7 +338,7 @@ int
 main (void)
 {
     UNITY_BEGIN();
-    RUN_TEST(test_message_is_13_bytes);
+    RUN_TEST(test_message_is_14_bytes);
     RUN_TEST(test_bit_helpers_round_trip_every_offset_and_width);
     RUN_TEST(test_bit_helpers_leave_neighbours_alone);
     RUN_TEST(test_every_distance_step_round_trips);
@@ -293,6 +347,9 @@ main (void)
     RUN_TEST(test_time_type_grip_and_empty_slots);
     RUN_TEST(test_reserved_codes_read_as_the_safe_value);
     RUN_TEST(test_spare_bits_are_zero);
+    RUN_TEST(test_side_round_trips_for_every_target);
+    RUN_TEST(test_empty_slot_side_is_center_even_if_set);
+    RUN_TEST(test_side_reserved_code_reads_as_center);
     RUN_TEST(test_packed_distance_edges_through_threat);
     RUN_TEST(test_saturated_distance_never_alerts);
 

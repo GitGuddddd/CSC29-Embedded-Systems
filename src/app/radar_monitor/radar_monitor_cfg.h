@@ -33,10 +33,30 @@
 // is not in the walking path and is sent to Glasses_Threat as an empty slot.
 // It costs no time: the decision is made on the frame itself. Tune with
 // walking tests (docs/target_gates.md). The debug print still shows the target.
-// 1200 mm (was 1000 mm until 31 Oct): a missed obstacle is worse than a false
-// alert, and the corridor turns with the head, so a wider strip hides fewer
-// real obstacles when the head is turned. Starting value from one walk.
-#define RADAR_MONITOR_CORRIDOR_HALF_MM      (1200)
+// 1500 mm (was 1200 mm until 8 Nov, 1000 mm until 31 Oct): a missed obstacle
+// is worse than a false alert, and the corridor turns with the head, so a
+// wider strip hides fewer real obstacles when the head is turned. Reframed
+// 8 Nov from a narrow cane-sweep model to a full walking-lane model: half
+// of a roughly 2.5-3 m single-person walking lane plus clearance, rather
+// than just the cane's own sweep arc.
+#define RADAR_MONITOR_CORRIDOR_HALF_MM      (1500)
+
+// FR9 cue byte (prof feedback, 7 Nov): a target within this far of the
+// sensor's centre line counts as straight ahead (RTE_SIDE_CENTER); beyond it,
+// LEFT or RIGHT by the sign of x_mm. Bench-confirmed 7 Nov: negative x is
+// left (sensor fixed, walked left to right), so x_mm < 0 is LEFT.
+// 300 mm (was 150 mm until 8 Nov): widened after bench use showed CENTER
+// standing still read as LEFT. Justified as the sum of three margins the
+// sensor has to absorb even when the user is genuinely centred: natural
+// lateral sway while walking (roughly 50-100 mm), radar lateral-measurement
+// jitter at typical use range (tens of mm, grows with distance), and
+// mounting/alignment tolerance on the glasses frame (a few degrees of yaw
+// at 1-2 m is real mm of offset). Still a DRAFT value: the sway and jitter
+// components are estimates, not bench-measured, so confirm by walking the
+// corridor before the report locks it in. Kept well inside
+// RADAR_MONITOR_CORRIDOR_HALF_MM so a target can be CENTER only while it is
+// also in the corridor.
+#define RADAR_MONITOR_SIDE_DEADZONE_MM      (300)
 
 #endif /* RADAR_MONITOR_CFG_H */
 

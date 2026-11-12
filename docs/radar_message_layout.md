@@ -17,7 +17,17 @@ hidden behind that call.
 `rte_radar_msg_t` was 44 bytes (4 B type, 4 B time, 3 x 10 B target slots, 4 B
 grip). The queue holds 4, so 176 bytes.
 
-## Proposed: 102 bits in a 13-byte array
+## Update (8 Nov 2026): side field added for FR9
+
+FR9 (cue byte, prof feedback 7 Nov) needs left/right at Threat. Rather than
+widen the queue to carry `x_mm`, `radar_monitor_apply_corridor()` classifies
+each target's side (`RTE_SIDE_CENTER`/`LEFT`/`RIGHT`, deadzone
+`RADAR_MONITOR_SIDE_DEADZONE_MM`) while `x_mm` is still available, and only the
+2-bit result rides the queue. This grows each slot from 22 to 24 bits and the
+message from 102 to 108 bits (13 to 14 bytes); the tables below are updated
+for that. See docs/audio_message_layout.md for the cue byte this feeds.
+
+## Proposed: 108 bits in a 14-byte array
 
 Bit n is bit (n % 8) of byte (n / 8), counting from 0 (least significant bit
 first). Pack and unpack with two shared helpers, `rte_pack_put_bits(buf, offset,
@@ -29,10 +39,10 @@ by hand.
 | 0-1    | type   | 2     | 0 FRAME, 1 FAULT, 2 GRIP, 3 reserved |
 | 2-3    | grip   | 2     | 0 UNKNOWN, 1 HELD, 2 RELEASED, 3 reserved. 0 for FRAME and FAULT. |
 | 4-35   | time   | 32    | Frame receive time in ms from boot (the `hal_time` clock). FRAME only, else 0. |
-| 36-57  | slot 0 | 22    | See slot layout |
-| 58-79  | slot 1 | 22    | See slot layout |
-| 80-101 | slot 2 | 22    | See slot layout |
-| 102-103| spare  | 2     | Always 0 |
+| 36-59  | slot 0 | 24    | See slot layout |
+| 60-83  | slot 1 | 24    | See slot layout |
+| 84-107 | slot 2 | 24    | See slot layout |
+| 108-111| spare  | 4     | Always 0 |
 
 The timestamp stays 32 bits as a justified exception (same reasoning as Brian's
 fall-detection timestamps): it is the system clock, it wraps after about
@@ -40,15 +50,16 @@ fall-detection timestamps): it is the system clock, it wraps after about
 use the same width, so no mixed-width arithmetic. Shrinking it would save only
 2 bytes per message.
 
-Slot layout (22 bits, offsets inside the slot):
+Slot layout (24 bits, offsets inside the slot):
 
 | Bits  | Field    | Width | Meaning |
 |-------|----------|-------|---------|
 | 0     | valid    | 1     | 1 = a real target, 0 = empty slot (all other slot bits 0) |
 | 1-12  | distance | 12    | Units of 2 mm, 0 to 4095 = 0 to 8190 mm. Rounded down, saturates at 4095. |
 | 13-21 | speed    | 9     | Signed cm/s, two's complement, clamped to -255..+255, sign as the sensor sends it. |
+| 22-23 | side     | 2     | 0 CENTER, 1 LEFT, 2 RIGHT, 3 reserved (unpacks as CENTER). 0 for an empty slot. |
 
-Total 102 bits, 13 bytes, so the 4-entry queue is 52 bytes (from 176).
+Total 108 bits, 14 bytes, so the 4-entry queue is 56 bytes (from 176).
 
 ## Changes to what the message carries
 

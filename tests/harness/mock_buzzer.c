@@ -13,6 +13,7 @@
 
 static uint32_t g_last_tone_hz = 0u;
 static uint32_t g_tone_calls = 0u;
+static uint32_t g_last_duty_pct = 0u;
 
 void
 buzzer_init (uint pin)
@@ -23,7 +24,16 @@ buzzer_init (uint pin)
 void
 buzzer_tone (uint32_t freq_hz)
 {
+    buzzer_tone_vol(freq_hz, 50u);
+}
+
+/* BRING-UP EDIT (Putra, 8 Nov): records duty too, for the loudness-as-
+ * distance cue tests. */
+void
+buzzer_tone_vol (uint32_t freq_hz, uint8_t duty_pct)
+{
     g_last_tone_hz = freq_hz;
+    g_last_duty_pct = (0u == freq_hz) ? 0u : (uint32_t) duty_pct;
     g_tone_calls++;
 }
 
@@ -32,6 +42,7 @@ mock_buzzer_reset (void)
 {
     g_last_tone_hz = 0u;
     g_tone_calls = 0u;
+    g_last_duty_pct = 0u;
 }
 
 uint32_t
@@ -44,6 +55,12 @@ uint32_t
 mock_buzzer_tone_calls (void)
 {
     return g_tone_calls;
+}
+
+uint32_t
+mock_buzzer_last_duty_pct (void)
+{
+    return g_last_duty_pct;
 }
 
 /*** end of file ***/

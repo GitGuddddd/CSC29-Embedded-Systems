@@ -18,18 +18,25 @@
 static threat_assessment_t g_state;
 
 static rte_radar_target_t
-make_target (int16_t d_mm, int16_t speed_cms)
+make_target_side (int16_t d_mm, int16_t speed_cms, rte_cue_side_t side)
 {
-    rte_radar_target_t target = { true, 0, 0, (uint16_t) d_mm, speed_cms };
+    rte_radar_target_t target = { true, 0, 0, (uint16_t) d_mm, speed_cms,
+                                  side };
 
     return (target);
+}
+
+static rte_radar_target_t
+make_target (int16_t d_mm, int16_t speed_cms)
+{
+    return (make_target_side(d_mm, speed_cms, RTE_SIDE_CENTER));
 }
 
 // Fills the three slots: slot 0 = given target, the other two empty.
 static void
 make_frame (rte_radar_target_t * p_targets, int16_t y_mm, int16_t speed_cms)
 {
-    rte_radar_target_t empty = { false, 0, 0, 0u, 0 };
+    rte_radar_target_t empty = { false, 0, 0, 0u, 0, RTE_SIDE_CENTER };
 
     p_targets[0] = make_target(y_mm, speed_cms);
     p_targets[1] = empty;
@@ -39,7 +46,7 @@ make_frame (rte_radar_target_t * p_targets, int16_t y_mm, int16_t speed_cms)
 static void
 make_empty_frame (rte_radar_target_t * p_targets)
 {
-    rte_radar_target_t empty = { false, 0, 0, 0u, 0 };
+    rte_radar_target_t empty = { false, 0, 0, 0u, 0, RTE_SIDE_CENTER };
 
     p_targets[0] = empty;
     p_targets[1] = empty;
@@ -389,7 +396,7 @@ static void
 test_other_slot_still_alerts_when_nearest_is_departing_by_trend (void)
 {
     rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
-    rte_radar_target_t empty = { false, 0, 0, 0u, 0 };
+    rte_radar_target_t empty = { false, 0, 0, 0u, 0, RTE_SIDE_CENTER };
     threat_assessment_out_t out;
     uint32_t now_ms = 0u;
 
@@ -670,7 +677,7 @@ static void
 make_two_target_frame (rte_radar_target_t * p_targets, int16_t near_mm,
                        int16_t near_speed_cms, int16_t far_mm)
 {
-    rte_radar_target_t empty = { false, 0, 0, 0u, 0 };
+    rte_radar_target_t empty = { false, 0, 0, 0u, 0, RTE_SIDE_CENTER };
 
     p_targets[0] = make_target(near_mm, near_speed_cms);
     p_targets[1] = make_target(far_mm, 0);
@@ -842,6 +849,393 @@ test_far_target_clears_at_once_when_the_near_one_is_beyond_stop (void)
     TEST_ASSERT_TRUE(out.b_post_clear);
 }
 
+// MIO tie-break (OPEN-16, HLK-LD2450 MIO checklist section 4): two targets
+// close enough in distance to be within THREAT_ASSESSMENT_MIO_TIE_BAND_MM of
+// each other, on opposite sides, so cue side is how the test tells which one
+// was picked.
+
+static void
+make_tied_frame (rte_radar_target_t * p_targets, int16_t left_mm,
+                 int16_t left_speed_cms, int16_t right_mm,
+                 int16_t right_speed_cms)
+{
+    rte_radar_target_t empty = { false, 0, 0, 0u, 0, RTE_SIDE_CENTER };
+
+    p_targets[0] = make_target_side(left_mm, left_speed_cms, RTE_SIDE_LEFT);
+    p_targets[1] = make_target_side(right_mm, right_speed_cms,
+                                    RTE_SIDE_RIGHT);
+    p_targets[2] = empty;
+}
+
+static rte_cue_side_t
+cue_side (uint8_t cue)
+{
+    return (rte_cue_side_t) ((cue >> RTE_CUE_SIDE_SHIFT) & RTE_CUE_SIDE_MASK);
+}
+
+static void
+test_mio_tiebreak_prefers_the_approaching_target_in_a_near_tie (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    // LEFT is 50 mm nearer (inside the 100 mm tie band) but standing still;
+    // RIGHT is slightly farther but closing in. The checklist's TTC-first
+    // rule should hand this to RIGHT, not to the merely-nearer LEFT.
+    make_tied_frame(targets, 1000, 0, 1050, -16);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL_UINT16(1050u, out.d_mm);
+}
+
+static void
+test_mio_tiebreak_outside_the_band_nearest_still_wins (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    // 200 mm apart (outside the 100 mm band): plain nearest-wins, exactly
+    // as before this change, even though RIGHT is the one closing in.
+    make_tied_frame(targets, 1000, 0, 1200, -16);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL_UINT16(1000u, out.d_mm);
+}
+
+static void
+test_mio_tiebreak_sticky_side_when_neither_is_approaching (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    // Frame 1: only RIGHT present, so RIGHT becomes the reported side.
+    rte_radar_target_t empty = { false, 0, 0, 0u, 0, RTE_SIDE_CENTER };
+    targets[0] = empty;
+    targets[1] = make_target_side(1000, 0, RTE_SIDE_RIGHT);
+    targets[2] = empty;
+    threat_assessment_update(&g_state, targets, 0u, &out);
+    TEST_ASSERT_EQUAL_UINT16(1000u, out.d_mm);
+
+    // Frame 2: LEFT and RIGHT are now both present, tied (within the band)
+    // and both stationary - no TTC to decide it. The previously-reported
+    // RIGHT should win, not flicker to the marginally nearer LEFT.
+    make_tied_frame(targets, 999, 0, 1000, 0);
+    threat_assessment_update(&g_state, targets, 89u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL_UINT16(1000u, out.d_mm);
+}
+
+// Collision risk assessment (OPEN-17, HLK-LD2450 MIO checklist section 3
+// and the ADVANCED items of section 6): MIO selection using 2D motion, not
+// just raw distance. Targets are built with real x_mm/y_mm this time (the
+// tests above all use (0, 0), which never triggers the collision predictor
+// by construction - these exercise the predictor itself).
+
+static rte_radar_target_t
+make_xy_target (int16_t x_mm, int16_t y_mm, uint16_t d_mm,
+                rte_cue_side_t side)
+{
+    rte_radar_target_t target = { true, x_mm, y_mm, d_mm, 0, side };
+
+    return (target);
+}
+
+static void
+test_farther_crossing_target_outranks_a_nearer_safe_one (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+    rte_radar_target_t empty = { false, 0, 0, 0u, 0, RTE_SIDE_CENTER };
+
+    // Frame 1: establishes A's starting position only (walking speed, not
+    // yet close enough to matter). B sits at the origin throughout, which
+    // keeps its own predicted path a no-op (zero displacement).
+    targets[0] = make_xy_target(390, 520, 650u, RTE_SIDE_LEFT);
+    targets[1] = make_xy_target(0, 0, 300u, RTE_SIDE_RIGHT);
+    targets[2] = empty;
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    // Frame 2 (100 ms later): A has moved to (300, 400) - 150 mm closer to
+    // the sensor along a path aimed almost straight at it - putting its
+    // predicted closest approach inside the safety radius. A's own raw
+    // distance (500 mm) is still farther than B's (300 mm, unmoved and
+    // therefore not on any collision course), but the checklist's named
+    // test case is exactly this: a farther approaching target must outrank
+    // a nearer safe one.
+    targets[0] = make_xy_target(300, 400, 500u, RTE_SIDE_LEFT);
+    targets[1] = make_xy_target(0, 0, 300u, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 100u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    // The real distance is still reported, not the risk-adjusted score.
+    TEST_ASSERT_EQUAL_UINT16(500u, out.d_mm);
+}
+
+static void
+test_a_receding_target_is_not_treated_as_a_collision_course (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+    rte_radar_target_t empty = { false, 0, 0, 0u, 0, RTE_SIDE_CENTER };
+
+    // Frame 1: C starts close in, at the position A ended at above. D is
+    // kept more than THREAT_ASSESSMENT_MIO_TIE_BAND_MM away from C's
+    // distance throughout, so plain nearest-wins decides outright and the
+    // (unrelated) near-tie/sticky-side rule from OPEN-16 never engages -
+    // this test is only about whether a receding target gets a collision
+    // bonus, not about the tie-break.
+    targets[0] = make_xy_target(300, 400, 500u, RTE_SIDE_LEFT);
+    targets[1] = make_xy_target(0, 0, 500u, RTE_SIDE_RIGHT);
+    targets[2] = empty;
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    // Frame 2: C has moved to where A started - away from the sensor, the
+    // exact reverse of the approaching case above. Its own distance grew to
+    // 650 mm, well past D's steady 500 mm; the point of this test is that C
+    // must NOT additionally get a collision bonus for being "close by"
+    // while it is actually leaving, which would let it keep outranking D
+    // despite being outside the tie band.
+    targets[0] = make_xy_target(390, 520, 650u, RTE_SIDE_LEFT);
+    targets[1] = make_xy_target(0, 0, 500u, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 100u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL_UINT16(500u, out.d_mm);
+}
+
+static void
+test_first_frame_has_no_association_and_falls_back_to_nearest (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+    rte_radar_target_t empty = { false, 0, 0, 0u, 0, RTE_SIDE_CENTER };
+
+    // No prior frame exists yet (fresh init from setUp()), so neither target
+    // can be matched to a previous position. The nearer, plain-safe target
+    // must win, same as before collision prediction existed, and nothing
+    // here should read uninitialised state or divide by a zero interval.
+    targets[0] = make_xy_target(300, 400, 500u, RTE_SIDE_LEFT);
+    targets[1] = make_xy_target(0, 0, 300u, RTE_SIDE_RIGHT);
+    targets[2] = empty;
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL_UINT16(300u, out.d_mm);
+}
+
+// Persistent track IDs (OPEN-18, checklist section 6 "targets are
+// associated across consecutive frames"): a track now survives a short run
+// of missing/invalid frames rather than resetting on the first one.
+
+static void
+test_a_track_survives_a_brief_drop_and_keeps_its_velocity (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+    rte_radar_target_t empty = { false, 0, 0, 0u, 0, RTE_SIDE_CENTER };
+
+    // Frame 1 (t=0): A's track is created. B sits at the origin throughout.
+    targets[0] = make_xy_target(390, 520, 650u, RTE_SIDE_LEFT);
+    targets[1] = make_xy_target(0, 0, 300u, RTE_SIDE_RIGHT);
+    targets[2] = empty;
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    // Frame 2 (t=100 ms): A drops out for one frame (a noisy or momentarily
+    // invalid detection) - well inside THREAT_ASSESSMENT_TRACK_LOST_GRACE_
+    // FRAMES (3), so its track must not be dropped.
+    targets[0] = empty;
+    targets[1] = make_xy_target(0, 0, 300u, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 100u, &out);
+    TEST_ASSERT_EQUAL_UINT16(300u, out.d_mm);
+
+    // Frame 3 (t=200 ms): A reappears, continuing on the same approach. Its
+    // raw distance (500 mm) is still well past B's steady 300 mm, but A's
+    // track survived the gap, so the collision prediction (now computed
+    // over the full 200 ms since it was last actually seen, not a missing
+    // 100 ms) still fires and A outranks the nearer, safe B.
+    targets[0] = make_xy_target(300, 400, 500u, RTE_SIDE_LEFT);
+    targets[1] = make_xy_target(0, 0, 300u, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 200u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL_UINT16(500u, out.d_mm);
+}
+
+static void
+test_a_track_is_dropped_once_the_grace_period_is_exceeded (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+    rte_radar_target_t empty = { false, 0, 0, 0u, 0, RTE_SIDE_CENTER };
+    uint32_t now_ms = 0u;
+
+    // Frame 1 (t=0): A's track is created, same as above.
+    targets[0] = make_xy_target(390, 520, 650u, RTE_SIDE_LEFT);
+    targets[1] = make_xy_target(0, 0, 300u, RTE_SIDE_RIGHT);
+    targets[2] = empty;
+    threat_assessment_update(&g_state, targets, now_ms, &out);
+
+    // A is missing for 4 consecutive frames - one more than
+    // THREAT_ASSESSMENT_TRACK_LOST_GRACE_FRAMES (3) - so its track must be
+    // dropped by the last of these.
+    for (int pass = 0; pass < 4; pass++)
+    {
+        now_ms += 100u;
+        targets[0] = empty;
+        targets[1] = make_xy_target(0, 0, 300u, RTE_SIDE_RIGHT);
+        threat_assessment_update(&g_state, targets, now_ms, &out);
+    }
+
+    // A reappears on the exact same trajectory as the surviving-gap test
+    // above, but this time with no track to recover: it is treated as a
+    // brand new, unknown object (no velocity, no collision bonus), so
+    // plain nearest-wins picks the nearer, safe B instead.
+    now_ms += 100u;
+    targets[0] = make_xy_target(300, 400, 500u, RTE_SIDE_LEFT);
+    targets[1] = make_xy_target(0, 0, 300u, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, now_ms, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL_UINT16(300u, out.d_mm);
+}
+
+// OPEN-20 (11 Nov): per-side corridor occupancy drives a new "which way is
+// open" meaning for the FR9 direction cue, replacing the old side-of-threat
+// meaning the tests above now check via out.d_mm instead. One target per
+// side/slot; 1800 mm is inside THREAT_ASSESSMENT_START_MM (2000, blocked),
+// 2200 mm is outside THREAT_ASSESSMENT_STOP_MM (2100, clear), well clear of
+// the hysteresis gap between them. At least one side is always <= 2000 mm
+// so the main alert (FR8) is active and a cue is actually built.
+
+static void
+test_direction_cue_middle_only_defaults_left (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    targets[0] = make_target_side(2200, 0, RTE_SIDE_LEFT);
+    targets[1] = make_target_side(1800, 0, RTE_SIDE_CENTER);
+    targets[2] = make_target_side(2200, 0, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL(RTE_SIDE_LEFT, cue_side(out.cue));
+    TEST_ASSERT_EQUAL(0u, out.cue & RTE_CUE_STOP);
+}
+
+static void
+test_direction_cue_left_only_stays_middle (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    targets[0] = make_target_side(1800, 0, RTE_SIDE_LEFT);
+    targets[1] = make_target_side(2200, 0, RTE_SIDE_CENTER);
+    targets[2] = make_target_side(2200, 0, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL(RTE_SIDE_CENTER, cue_side(out.cue));
+    TEST_ASSERT_EQUAL(0u, out.cue & RTE_CUE_STOP);
+}
+
+static void
+test_direction_cue_right_only_stays_middle (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    targets[0] = make_target_side(2200, 0, RTE_SIDE_LEFT);
+    targets[1] = make_target_side(2200, 0, RTE_SIDE_CENTER);
+    targets[2] = make_target_side(1800, 0, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL(RTE_SIDE_CENTER, cue_side(out.cue));
+    TEST_ASSERT_EQUAL(0u, out.cue & RTE_CUE_STOP);
+}
+
+static void
+test_direction_cue_left_and_middle_blocked_goes_right (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    targets[0] = make_target_side(1800, 0, RTE_SIDE_LEFT);
+    targets[1] = make_target_side(1800, 0, RTE_SIDE_CENTER);
+    targets[2] = make_target_side(2200, 0, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL(RTE_SIDE_RIGHT, cue_side(out.cue));
+    TEST_ASSERT_EQUAL(0u, out.cue & RTE_CUE_STOP);
+}
+
+static void
+test_direction_cue_middle_and_right_blocked_goes_left (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    targets[0] = make_target_side(2200, 0, RTE_SIDE_LEFT);
+    targets[1] = make_target_side(1800, 0, RTE_SIDE_CENTER);
+    targets[2] = make_target_side(1800, 0, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL(RTE_SIDE_LEFT, cue_side(out.cue));
+    TEST_ASSERT_EQUAL(0u, out.cue & RTE_CUE_STOP);
+}
+
+static void
+test_direction_cue_left_and_right_blocked_stays_middle (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    targets[0] = make_target_side(1800, 0, RTE_SIDE_LEFT);
+    targets[1] = make_target_side(2200, 0, RTE_SIDE_CENTER);
+    targets[2] = make_target_side(1800, 0, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL(RTE_SIDE_CENTER, cue_side(out.cue));
+    TEST_ASSERT_EQUAL(0u, out.cue & RTE_CUE_STOP);
+}
+
+static void
+test_direction_cue_all_three_blocked_is_stop (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    targets[0] = make_target_side(1800, 0, RTE_SIDE_LEFT);
+    targets[1] = make_target_side(1800, 0, RTE_SIDE_CENTER);
+    targets[2] = make_target_side(1800, 0, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_NOT_EQUAL(0u, out.cue & RTE_CUE_STOP);
+}
+
+static void
+test_direction_cue_all_clear_is_center_and_inactive (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    targets[0] = make_target_side(2200, 0, RTE_SIDE_LEFT);
+    targets[1] = make_target_side(2200, 0, RTE_SIDE_CENTER);
+    targets[2] = make_target_side(2200, 0, RTE_SIDE_RIGHT);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    TEST_ASSERT_FALSE(out.b_active);
+    TEST_ASSERT_EQUAL_UINT8(0u, out.cue);
+}
+
 int
 main (void)
 {
@@ -873,6 +1267,22 @@ main (void)
     RUN_TEST(test_speed_without_range_growth_and_no_far_target_keeps_the_alert);
     RUN_TEST(test_far_target_clears_a_real_exit_after_two_trend_frames);
     RUN_TEST(test_far_target_clears_at_once_when_the_near_one_is_beyond_stop);
+    RUN_TEST(test_mio_tiebreak_prefers_the_approaching_target_in_a_near_tie);
+    RUN_TEST(test_mio_tiebreak_outside_the_band_nearest_still_wins);
+    RUN_TEST(test_mio_tiebreak_sticky_side_when_neither_is_approaching);
+    RUN_TEST(test_farther_crossing_target_outranks_a_nearer_safe_one);
+    RUN_TEST(test_a_receding_target_is_not_treated_as_a_collision_course);
+    RUN_TEST(test_first_frame_has_no_association_and_falls_back_to_nearest);
+    RUN_TEST(test_a_track_survives_a_brief_drop_and_keeps_its_velocity);
+    RUN_TEST(test_a_track_is_dropped_once_the_grace_period_is_exceeded);
+    RUN_TEST(test_direction_cue_middle_only_defaults_left);
+    RUN_TEST(test_direction_cue_left_only_stays_middle);
+    RUN_TEST(test_direction_cue_right_only_stays_middle);
+    RUN_TEST(test_direction_cue_left_and_middle_blocked_goes_right);
+    RUN_TEST(test_direction_cue_middle_and_right_blocked_goes_left);
+    RUN_TEST(test_direction_cue_left_and_right_blocked_stays_middle);
+    RUN_TEST(test_direction_cue_all_three_blocked_is_stop);
+    RUN_TEST(test_direction_cue_all_clear_is_center_and_inactive);
     RUN_TEST(test_process_frame_sends_audio_and_ble);
     RUN_TEST(test_radar_fault_forces_clear_only_when_active);
     RUN_TEST(test_grip_starts_unknown_and_unknown_alerts);

@@ -34,7 +34,7 @@ tearDown (void)
 static void
 feed_good_frame (uint32_t now_ms)
 {
-    rte_radar_target_t empty = { false, 0, 0, 0, 0u };
+    rte_radar_target_t empty = { false, 0, 0, 0, 0u, RTE_SIDE_CENTER };
     rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS] = { empty, empty, empty };
 
     radar_monitor_on_frame(&g_monitor, targets, now_ms);
@@ -167,7 +167,8 @@ test_timeout_outside_run_is_ignored (void)
 static rte_radar_target_t
 make_side_target (int16_t x_mm)
 {
-    rte_radar_target_t target = { true, x_mm, 1500, 1500u, -16 };
+    rte_radar_target_t target = { true, x_mm, 1500, 1500u, -16,
+                                  RTE_SIDE_CENTER };
 
     return (target);
 }
@@ -175,7 +176,7 @@ make_side_target (int16_t x_mm)
 static void
 test_corridor_gate_empties_targets_outside_the_path (void)
 {
-    rte_radar_target_t empty = { false, 0, 0, 0, 0 };
+    rte_radar_target_t empty = { false, 0, 0, 0, 0, RTE_SIDE_CENTER };
     rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
     rte_radar_data_t sent;
 
@@ -187,10 +188,14 @@ test_corridor_gate_empties_targets_outside_the_path (void)
     radar_monitor_on_frame(&g_monitor, targets, 100u);
     sent = mock_radar_get(0u);
 
-    // On the edge is kept (the message has distance and speed only).
+    // On the edge is kept (the message has distance, speed and side; x and y
+    // themselves do not reach the message, see rte_type.h).
     TEST_ASSERT_TRUE(sent.targets[0].b_valid);
     TEST_ASSERT_EQUAL_UINT16(1500u, sent.targets[0].d_mm);
     TEST_ASSERT_EQUAL_INT16(-16, sent.targets[0].speed_cms);
+    // x_mm is at the corridor edge, beyond the side deadzone, so RIGHT
+    // (FR9 cue byte).
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_RIGHT, sent.targets[0].side);
     // One millimetre beyond the edge, on either side, is dropped.
     TEST_ASSERT_FALSE(sent.targets[1].b_valid);
     TEST_ASSERT_FALSE(sent.targets[2].b_valid);
@@ -198,9 +203,50 @@ test_corridor_gate_empties_targets_outside_the_path (void)
 }
 
 static void
+test_corridor_gate_side_classifies_left_center_and_right (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    rte_radar_data_t sent;
+
+    targets[0] = make_side_target(
+        (int16_t) -(RADAR_MONITOR_SIDE_DEADZONE_MM + 1));
+    targets[1] = make_side_target(0);
+    targets[2] = make_side_target(
+        (int16_t) (RADAR_MONITOR_SIDE_DEADZONE_MM + 1));
+
+    radar_monitor_on_config_result(&g_monitor, true, 0u);
+    radar_monitor_on_frame(&g_monitor, targets, 100u);
+    sent = mock_radar_get(0u);
+
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_LEFT, sent.targets[0].side);
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_CENTER, sent.targets[1].side);
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_RIGHT, sent.targets[2].side);
+}
+
+static void
+test_corridor_gate_side_deadzone_edge_is_center (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    rte_radar_data_t sent;
+
+    targets[0] = make_side_target((int16_t) -RADAR_MONITOR_SIDE_DEADZONE_MM);
+    targets[1] = make_side_target(0);
+    targets[2] = make_side_target((int16_t) RADAR_MONITOR_SIDE_DEADZONE_MM);
+
+    radar_monitor_on_config_result(&g_monitor, true, 0u);
+    radar_monitor_on_frame(&g_monitor, targets, 100u);
+    sent = mock_radar_get(0u);
+
+    // Exactly at the deadzone edge, on either side, still reads CENTER.
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_CENTER, sent.targets[0].side);
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_CENTER, sent.targets[1].side);
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_CENTER, sent.targets[2].side);
+}
+
+static void
 test_corridor_gate_keeps_the_frame_and_the_timer (void)
 {
-    rte_radar_target_t empty = { false, 0, 0, 0, 0 };
+    rte_radar_target_t empty = { false, 0, 0, 0, 0, RTE_SIDE_CENTER };
     rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
 
     targets[0] = make_side_target(2000);
@@ -280,6 +326,8 @@ main (void)
     RUN_TEST(test_silent_sensor_is_configured_again_after_listening);
     RUN_TEST(test_timeout_outside_run_is_ignored);
     RUN_TEST(test_corridor_gate_empties_targets_outside_the_path);
+    RUN_TEST(test_corridor_gate_side_classifies_left_center_and_right);
+    RUN_TEST(test_corridor_gate_side_deadzone_edge_is_center);
     RUN_TEST(test_corridor_gate_keeps_the_frame_and_the_timer);
     RUN_TEST(test_silence_inside_settle_window_clears_the_tone_without_a_fault);
     RUN_TEST(test_silence_until_the_end_of_the_settle_window_is_a_fault);

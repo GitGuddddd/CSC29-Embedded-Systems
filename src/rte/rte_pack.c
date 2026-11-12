@@ -19,7 +19,7 @@
 
 #define RTE_PACK_BITS_PER_BYTE    (8u)
 
-// Field positions (bit offsets) in the 102-bit message.
+// Field positions (bit offsets) in the 108-bit message (14 bytes, 4 spare).
 #define RTE_PACK_TYPE_AT          (0u)
 #define RTE_PACK_TYPE_BITS        (2u)
 #define RTE_PACK_GRIP_AT          (2u)
@@ -27,12 +27,13 @@
 #define RTE_PACK_TIME_AT          (4u)
 #define RTE_PACK_TIME_BITS        (32u)
 #define RTE_PACK_SLOT0_AT         (36u)
-#define RTE_PACK_SLOT_BITS        (22u)
+#define RTE_PACK_SLOT_BITS        (24u)
 
-// Offsets inside one 22-bit slot.
+// Offsets inside one 24-bit slot.
 #define RTE_PACK_SLOT_VALID_AT    (0u)
 #define RTE_PACK_SLOT_DIST_AT     (1u)
 #define RTE_PACK_SLOT_SPEED_AT    (13u)
+#define RTE_PACK_SLOT_SIDE_AT     (22u)
 
 #define RTE_PACK_CODE_RESERVED    (3u)
 
@@ -93,10 +94,12 @@ rte_pack_get_bits (const uint8_t * p_buf, uint32_t offset, uint32_t width)
 }
 
 /*!
- * @brief Pack one target slot (22 bits). An empty slot is all zero.
+ * @brief Pack one target slot (24 bits). An empty slot is all zero.
  *
  * Distance is rounded down to a 2 mm step and saturates at 4095 steps. Speed
  * is clamped to the symmetric range so that negating it cannot overflow.
+ * Side (FR9 cue byte, 8 Nov) already comes from radar_monitor as a 2-bit
+ * verdict, so it is only carried here, not computed.
  */
 static void
 rte_pack_slot (uint8_t * p_buf, uint32_t at, const rte_radar_target_t * p_t)
@@ -132,11 +135,16 @@ rte_pack_slot (uint8_t * p_buf, uint32_t at, const rte_radar_target_t * p_t)
         // bits above the field width.
         rte_pack_put_bits(p_buf, at + RTE_PACK_SLOT_SPEED_AT,
                      RTE_PACK_SPEED_BITS, (uint32_t) speed);
+
+        // rte_cue_side_t only ever holds 0 to 2, so the 2-bit field never
+        // truncates a real value.
+        rte_pack_put_bits(p_buf, at + RTE_PACK_SLOT_SIDE_AT,
+                     RTE_PACK_SIDE_BITS, (uint32_t) p_t->side);
     }
 }
 
 /*!
- * @brief Unpack one target slot (22 bits).
+ * @brief Unpack one target slot (24 bits).
  */
 static void
 rte_unpack_slot (const uint8_t * p_buf, uint32_t at, rte_radar_target_t * p_t)
@@ -148,6 +156,7 @@ rte_unpack_slot (const uint8_t * p_buf, uint32_t at, rte_radar_target_t * p_t)
     p_t->y_mm = 0;
     p_t->d_mm = 0u;
     p_t->speed_cms = 0;
+    p_t->side = RTE_SIDE_CENTER;
 
     if (p_t->b_valid)
     {
@@ -155,6 +164,8 @@ rte_unpack_slot (const uint8_t * p_buf, uint32_t at, rte_radar_target_t * p_t)
                                       RTE_PACK_DISTANCE_BITS);
         uint32_t raw = rte_pack_get_bits(p_buf, at + RTE_PACK_SLOT_SPEED_AT,
                                     RTE_PACK_SPEED_BITS);
+        uint32_t side = rte_pack_get_bits(p_buf, at + RTE_PACK_SLOT_SIDE_AT,
+                                     RTE_PACK_SIDE_BITS);
         int32_t speed = (int32_t) raw;
 
         // Sign-extend the two's complement speed field.
@@ -166,11 +177,16 @@ rte_unpack_slot (const uint8_t * p_buf, uint32_t at, rte_radar_target_t * p_t)
         // At most 4095 * 2 = 8190, which fits uint16_t.
         p_t->d_mm = (uint16_t) (steps * RTE_PACK_DISTANCE_STEP_MM);
         p_t->speed_cms = (int16_t) speed;
+
+        // Code 3 is not sent (RTE_PACK_SIDE_BITS only ever packs 0 to 2), but
+        // a corrupt frame could still produce it; CENTER is the safe reading.
+        p_t->side = (side <= (uint32_t) RTE_SIDE_RIGHT) ? (rte_cue_side_t) side
+                                                        : RTE_SIDE_CENTER;
     }
 }
 
 /*!
- * @brief Pack a radar queue message (13 bytes, 102 bits used).
+ * @brief Pack a radar queue message (14 bytes, 108 bits used).
  *
  * @param[in]  p_data  The message fields.
  * @param[out] p_msg   The packed bytes (spare bits are 0).

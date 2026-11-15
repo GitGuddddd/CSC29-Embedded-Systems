@@ -203,7 +203,7 @@ rte_write_ble_obstacle (bool b_active, const uint16_t d_mm[3],
  *        OPEN-22, 13 Nov: added d_mm, and this is now the only bench-debug
  *        line - the separate [MIO] line is gone along with MIO target
  *        selection itself). No-op unless FEATURE_DEBUG_LOGS and
- *        FEATURE_DEBUG_LOG_MIO are both 1. One full gr_printf() per case
+ *        FEATURE_DEBUG_LOG_DIR are both 1. One full gr_printf() per case
  *        rather than building a string, so no `char *` is ever declared
  *        here (Barr-C 5.2.a bans the raw type).
  *
@@ -225,7 +225,7 @@ rte_write_dir_debug (bool b_left_blocked, bool b_middle_blocked,
                      uint8_t cue)
 {
 #if (1 == FEATURE_DEBUG_LOGS)
-    if ((1 == FEATURE_DEBUG_LOGS) && (1 == FEATURE_DEBUG_LOG_MIO))
+    if ((1 == FEATURE_DEBUG_LOGS) && (1 == FEATURE_DEBUG_LOG_DIR))
     {
         uint32_t l = (uint32_t) b_left_blocked;
         uint32_t m = (uint32_t) b_middle_blocked;

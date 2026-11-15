@@ -40,18 +40,20 @@ void rte_write_audio_msg (rte_audio_msg_type_t type, uint16_t d_mm,
 void rte_write_ble_obstacle (bool b_active, const uint16_t d_mm[3],
                              const uint16_t ttc_ms[3]);
 
-// Bench-debug only (OPEN-20, FEATURE_DEBUG_LOG_MIO; OPEN-22, 13 Nov: added
-// d_mm, removed the separate [MIO] line and its rte_write_mio_debug() -
-// there is no more "selected object" to report now that MIO target
-// selection itself is removed). A plain-language line for the FR9
-// direction cue - which lanes are occupied this frame (independent of
-// b_active: occupancy is still useful to see even while no alert is
-// active), the nearest distance among the currently blocked lanes, and
-// the resulting "go left"/"stay middle"/"go right"/"STOP" decision, or
-// "no alert" when b_active is false (cue and d_mm are not meaningful
-// then) - so the cue byte does not have to be decoded by hand on the
-// bench. No-op unless FEATURE_DEBUG_LOGS and FEATURE_DEBUG_LOG_MIO are
-// both 1. Never read back by anything, unlike the rte_write_* functions
+// Bench-debug only (OPEN-20, FEATURE_DEBUG_LOG_DIR - renamed from
+// FEATURE_DEBUG_LOG_MIO 15 Nov, since this flag now gates the [DIR] line
+// below, not the old [MIO] line; OPEN-22, 13 Nov: added d_mm, removed the
+// separate [MIO] line and its rte_write_mio_debug() - there is no more
+// "selected object" to report now that MIO target selection itself is
+// removed). A plain-language line for the FR9 direction cue - which
+// lanes are occupied this frame (independent of b_active: occupancy is
+// still useful to see even while no alert is active), the nearest
+// distance among the currently blocked lanes, and the resulting
+// "go left"/"stay middle"/"go right"/"STOP" decision, or "no alert" when
+// b_active is false (cue and d_mm are not meaningful then) - so the cue
+// byte does not have to be decoded by hand on the bench. No-op unless
+// FEATURE_DEBUG_LOGS and FEATURE_DEBUG_LOG_DIR are both 1. Never read
+// back by anything, unlike the rte_write_* functions
 // above - this is a print, not a queued message.
 void rte_write_dir_debug (bool b_left_blocked, bool b_middle_blocked,
                           bool b_right_blocked, bool b_active,

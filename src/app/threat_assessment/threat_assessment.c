@@ -253,7 +253,7 @@ threat_assessment_process_frame (threat_assessment_t * p_state,
     }
 
     // OPEN-20/OPEN-22: bench-debug only, a no-op unless FEATURE_DEBUG_LOGS
-    // and FEATURE_DEBUG_LOG_MIO are both 1. The FR9 direction cue in plain
+    // and FEATURE_DEBUG_LOG_DIR are both 1. The FR9 direction cue in plain
     // language, plus (OPEN-22) the distance driving loudness/pitch, so
     // neither has to be decoded from the raw byte by hand on the bench.
     // OPEN-19's separate [MIO] line is gone: there is no more "selected

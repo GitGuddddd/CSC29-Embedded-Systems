@@ -32,7 +32,8 @@
 // Corridor gate: a target whose side-to-side position |x| is larger than this
 // is not in the walking path and is sent to Glasses_Threat as an empty slot.
 // It costs no time: the decision is made on the frame itself. Tune with
-// walking tests (docs/target_gates.md). The debug print still shows the target.
+// walking tests (see docs/testing_guide.md). The debug print still shows
+// the target.
 // 1500 mm (was 1200 mm until 8 Nov, 1000 mm until 31 Oct): a missed obstacle
 // is worse than a false alert, and the corridor turns with the head, so a
 // wider strip hides fewer real obstacles when the head is turned. Reframed
@@ -45,18 +46,41 @@
 // sensor's centre line counts as straight ahead (RTE_SIDE_CENTER); beyond it,
 // LEFT or RIGHT by the sign of x_mm. Bench-confirmed 7 Nov: negative x is
 // left (sensor fixed, walked left to right), so x_mm < 0 is LEFT.
-// 300 mm (was 150 mm until 8 Nov): widened after bench use showed CENTER
-// standing still read as LEFT. Justified as the sum of three margins the
-// sensor has to absorb even when the user is genuinely centred: natural
-// lateral sway while walking (roughly 50-100 mm), radar lateral-measurement
-// jitter at typical use range (tens of mm, grows with distance), and
-// mounting/alignment tolerance on the glasses frame (a few degrees of yaw
-// at 1-2 m is real mm of offset). Still a DRAFT value: the sway and jitter
-// components are estimates, not bench-measured, so confirm by walking the
-// corridor before the report locks it in. Kept well inside
-// RADAR_MONITOR_CORRIDOR_HALF_MM so a target can be CENTER only while it is
-// also in the corridor.
-#define RADAR_MONITOR_SIDE_DEADZONE_MM      (300)
+// 425 mm (OPEN-22, 13 Nov; was 300 mm, was 150 mm until 8 Nov): widened again
+// for the lane-occupancy redesign. The same three margins as before (natural
+// lateral sway while walking, radar lateral jitter, mounting/alignment
+// tolerance) still apply, but OPEN-22 also removed the per-side departing-
+// target filter, so a lane now stays BLOCKED until every target in it
+// physically clears THREAT_ASSESSMENT_STOP_MM rather than being excused
+// early by a trend filter - a narrow lane makes that wait feel twitchy on
+// every small head turn. The wider half-width absorbs that natural head sway
+// so a walking corridor does not flicker between lanes on every footstep.
+// Still a DRAFT value, not bench-measured against the new lane logic; kept
+// well inside RADAR_MONITOR_CORRIDOR_HALF_MM so a target can be CENTER only
+// while it is also in the corridor.
+#define RADAR_MONITOR_SIDE_DEADZONE_MM      (425)
+
+// OPEN-24 (13 Nov): a target sitting near a +/-RADAR_MONITOR_SIDE_DEADZONE_MM
+// boundary, with x_mm drifting by a few mm frame to frame (sensor jitter,
+// small head sway), could otherwise flip side every frame and make the FR9
+// direction cue flicker - a lane now has a 200 ms hold on the way out
+// (THREAT_ASSESSMENT_LANE_HOLD_MS) but a target's lane *membership* itself
+// had no such hold. This is that hold, applied to the boundary itself
+// (Schmitt-trigger style, same shape as the distance START/STOP pair):
+// crossing INTO a side still only needs DEADZONE_MM, but once classified
+// LEFT or RIGHT, leaving that side back toward CENTER (or past it to the
+// far side) needs x_mm to come back inside DEADZONE_MM - HYSTERESIS_MM,
+// not just DEADZONE_MM, so a target has to clearly leave, not merely touch
+// the line. 75 mm (DRAFT, not bench-measured): a few times the lateral
+// jitter a stationary target shows frame to frame, but small next to
+// DEADZONE_MM (425) itself so it narrows a lane's effective width only a
+// little. Per RTE_RADAR_NUM_TARGETS slot, not per physical target - the
+// sensor does not promise a target keeps the same slot frame to frame
+// (the same known, bounded risk noted for OPEN-18's removal in
+// docs/deviations.md), so this hysteresis is occasionally applied to a
+// slot that is now a different physical object than the frame before;
+// with only 3 slots and a walking-paced user this is judged acceptable.
+#define RADAR_MONITOR_SIDE_HYSTERESIS_MM    (75)
 
 #endif /* RADAR_MONITOR_CFG_H */
 

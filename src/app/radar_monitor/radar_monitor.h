@@ -52,6 +52,13 @@ typedef struct
     uint32_t              deadline_ms;
     bool                  b_settling;
     uint32_t              settle_until_ms;
+
+    // OPEN-24 (13 Nov): one remembered side per target slot, for the FR9
+    // cue byte's side-classification hysteresis (RADAR_MONITOR_SIDE_
+    // HYSTERESIS_MM). Reset to RTE_SIDE_CENTER whenever a slot is empty or
+    // corridor-gated out, so a new object appearing in a slot starts fresh
+    // rather than inheriting a stale bias from whatever was last there.
+    rte_cue_side_t        last_side[RTE_RADAR_NUM_TARGETS];
 } radar_monitor_t;
 
 void radar_monitor_init (radar_monitor_t * p_monitor);

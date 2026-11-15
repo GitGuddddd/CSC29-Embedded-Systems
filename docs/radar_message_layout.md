@@ -106,8 +106,10 @@ packed after this message works.
 
 None. Speed width settled by capture (assumption A7), 27 Oct 2026.
 
-Evidence: docs/evidence/2026-10-27_speed_walk.txt (walk, 415 to 2192 mm) and
-docs/evidence/2026-10-27_speed_bench.txt (bench, 183 to 515 mm). Largest
+Evidence: captured 27 Oct as docs/evidence/2026-10-27_speed_walk.txt (walk,
+415 to 2192 mm) and _speed_bench.txt (bench, 183 to 515 mm); deleted 15 Nov
+along with the rest of docs/evidence/ (outdated, to be replaced by a new
+testing session). Largest
 |speed| seen was 112 cm/s, with no reading above 255, so 9 bits with a +/-255
 clamp holds. Negative speed matched approaching in 96 of 100 clear-motion
 samples (the 4 misses were at turnarounds), which agrees with

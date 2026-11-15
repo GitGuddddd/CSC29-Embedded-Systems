@@ -169,16 +169,25 @@ test_person_walks_up_alert_starts_then_clears (void)
     send_frame(2500, -20);
     TEST_ASSERT_EQUAL_size_t(0u, mock_audio_count());
 
-    // Crossing 2000 mm starts the alert, then OBSTACLE every frame.
-    send_frame(1900, -20);
+    // Crossing 1800 mm (OPEN-22) starts the alert, then OBSTACLE every
+    // frame.
     send_frame(1700, -20);
+    send_frame(1600, -20);
     send_frame(1500, -20);
     TEST_ASSERT_EQUAL_size_t(3u, count_audio(RTE_AUDIO_OBSTACLE));
     TEST_ASSERT_EQUAL_UINT16(1500u, mock_audio_get(2u).d_mm);
     TEST_ASSERT_TRUE(mock_ble_get(2u).b_active);
-    TEST_ASSERT_EQUAL_UINT16(7500u, mock_ble_get(2u).ttc_ms);
+    // FR13 (OPEN-23, then per-lane OPEN-25): send_frame() puts its target
+    // at x=0 (CENTER). CENTER is live this frame with closing speed 20
+    // cm/s, so its lane_ttc_ms is a real computed value, not NONE; the
+    // other two lanes are not BLOCKED. See docs/deviations.md OPEN-23/
+    // OPEN-25.
+    TEST_ASSERT_EQUAL_UINT16(1500u, mock_ble_get(2u).d_mm[RTE_SIDE_CENTER]);
+    TEST_ASSERT_EQUAL_UINT16(7500u,
+                             mock_ble_get(2u).ttc_ms[RTE_SIDE_CENTER]);
 
-    // Walking away beyond 2100 mm clears it exactly once.
+    // Walking away beyond 1950 mm (OPEN-22) clears it exactly once, once
+    // the lane's hold timer (200 ms) has elapsed.
     send_frame(2050, 0);
     send_frame(2200, 0);
     send_frame(2300, 0);

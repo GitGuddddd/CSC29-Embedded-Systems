@@ -212,40 +212,36 @@ rte_write_audio_msg (rte_audio_msg_type_t type, uint16_t d_mm, uint8_t cue)
 }
 
 void
-rte_write_ble_obstacle (bool b_active, uint16_t d_mm, uint16_t ttc_ms)
+rte_write_ble_obstacle (bool b_active, const uint16_t d_mm[3],
+                        const uint16_t ttc_ms[3])
 {
     if (g_ble_count < MOCK_LOG_CAPACITY)
     {
         g_ble_log[g_ble_count].b_active = b_active;
-        g_ble_log[g_ble_count].d_mm = d_mm;
-        g_ble_log[g_ble_count].ttc_ms = ttc_ms;
+
+        for (size_t idx = 0u; idx < 3u; idx++)
+        {
+            g_ble_log[g_ble_count].d_mm[idx] = d_mm[idx];
+            g_ble_log[g_ble_count].ttc_ms[idx] = ttc_ms[idx];
+        }
+
         g_ble_count++;
     }
 }
 
-// Bench-debug only (OPEN-19): a print on the real target, so the host
-// build has nothing to assert on here.
-void
-rte_write_mio_debug (bool b_present, size_t track_slot, uint32_t d_mm,
-                     uint32_t risk_mm, bool b_collision)
-{
-    (void) b_present;
-    (void) track_slot;
-    (void) d_mm;
-    (void) risk_mm;
-    (void) b_collision;
-}
-
-// Bench-debug only (OPEN-20): a print on the real target, so the host
+// Bench-debug only (OPEN-20; OPEN-22 removed the separate [MIO] mock along
+// with MIO target selection): a print on the real target, so the host
 // build has nothing to assert on here.
 void
 rte_write_dir_debug (bool b_left_blocked, bool b_middle_blocked,
-                     bool b_right_blocked, bool b_active, uint8_t cue)
+                     bool b_right_blocked, bool b_active, uint16_t d_mm,
+                     uint8_t cue)
 {
     (void) b_left_blocked;
     (void) b_middle_blocked;
     (void) b_right_blocked;
     (void) b_active;
+    (void) d_mm;
     (void) cue;
 }
 

@@ -141,18 +141,28 @@ main_glasses_stub_ble_task (void * p_arg)
     {
         if (rte_read_ble_obstacle(&msg, RTE_WAIT_FOREVER))
         {
-            uint32_t d_mm = msg.d_mm;
-            uint32_t ttc_ms = msg.ttc_ms;
-
             if (!msg.b_active)
             {
                 gr_printf(">>> BLE task <- obstacle CLEAR\n");
             }
             else
             {
-                gr_printf(">>> BLE task <- obstacle ACTIVE d=%" PRIu32
+                // OPEN-25 (14 Nov): one line per lane now, not one
+                // combined distance/TTC - RTE_LANE_NONE_MM/RTE_TTC_
+                // NONE_MS (0xFFFF) print as 65535 for a lane that is not
+                // BLOCKED, which is fine for this bring-up-only print.
+                gr_printf(">>> BLE task <- obstacle ACTIVE L d=%" PRIu32
                           "mm TTC=%" PRIu32 "ms\n",
-                          d_mm, ttc_ms);
+                          (uint32_t) msg.d_mm[RTE_SIDE_LEFT],
+                          (uint32_t) msg.ttc_ms[RTE_SIDE_LEFT]);
+                gr_printf(">>> BLE task <- obstacle ACTIVE M d=%" PRIu32
+                          "mm TTC=%" PRIu32 "ms\n",
+                          (uint32_t) msg.d_mm[RTE_SIDE_CENTER],
+                          (uint32_t) msg.ttc_ms[RTE_SIDE_CENTER]);
+                gr_printf(">>> BLE task <- obstacle ACTIVE R d=%" PRIu32
+                          "mm TTC=%" PRIu32 "ms\n",
+                          (uint32_t) msg.d_mm[RTE_SIDE_RIGHT],
+                          (uint32_t) msg.ttc_ms[RTE_SIDE_RIGHT]);
             }
         }
     }

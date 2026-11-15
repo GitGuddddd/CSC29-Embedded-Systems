@@ -37,24 +37,25 @@ void rte_write_radar_fault (void);
 void rte_write_grip_state (rte_grip_state_t grip);
 void rte_write_audio_msg (rte_audio_msg_type_t type, uint16_t d_mm,
                           uint8_t cue);
-void rte_write_ble_obstacle (bool b_active, uint16_t d_mm, uint16_t ttc_ms);
+void rte_write_ble_obstacle (bool b_active, const uint16_t d_mm[3],
+                             const uint16_t ttc_ms[3]);
 
-// Bench-debug only (OPEN-19, FEATURE_DEBUG_LOG_MIO): which target the MIO
-// selection picked this frame, and why. No-op unless that flag is 1. Never
-// read back by anything, unlike the rte_write_* functions above - this is
-// a print, not a queued message.
-void rte_write_mio_debug (bool b_present, size_t track_slot, uint32_t d_mm,
-                          uint32_t risk_mm, bool b_collision);
-
-// Bench-debug only (OPEN-20, same FEATURE_DEBUG_LOG_MIO flag as above): a
-// plain-language line for the new FR9 direction cue - which sides are
-// occupied this frame (independent of b_active: occupancy is still useful
-// to see even while no alert is active) and the resulting "go left"/"stay
-// middle"/"go right"/"STOP" decision, or "no alert" when b_active is false
-// (cue is not meaningful then) - so the cue byte does not have to be
-// decoded by hand on the bench.
+// Bench-debug only (OPEN-20, FEATURE_DEBUG_LOG_MIO; OPEN-22, 13 Nov: added
+// d_mm, removed the separate [MIO] line and its rte_write_mio_debug() -
+// there is no more "selected object" to report now that MIO target
+// selection itself is removed). A plain-language line for the FR9
+// direction cue - which lanes are occupied this frame (independent of
+// b_active: occupancy is still useful to see even while no alert is
+// active), the nearest distance among the currently blocked lanes, and
+// the resulting "go left"/"stay middle"/"go right"/"STOP" decision, or
+// "no alert" when b_active is false (cue and d_mm are not meaningful
+// then) - so the cue byte does not have to be decoded by hand on the
+// bench. No-op unless FEATURE_DEBUG_LOGS and FEATURE_DEBUG_LOG_MIO are
+// both 1. Never read back by anything, unlike the rte_write_* functions
+// above - this is a print, not a queued message.
 void rte_write_dir_debug (bool b_left_blocked, bool b_middle_blocked,
-                          bool b_right_blocked, bool b_active, uint8_t cue);
+                          bool b_right_blocked, bool b_active,
+                          uint16_t d_mm, uint8_t cue);
 
 bool rte_read_audio_msg (rte_audio_msg_t * p_msg, uint32_t timeout_ms);
 bool rte_read_ble_obstacle (rte_ble_obstacle_t * p_msg, uint32_t timeout_ms);

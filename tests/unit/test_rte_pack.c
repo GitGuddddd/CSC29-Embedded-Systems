@@ -302,24 +302,29 @@ test_packed_distance_edges_through_threat (void)
 
     threat_assessment_init(&state);
 
-    // Frames are 1 s apart so the range trend (400 ms cap) stays out of the
-    // way: this test is about the 2 mm distance edges, not about departing.
+    // Frames are 1 s apart, well clear of THREAT_ASSESSMENT_LANE_HOLD_MS
+    // (200 ms, OPEN-22): this test is about the 2 mm distance edges, not
+    // about the hold timer's own timing.
 
-    out = feed_distance(&state, 2000u, 1000u);
+    out = feed_distance(&state, 1802u, 1000u);
     TEST_ASSERT_FALSE(out.b_active);
 
-    out = feed_distance(&state, 1999u, 2000u);
+    // 1799 mm is sent as 1798 mm (2 mm step rounds down).
+    out = feed_distance(&state, 1799u, 2000u);
     TEST_ASSERT_TRUE(out.b_active);
-    TEST_ASSERT_EQUAL_UINT16(1998u, out.d_mm);
+    TEST_ASSERT_EQUAL_UINT16(1798u, out.d_mm);
 
-    out = feed_distance(&state, 2100u, 3000u);
-    TEST_ASSERT_TRUE(out.b_active);
-
-    // 2101 mm is sent as 2100 mm, so it still holds.
-    out = feed_distance(&state, 2101u, 4000u);
+    out = feed_distance(&state, 1950u, 3000u);
     TEST_ASSERT_TRUE(out.b_active);
 
-    out = feed_distance(&state, 2102u, 5000u);
+    // 1953 mm is sent as 1952 mm, just past THREAT_ASSESSMENT_STOP_MM
+    // (1950): the lane's hold timer starts here, so it still holds on
+    // this frame (OPEN-22: clearing is debounced, starting is not).
+    out = feed_distance(&state, 1953u, 4000u);
+    TEST_ASSERT_TRUE(out.b_active);
+
+    // Another second later (well past the 200 ms hold): now it clears.
+    out = feed_distance(&state, 1954u, 5000u);
     TEST_ASSERT_FALSE(out.b_active);
 }
 

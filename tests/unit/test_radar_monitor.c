@@ -244,6 +244,78 @@ test_corridor_gate_side_deadzone_edge_is_center (void)
 }
 
 static void
+test_side_hysteresis_holds_left_until_clearly_centered (void)
+{
+    rte_radar_target_t empty = { false, 0, 0, 0, 0, RTE_SIDE_CENTER };
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    rte_radar_data_t sent;
+
+    radar_monitor_on_config_result(&g_monitor, true, 0u);
+
+    // Clearly LEFT: just past -DEADZONE_MM.
+    targets[0] = make_side_target(
+        (int16_t) -(RADAR_MONITOR_SIDE_DEADZONE_MM + 1));
+    targets[1] = empty;
+    targets[2] = empty;
+    radar_monitor_on_frame(&g_monitor, targets, 100u);
+    sent = mock_radar_get(0u);
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_LEFT, sent.targets[0].side);
+
+    // Drifts back inside the old DEADZONE_MM boundary (sensor jitter),
+    // but not past the HYSTERESIS_MM margin: a plain DEADZONE_MM-only
+    // rule would flip this back to CENTER, which is exactly the
+    // boundary flicker OPEN-24 exists to prevent.
+    targets[0] = make_side_target(
+        (int16_t) -(RADAR_MONITOR_SIDE_DEADZONE_MM -
+                   (RADAR_MONITOR_SIDE_HYSTERESIS_MM / 2)));
+    radar_monitor_on_frame(&g_monitor, targets, 200u);
+    sent = mock_radar_get(1u);
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_LEFT, sent.targets[0].side);
+
+    // Clearly leaves LEFT, past the HYSTERESIS_MM margin: now
+    // re-classifies by the plain DEADZONE_MM rule, landing on CENTER.
+    targets[0] = make_side_target(
+        (int16_t) -(RADAR_MONITOR_SIDE_DEADZONE_MM -
+                   RADAR_MONITOR_SIDE_HYSTERESIS_MM - 1));
+    radar_monitor_on_frame(&g_monitor, targets, 300u);
+    sent = mock_radar_get(2u);
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_CENTER, sent.targets[0].side);
+}
+
+static void
+test_side_hysteresis_resets_when_the_slot_goes_empty (void)
+{
+    rte_radar_target_t empty = { false, 0, 0, 0, 0, RTE_SIDE_CENTER };
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    rte_radar_data_t sent;
+
+    radar_monitor_on_config_result(&g_monitor, true, 0u);
+
+    targets[0] = make_side_target(
+        (int16_t) -(RADAR_MONITOR_SIDE_DEADZONE_MM + 1));
+    targets[1] = empty;
+    targets[2] = empty;
+    radar_monitor_on_frame(&g_monitor, targets, 100u);
+    sent = mock_radar_get(0u);
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_LEFT, sent.targets[0].side);
+
+    // The slot reads empty for a frame: whatever appears in it next is a
+    // new object, so it must not inherit LEFT's hysteresis.
+    targets[0] = empty;
+    radar_monitor_on_frame(&g_monitor, targets, 200u);
+
+    // A target reappears in the slot, inside the old DEADZONE_MM boundary
+    // but on the side that LEFT's hysteresis would have held onto: with
+    // the reset, this classifies CENTER by the plain base rule, not LEFT.
+    targets[0] = make_side_target(
+        (int16_t) -(RADAR_MONITOR_SIDE_DEADZONE_MM -
+                   (RADAR_MONITOR_SIDE_HYSTERESIS_MM / 2)));
+    radar_monitor_on_frame(&g_monitor, targets, 300u);
+    sent = mock_radar_get(2u);
+    TEST_ASSERT_EQUAL_INT(RTE_SIDE_CENTER, sent.targets[0].side);
+}
+
+static void
 test_corridor_gate_keeps_the_frame_and_the_timer (void)
 {
     rte_radar_target_t empty = { false, 0, 0, 0, 0, RTE_SIDE_CENTER };
@@ -328,6 +400,8 @@ main (void)
     RUN_TEST(test_corridor_gate_empties_targets_outside_the_path);
     RUN_TEST(test_corridor_gate_side_classifies_left_center_and_right);
     RUN_TEST(test_corridor_gate_side_deadzone_edge_is_center);
+    RUN_TEST(test_side_hysteresis_holds_left_until_clearly_centered);
+    RUN_TEST(test_side_hysteresis_resets_when_the_slot_goes_empty);
     RUN_TEST(test_corridor_gate_keeps_the_frame_and_the_timer);
     RUN_TEST(test_silence_inside_settle_window_clears_the_tone_without_a_fault);
     RUN_TEST(test_silence_until_the_end_of_the_settle_window_is_a_fault);

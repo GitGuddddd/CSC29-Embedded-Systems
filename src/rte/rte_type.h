@@ -125,27 +125,44 @@ typedef struct
 
 /**
  * FR9 cue byte (prof feedback, 7 Nov 2026): tells Audio Alert what to do,
- * not just how close. Bit 0 is STOP (the alerting target is inside the stop
- * cue band, see THREAT_ASSESSMENT_STOP_CUE_ON_MM); bits 1-2 are the side
- * (rte_cue_side_t) of the target Glasses_Threat is alerting on. Bits 3-7 are
- * always 0. A bit-flag byte describing the obstacle, not a reject mask
- * (OPEN-4): there is nothing here to reject, every bit says something true
- * about the alert that is already active.
+ * not just how close. OPEN-20/OPEN-22 (docs/deviations.md): bit 0 is STOP
+ * (all three lanes - left/middle/right - are BLOCKED); bits 1-2 are which
+ * way is open to walk (rte_cue_side_t), from per-lane occupancy
+ * (threat_assessment_direction_cue()), not the side of a single alerting
+ * target. Bits 3-7 are always 0. A bit-flag byte describing the obstacle,
+ * not a reject mask (OPEN-4): there is nothing here to reject, every bit
+ * says something true about the alert that is already active.
  */
 #define RTE_CUE_STOP        (0x01u)
 #define RTE_CUE_SIDE_SHIFT  (1u)
 #define RTE_CUE_SIDE_MASK   (0x03u)
 
-/** Item of the BLE obstacle queue. ttc_ms is RTE_TTC_NONE_MS if unknown. */
+/**
+ * Item of the BLE obstacle queue (OPEN-25, 14 Nov): one distance and one
+ * TTC per lane, not a single nearest-lane summary - the nearest lane by
+ * distance is not always the one closing in soonest (a farther lane
+ * approaching fast can have a shorter TTC than a nearer, slower one), so
+ * reporting only one lane's numbers could understate urgency on another.
+ * Both arrays are indexed by rte_cue_side_t (CENTER/LEFT/RIGHT). A lane
+ * that is not currently BLOCKED reports RTE_LANE_NONE_MM / RTE_TTC_NONE_MS
+ * in its slot; a BLOCKED lane with no live speed_cms reading this frame
+ * (only held via its hold-grace window) reports a real d_mm but
+ * RTE_TTC_NONE_MS. See docs/deviations.md OPEN-25.
+ */
 typedef struct
 {
     bool     b_active;
-    uint16_t d_mm;
-    uint16_t ttc_ms;
+    uint16_t d_mm[3];
+    uint16_t ttc_ms[3];
 } rte_ble_obstacle_t;
 
 /** Time to collision value meaning "not approaching". */
 #define RTE_TTC_NONE_MS    (0xFFFFu)
+
+/** Per-lane BLE distance value meaning "this lane is not BLOCKED"
+ *  (OPEN-25). Safe as a sentinel: threat_assessment_distance_mm() never
+ *  returns above 46339. */
+#define RTE_LANE_NONE_MM    (0xFFFFu)
 
 #endif /* RTE_TYPE_H */
 

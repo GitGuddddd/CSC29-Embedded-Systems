@@ -27,7 +27,8 @@ Status: draft for the BLE owner. See also docs/deviations.md, OPEN-1 and OPEN-12
 - HELD and UNKNOWN leave the obstacle alert active (report FR6).
 - RELEASED ends an active alert with one OBSTACLE(CLEAR) and keeps it silent.
 - When grip returns to HELD or UNKNOWN, the next radar frame restarts the
-  alert if a target is inside 2000 mm.
+  alert if a target is inside a lane's START_MM (1800 mm as of OPEN-22;
+  was 2000 mm before the lane-occupancy redesign).
 - A radar fault does not reset the stored grip state.
 
 ## Behaviour to know about

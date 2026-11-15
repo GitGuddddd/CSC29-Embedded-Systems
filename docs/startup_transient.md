@@ -36,8 +36,10 @@ Measured on the Pico W with the debug log on. Four boots, same firmware.
 
 ## Result after the change
 
-Evidence: `docs/evidence/2026-10-28_startup_before_fix.txt` and
-`docs/evidence/2026-10-28_startup_after_fix.txt`.
+Evidence: captured 28 Oct as `docs/evidence/2026-10-28_startup_before_fix.txt`
+and `_after_fix.txt`; deleted 15 Nov along with the rest of `docs/evidence/`
+(outdated, to be replaced by a new testing session). Re-capture if this
+transient needs to be re-verified.
 
 | | Before | After |
 |---|---|---|

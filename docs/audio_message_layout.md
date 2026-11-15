@@ -92,6 +92,30 @@ in `threat_assessment_t` and is still updated every frame, but is no longer
 read by `threat_assessment_build_cue()`; it is dormant, kept in case a
 near-distance STOP sub-cue is wanted again.
 
+### Lane occupancy redesign (13 Nov 2026, OPEN-22): MIO dropped, d_mm is per-lane
+
+Putra's call: MIO target selection (and with it the 2D collision prediction,
+track IDs, and departing-target filters) is removed entirely, along with the
+now-unused dormant STOP sub-cue mentioned just above. `threat_assessment_
+scan_sides()`/`_hold_side()` are generalised into `threat_assessment_
+scan_lanes()`/`_hold_lane()`: each of the 3 lanes (left/middle/right, same
+`RTE_SIDE_*` classification) now has its own full hysteresis AND its own
+hold timer, re-valued `THREAT_ASSESSMENT_START_MM`/`_STOP_MM` 2000/2100 ->
+1800/1950 mm and `_NO_TARGET_HOLD_MS` -> `_LANE_HOLD_MS` 500 -> 200 ms (see
+docs/deviations.md OPEN-22 for the full reasoning). The direction-cue truth
+table above is unaffected - it only ever looked at which lanes are blocked,
+not at a distance - but `d_mm` (the value driving `alert.c`'s loudness/pitch
+mapping) now means "the nearest distance among the currently blocked lanes",
+not a single selected target's distance; with more than one lane blocked at
+once, `d_mm` tracks whichever is closer. `rte_write_dir_debug()` gained this
+`d_mm` so the bench print still shows it alongside the lane states.
+**FR13 note (superseded 14 Nov, OPEN-23/OPEN-25)**: at this point in the
+history FR13 was unmet - no velocity data remained anywhere in Threat, so
+BLE's `ttc_ms` was always `RTE_TTC_NONE_MS`. TTC was later restored from the
+radar's raw per-frame `speed_cms` (OPEN-23), then reported per lane as
+`lane_ttc_ms[3]` (OPEN-25) - see docs/deviations.md for both. FR13 is MET as
+of OPEN-25.
+
 **Nothing downstream needed a code change.** `alert.c`'s decode
 (`alert_update()`, "Sound design, revised 8 Nov" below) is purely mechanical
 on the bit values - it plays a continuous tone for side-bits `CENTER`, a

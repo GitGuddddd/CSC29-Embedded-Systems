@@ -12,6 +12,7 @@
  */
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <inttypes.h>
@@ -171,90 +172,57 @@ rte_write_audio_msg (rte_audio_msg_type_t type, uint16_t d_mm, uint8_t cue)
 }
 
 /*!
- * @brief Send the obstacle state to the BLE task (best effort, FR10).
+ * @brief Send the per-lane obstacle state to the BLE task (OPEN-25, 14
+ *        Nov; best effort, FR10).
  *
  * @param[in] b_active  true while an obstacle is active.
- * @param[in] d_mm      Distance when active.
- * @param[in] ttc_ms    Time to collision, RTE_TTC_NONE_MS if unknown.
+ * @param[in] d_mm      Per-lane distance (RTE_SIDE_* index), RTE_LANE_
+ *                      NONE_MM for a lane that is not BLOCKED.
+ * @param[in] ttc_ms    Per-lane time to collision, RTE_TTC_NONE_MS if
+ *                      that lane is not BLOCKED, has no live speed_cms
+ *                      reading this frame, or is not approaching.
  */
 void
-rte_write_ble_obstacle (bool b_active, uint16_t d_mm, uint16_t ttc_ms)
+rte_write_ble_obstacle (bool b_active, const uint16_t d_mm[3],
+                        const uint16_t ttc_ms[3])
 {
-    rte_ble_obstacle_t msg = { .b_active = b_active, .d_mm = d_mm,
-                               .ttc_ms = ttc_ms };
+    rte_ble_obstacle_t msg = { .b_active = b_active };
+
+    for (size_t idx = 0u; idx < 3u; idx++)
+    {
+        msg.d_mm[idx] = d_mm[idx];
+        msg.ttc_ms[idx] = ttc_ms[idx];
+    }
 
     // Local alerts never depend on BLE, so a full queue is not an error.
     (void) osal_queue_send(&g_ble_queue, &msg, 0u);
 }
 
 /*!
- * @brief Bench-debug line: which target MIO selection picked this frame,
- *        and why (OPEN-19). No-op unless FEATURE_DEBUG_LOGS and
- *        FEATURE_DEBUG_LOG_MIO are both 1.
+ * @brief Bench-debug line: the FR9 direction cue in plain language (OPEN-20;
+ *        OPEN-22, 13 Nov: added d_mm, and this is now the only bench-debug
+ *        line - the separate [MIO] line is gone along with MIO target
+ *        selection itself). No-op unless FEATURE_DEBUG_LOGS and
+ *        FEATURE_DEBUG_LOG_MIO are both 1. One full gr_printf() per case
+ *        rather than building a string, so no `char *` is ever declared
+ *        here (Barr-C 5.2.a bans the raw type).
  *
- * @param[in] b_present   A target was selected this frame.
- * @param[in] track_slot  Its track slot id (OPEN-18), or RTE_RADAR_NUM_
- *                        TARGETS if the track was new or lost this frame.
- * @param[in] d_mm        Its real distance.
- * @param[in] risk_mm     Risk-adjusted selection distance (OPEN-17); equal
- *                        to d_mm unless a collision course was predicted.
- * @param[in] b_collision A collision course was predicted this frame.
- */
-void
-rte_write_mio_debug (bool b_present, size_t track_slot, uint32_t d_mm,
-                     uint32_t risk_mm, bool b_collision)
-{
-#if (1 == FEATURE_DEBUG_LOGS)
-    if ((1 == FEATURE_DEBUG_LOGS) && (1 == FEATURE_DEBUG_LOG_MIO))
-    {
-        if (b_present)
-        {
-            if (RTE_RADAR_NUM_TARGETS == track_slot)
-            {
-                gr_printf("[MIO] track=- d=%" PRIu32 "mm risk=%" PRIu32
-                          "mm collision=%" PRIu32 "\n", d_mm, risk_mm,
-                          (uint32_t) b_collision);
-            }
-            else
-            {
-                gr_printf("[MIO] track=%" PRIu32 " d=%" PRIu32 "mm risk=%"
-                          PRIu32 "mm collision=%" PRIu32 "\n",
-                          (uint32_t) track_slot, d_mm, risk_mm,
-                          (uint32_t) b_collision);
-            }
-        }
-        else
-        {
-            gr_printf("[MIO] CLEAR\n");
-        }
-    }
-#else
-    (void) b_present;
-    (void) track_slot;
-    (void) d_mm;
-    (void) risk_mm;
-    (void) b_collision;
-#endif
-}
-
-/*!
- * @brief Bench-debug line: the FR9 direction cue in plain language (OPEN-20).
- *        No-op unless FEATURE_DEBUG_LOGS and FEATURE_DEBUG_LOG_MIO are both
- *        1 (same flag as rte_write_mio_debug(), this is the same bench
- *        session's output, just a second line). One full gr_printf() per
- *        case rather than building a string, so no `char *` is ever
- *        declared here (Barr-C 5.2.a bans the raw type).
- *
- * @param[in] b_left_blocked    Left side occupied within range this frame.
- * @param[in] b_middle_blocked  Middle occupied within range this frame.
- * @param[in] b_right_blocked   Right side occupied within range this frame.
+ * @param[in] b_left_blocked    Left lane occupied within range this frame.
+ * @param[in] b_middle_blocked  Middle lane occupied within range this
+ *                              frame.
+ * @param[in] b_right_blocked   Right lane occupied within range this
+ *                              frame.
  * @param[in] b_active          Whether an alert is active this frame; cue
- *                              is only meaningful when this is true.
+ *                              and d_mm are only meaningful when this is
+ *                              true.
+ * @param[in] d_mm              Nearest distance among the currently
+ *                              blocked lanes (OPEN-22).
  * @param[in] cue               The cue byte as sent to Audio Alert.
  */
 void
 rte_write_dir_debug (bool b_left_blocked, bool b_middle_blocked,
-                     bool b_right_blocked, bool b_active, uint8_t cue)
+                     bool b_right_blocked, bool b_active, uint16_t d_mm,
+                     uint8_t cue)
 {
 #if (1 == FEATURE_DEBUG_LOGS)
     if ((1 == FEATURE_DEBUG_LOGS) && (1 == FEATURE_DEBUG_LOG_MIO))
@@ -262,6 +230,7 @@ rte_write_dir_debug (bool b_left_blocked, bool b_middle_blocked,
         uint32_t l = (uint32_t) b_left_blocked;
         uint32_t m = (uint32_t) b_middle_blocked;
         uint32_t r = (uint32_t) b_right_blocked;
+        uint32_t d = (uint32_t) d_mm;
         uint8_t side = (uint8_t) ((cue >> RTE_CUE_SIDE_SHIFT) &
                                   RTE_CUE_SIDE_MASK);
 
@@ -273,22 +242,22 @@ rte_write_dir_debug (bool b_left_blocked, bool b_middle_blocked,
         else if (0u != (cue & RTE_CUE_STOP))
         {
             gr_printf("[DIR] L=%" PRIu32 " M=%" PRIu32 " R=%" PRIu32
-                      " -> STOP\n", l, m, r);
+                      " d=%" PRIu32 "mm -> STOP\n", l, m, r, d);
         }
         else if (RTE_SIDE_LEFT == side)
         {
             gr_printf("[DIR] L=%" PRIu32 " M=%" PRIu32 " R=%" PRIu32
-                      " -> go left\n", l, m, r);
+                      " d=%" PRIu32 "mm -> go left\n", l, m, r, d);
         }
         else if (RTE_SIDE_RIGHT == side)
         {
             gr_printf("[DIR] L=%" PRIu32 " M=%" PRIu32 " R=%" PRIu32
-                      " -> go right\n", l, m, r);
+                      " d=%" PRIu32 "mm -> go right\n", l, m, r, d);
         }
         else
         {
             gr_printf("[DIR] L=%" PRIu32 " M=%" PRIu32 " R=%" PRIu32
-                      " -> stay middle\n", l, m, r);
+                      " d=%" PRIu32 "mm -> stay middle\n", l, m, r, d);
         }
     }
 #else
@@ -296,6 +265,7 @@ rte_write_dir_debug (bool b_left_blocked, bool b_middle_blocked,
     (void) b_middle_blocked;
     (void) b_right_blocked;
     (void) b_active;
+    (void) d_mm;
     (void) cue;
 #endif
 }

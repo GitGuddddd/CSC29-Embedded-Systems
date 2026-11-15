@@ -21,8 +21,10 @@ static void radar_monitor_enter_fault (radar_monitor_t * p_monitor);
 static bool radar_monitor_is_settling (const radar_monitor_t * p_monitor,
                                        uint32_t now_ms);
 static void radar_monitor_apply_corridor (
-    const rte_radar_target_t * p_in, rte_radar_target_t * p_out);
-static rte_cue_side_t radar_monitor_classify_side (int32_t x_mm);
+    radar_monitor_t * p_monitor, const rte_radar_target_t * p_in,
+    rte_radar_target_t * p_out);
+static rte_cue_side_t radar_monitor_classify_side (
+    int32_t x_mm, rte_cue_side_t last_side);
 
 /*!
  * @brief Start in INIT, with no delay pending.
@@ -40,6 +42,11 @@ radar_monitor_init (radar_monitor_t * p_monitor)
     p_monitor->deadline_ms = 0u;
     p_monitor->b_settling = false;
     p_monitor->settle_until_ms = 0u;
+
+    for (size_t idx = 0u; idx < RTE_RADAR_NUM_TARGETS; idx++)
+    {
+        p_monitor->last_side[idx] = RTE_SIDE_CENTER;
+    }
 }
 
 /*!
@@ -157,7 +164,7 @@ radar_monitor_on_frame (radar_monitor_t * p_monitor,
         p_monitor->b_fault_reported = false;
     }
 
-    radar_monitor_apply_corridor(p_targets, gated);
+    radar_monitor_apply_corridor(p_monitor, p_targets, gated);
     rte_write_radar_frame(gated, now_ms);
 }
 
@@ -182,17 +189,22 @@ radar_monitor_is_settling (const radar_monitor_t * p_monitor, uint32_t now_ms)
 /*!
  * @brief Corridor gate: empty every slot that is outside the walking path.
  *
- * Decided on this frame alone, so it adds no delay. A slot with
- * |x| <= RADAR_MONITOR_CORRIDOR_HALF_MM is copied unchanged, and also gets
- * its side classified (FR9 cue byte) while x_mm is still available: it is
- * the last point in the pipeline that has it (docs/radar_message_layout.md:
- * x_mm and y_mm do not reach the radar queue message).
+ * Decided on this frame alone, so it adds no delay (the corridor gate
+ * itself has no hysteresis). A slot with |x| <= RADAR_MONITOR_
+ * CORRIDOR_HALF_MM is copied unchanged, and also gets its side classified
+ * (FR9 cue byte, OPEN-24: with hysteresis against p_monitor->last_side)
+ * while x_mm is still available: it is the last point in the pipeline that
+ * has it (docs/radar_message_layout.md: x_mm and y_mm do not reach the
+ * radar queue message).
  *
- * @param[in]  p_in   The three decoded target slots.
- * @param[out] p_out  The three slots to send.
+ * @param[in,out] p_monitor  Supervision state; last_side is read and
+ *                            updated per slot (OPEN-24).
+ * @param[in]     p_in       The three decoded target slots.
+ * @param[out]    p_out      The three slots to send.
  */
 static void
-radar_monitor_apply_corridor (const rte_radar_target_t * p_in,
+radar_monitor_apply_corridor (radar_monitor_t * p_monitor,
+                              const rte_radar_target_t * p_in,
                               rte_radar_target_t * p_out)
 {
     for (size_t idx = 0u; idx < RTE_RADAR_NUM_TARGETS; idx++)
@@ -211,14 +223,20 @@ radar_monitor_apply_corridor (const rte_radar_target_t * p_in,
             p_out[idx].y_mm = 0;
             p_out[idx].d_mm = 0u;
             p_out[idx].speed_cms = 0;
+            // OPEN-24: this slot is empty of anything in the corridor; the
+            // next object seen here should not inherit this one's bias.
+            p_monitor->last_side[idx] = RTE_SIDE_CENTER;
         }
         else if (p_in[idx].b_valid)
         {
-            p_out[idx].side = radar_monitor_classify_side(x_mm);
+            p_out[idx].side = radar_monitor_classify_side(
+                x_mm, p_monitor->last_side[idx]);
+            p_monitor->last_side[idx] = p_out[idx].side;
         }
         else
         {
             // Already an empty slot; CENTER (set above) is unused.
+            p_monitor->last_side[idx] = RTE_SIDE_CENTER;
         }
     }
 }
@@ -226,27 +244,61 @@ radar_monitor_apply_corridor (const rte_radar_target_t * p_in,
 /*!
  * @brief Classify which side of the corridor a target is on (FR9 cue byte).
  *
- * @param[in] x_mm  Side-to-side position; only called for a target already
- *                  known to be inside the corridor.
+ * OPEN-24 (13 Nov): Schmitt-trigger hysteresis against the side this same
+ * target slot read last frame, so a target sitting near a +/-DEADZONE_MM
+ * boundary (sensor jitter, small head sway) cannot flip side every frame.
+ * Entering a side from CENTER still only needs DEADZONE_MM; once on a
+ * side, leaving it needs the extra RADAR_MONITOR_SIDE_HYSTERESIS_MM
+ * margin, not just DEADZONE_MM again.
  *
- * @return CENTER within the deadzone, else LEFT or RIGHT by the sign of x_mm.
+ * @param[in] x_mm       Side-to-side position; only called for a target
+ *                       already known to be inside the corridor.
+ * @param[in] last_side  What this slot read last frame (RTE_SIDE_CENTER
+ *                       for a slot with no target last frame, OPEN-24).
+ *
+ * @return CENTER, LEFT, or RIGHT.
  */
 static rte_cue_side_t
-radar_monitor_classify_side (int32_t x_mm)
+radar_monitor_classify_side (int32_t x_mm, rte_cue_side_t last_side)
 {
-    rte_cue_side_t side = RTE_SIDE_CENTER;
+    rte_cue_side_t side = last_side;
+    int32_t inner_mm = RADAR_MONITOR_SIDE_DEADZONE_MM -
+                       RADAR_MONITOR_SIDE_HYSTERESIS_MM;
 
-    if (x_mm < -RADAR_MONITOR_SIDE_DEADZONE_MM)
+    if (RTE_SIDE_LEFT == last_side)
     {
-        side = RTE_SIDE_LEFT;
+        if (x_mm > -inner_mm)
+        {
+            // Clearly left LEFT: re-derive from the plain DEADZONE_MM rule,
+            // same as starting fresh from CENTER.
+            side = (x_mm > RADAR_MONITOR_SIDE_DEADZONE_MM) ? RTE_SIDE_RIGHT
+                                                            : RTE_SIDE_CENTER;
+        }
     }
-    else if (x_mm > RADAR_MONITOR_SIDE_DEADZONE_MM)
+    else if (RTE_SIDE_RIGHT == last_side)
     {
-        side = RTE_SIDE_RIGHT;
+        if (x_mm < inner_mm)
+        {
+            side = (x_mm < -RADAR_MONITOR_SIDE_DEADZONE_MM) ? RTE_SIDE_LEFT
+                                                             : RTE_SIDE_CENTER;
+        }
     }
     else
     {
-        // Inside the deadzone: straight ahead.
+        // Was CENTER (or this slot had no target last frame): the plain
+        // DEADZONE_MM rule, no hysteresis needed on the way in.
+        if (x_mm < -RADAR_MONITOR_SIDE_DEADZONE_MM)
+        {
+            side = RTE_SIDE_LEFT;
+        }
+        else if (x_mm > RADAR_MONITOR_SIDE_DEADZONE_MM)
+        {
+            side = RTE_SIDE_RIGHT;
+        }
+        else
+        {
+            side = RTE_SIDE_CENTER;
+        }
     }
 
     return (side);

@@ -118,6 +118,9 @@ static void vTask_GlassesPerception(void *pvParameters)
     uint32_t last_cane_pkt_ms = 0U;
     bool cane_seen = false;
     bool cane_standby = false;
+    bool cane_buzzer_fault = false;
+    bool cane_fall_active = false;
+    bool cane_sensor_fault = false;
     uint8_t last_cane_flags = 0xFFU;
 
     s_glasses_mode = SYS_STATE_INIT;
@@ -157,16 +160,21 @@ static void vTask_GlassesPerception(void *pvParameters)
                 last_cane_pkt_ms = received_ms;
                 cane_seen = true;
                 cane_standby = ((rx_pkt.state_flags & BLE_FLAG_STANDBY) != 0U);
+                cane_buzzer_fault = ((rx_pkt.state_flags & BLE_FLAG_BUZZER_FAULT) != 0U);
+                cane_fall_active = ((rx_pkt.state_flags & BLE_FLAG_FALL_ALERT) != 0U) &&
+                                   ((rx_pkt.state_flags & BLE_FLAG_ALARM_PAUSED) == 0U);
+                cane_sensor_fault = ((rx_pkt.state_flags & BLE_FLAG_SENSOR_FAULT) != 0U);
                 /* An override can park the cane with the touch pad still held. */
                 cane_grip_telemetry = !cane_standby && ((rx_pkt.state_flags & BLE_FLAG_CANE_HELD) != 0U) ?
                                       GRIP_STATE_HELD : GRIP_STATE_RELEASED;
                 if (rx_pkt.state_flags != last_cane_flags)
                 {
-                    printf("[CANE STATUS] fall=%u paused=%u standby=%u user_park=%u\n",
+                    printf("[CANE STATUS] fall=%u paused=%u standby=%u user_park=%u buzzer_fault=%u\n",
                            (unsigned)((rx_pkt.state_flags & BLE_FLAG_FALL_ALERT) != 0U),
                            (unsigned)((rx_pkt.state_flags & BLE_FLAG_ALARM_PAUSED) != 0U),
                            (unsigned)cane_standby,
-                           (unsigned)((rx_pkt.state_flags & BLE_FLAG_PARKED_BY_USER) != 0U));
+                           (unsigned)((rx_pkt.state_flags & BLE_FLAG_PARKED_BY_USER) != 0U),
+                           (unsigned)cane_buzzer_fault);
                     last_cane_flags = rx_pkt.state_flags;
                 }
             }
@@ -176,6 +184,9 @@ static void vTask_GlassesPerception(void *pvParameters)
         {
             cane_grip_telemetry = GRIP_STATE_UNKNOWN;
             cane_standby = false;
+            cane_buzzer_fault = false;
+            cane_fall_active = false;
+            cane_sensor_fault = false;
         }
 
         /* The BLE receiver stays awake: a fresh cane wake or uncertain link restores
@@ -244,7 +255,7 @@ static void vTask_GlassesPerception(void *pvParameters)
             if (Ld2450_ProcessStream(targets, &target_count, now_ms))
             {
                 last_valid_radar_frame_ms = now_ms;
-                ThreatAssessment_ProcessTargets(targets, target_count, cane_grip_telemetry, &current_threat);
+                ThreatAssessment_ProcessTargetsAt(targets, target_count, cane_grip_telemetry, now_ms, &current_threat);
             }
             if (Ld2450_HasRxFault() && ((uint32_t)(now_ms - last_radar_retry_ms) >= 1000U))
             {
@@ -252,6 +263,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                 (void)Ld2450_Init(&Ld2450_Config_Glasses);
                 /* Do not reuse the old threat after restarting the DMA stream. */
                 current_threat.is_threat_active = false;
+                current_threat.open_direction_cue = 0U;
             }
         }
 
@@ -325,26 +337,24 @@ static void vTask_GlassesPerception(void *pvParameters)
         Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, head_fall.latched ||
                        (imu.fault && ((now_ms % 1000U) < 500U)));
 
-        Alert_Type_t request = ALERT_NONE;
         bool delivery_fallback = head_fall.latched &&
                                  SafetyDelivery_NeedsFallback(&fall_delivery, now_ms);
-        if (delivery_fallback)
-        {
-            request = ALERT_FALL_DELIVERY_FAULT;
-        }
-        else if (!head_fall.latched && !standby)
-        {
-            if (obstacle)
-            {
-                request = ALERT_OBSTACLE_PROXIMITY;
-            }
-            else if (imu.fault || radar_timeout)
-            {
-                request = ALERT_SENSOR_FAULT;
-            }
-        }
+        bool cane_fresh = cane_seen &&
+                          ((uint32_t)(now_ms - last_cane_pkt_ms) < WATCHDOG_CFG_DEADMAN_TIMEOUT_MS);
+        Alert_SyncInput_t sync_in = {
+            .is_glasses_node = true,
+            .local_fall_latched = (head_fall.latched != 0U),
+            .local_alarm_paused = false,
+            .peer_fall_active = cane_fall_active,
+            .delivery_fallback = delivery_fallback,
+            .cane_link_fresh = cane_fresh,
+            .cane_buzzer_fault = cane_buzzer_fault,
+            .obstacle_active = obstacle,
+            .obstacle_dist_mm = current_threat.nearest_distance_mm,
+            .sensor_fault = !standby && (imu.fault || radar_timeout || cane_sensor_fault)
+        };
         Alert_Output_t alert_out;
-        AlertManager_Arbitrate(request, current_threat.nearest_distance_mm, now_ms, &alert_out);
+        AlertManager_ArbitrateSynced(&sync_in, now_ms, &alert_out);
         uint16_t next_freq_hz = alert_out.buzzer_active ? alert_out.generated_freq_hz : 0U;
         uint8_t next_duty_percent = alert_out.buzzer_active ?
                                     alert_out.generated_duty_percent : 0U;

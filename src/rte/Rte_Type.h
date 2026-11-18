@@ -89,6 +89,7 @@ typedef struct
     uint16_t distance_mm;
     int16_t speed_cms;
     int16_t angle_deg;
+    int16_t x_mm;
     bool is_valid;
 } Radar_Target_t;
 
@@ -108,6 +109,7 @@ typedef struct
 #define BLE_FLAG_CANE_HELD           (0x10U)
 #define BLE_FLAG_STANDBY             (0x20U)
 #define BLE_FLAG_PARKED_BY_USER      (0x40U)
+#define BLE_FLAG_BUZZER_FAULT        (0x80U)
 
 #define BLE_DIST_NO_TARGET           (0x0FFFU)
 #define BLE_TTC_NO_THREAT            (0x0FFFU)

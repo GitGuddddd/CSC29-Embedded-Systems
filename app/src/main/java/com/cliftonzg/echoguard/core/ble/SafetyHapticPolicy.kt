@@ -9,8 +9,8 @@ import com.cliftonzg.echoguard.core.ble.model.TelemetryStatus
 
 enum class HapticCue(val priority: Int, val durationMs: Long, val reminderMs: Long) {
     STOP(0, 0L, Long.MAX_VALUE),
-    WARNING(1, 120L, 3_000L),
-    SENSOR_FAULT(2, 500L, 10_000L),
+    SENSOR_FAULT(1, 500L, 10_000L),
+    WARNING(2, 120L, 3_000L),
     LINK_LOSS(3, 650L, 10_000L),
     CRITICAL(4, 250L, 2_000L),
     FALL(5, 900L, 5_000L),
@@ -97,7 +97,13 @@ class SafetyHapticPolicy {
             TelemetryStatus.OBSTACLE_WARNING -> Signal(HapticCue.WARNING)
             TelemetryStatus.SENSOR_FAULT -> Signal(HapticCue.SENSOR_FAULT)
             TelemetryStatus.FALL_PAUSED, TelemetryStatus.STANDBY, TelemetryStatus.GRIP_RELEASED,
-            TelemetryStatus.MONITORING, TelemetryStatus.NO_READING -> Signal(HapticCue.STOP)
+            TelemetryStatus.MONITORING, TelemetryStatus.NO_READING -> {
+                if (packet.isBuzzerFault && !packet.isStandby && !packet.isAlarmPaused) {
+                    Signal(HapticCue.SENSOR_FAULT)
+                } else {
+                    Signal(HapticCue.STOP)
+                }
+            }
         }
     }
 }

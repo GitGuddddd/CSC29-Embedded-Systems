@@ -61,6 +61,7 @@ data class SystemPacket(
     val hasLatchedFall: Boolean get() = isFallAlert || isAlarmPaused
     val isSensorFault: Boolean get() = (stateFlags and FLAG_SENSOR_FAULT) != 0
     val isRadarFault: Boolean get() = isSensorFault // Compatibility with legacy callers.
+    val isBuzzerFault: Boolean get() = (stateFlags and FLAG_BUZZER_FAULT) != 0
     val isObstacleActive: Boolean get() = (stateFlags and FLAG_OBSTACLE_ACTIVE) != 0
     val isStandby: Boolean get() = (stateFlags and FLAG_STANDBY) != 0
     val isParkedByUser: Boolean get() = (stateFlags and FLAG_PARKED_BY_USER) != 0
@@ -133,9 +134,10 @@ data class SystemPacket(
             isStandby -> TelemetryStatus.STANDBY
             isSensorFault -> TelemetryStatus.SENSOR_FAULT
             nodeType == NodeType.CANE && threatLevel == ThreatLevel.CRITICAL -> TelemetryStatus.GROUND_HAZARD
-            hasGripTelemetry && !isCaneHeld -> TelemetryStatus.GRIP_RELEASED
             threatLevel == ThreatLevel.CRITICAL -> TelemetryStatus.OBSTACLE_CRITICAL
             threatLevel == ThreatLevel.WARNING -> TelemetryStatus.OBSTACLE_WARNING
+            isBuzzerFault -> TelemetryStatus.SENSOR_FAULT
+            hasGripTelemetry && !isCaneHeld -> TelemetryStatus.GRIP_RELEASED
             threatLevel == ThreatLevel.SAFE -> TelemetryStatus.MONITORING
             else -> TelemetryStatus.NO_READING
         }
@@ -200,6 +202,7 @@ data class SystemPacket(
         const val FLAG_CANE_HELD = 0x10
         const val FLAG_STANDBY = 0x20
         const val FLAG_PARKED_BY_USER = 0x40
+        const val FLAG_BUZZER_FAULT = 0x80
         const val LINK_TIMEOUT_MS = 500L
         const val SEQUENCE_REBASE_MS = 250L
         const val PROTOCOL_VERSION = 2

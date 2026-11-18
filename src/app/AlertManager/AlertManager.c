@@ -192,3 +192,82 @@ void AlertManager_Arbitrate(Alert_Type_t requested_alert,
         return;
     }
 }
+
+void AlertManager_ArbitrateSynced(const Alert_SyncInput_t * const p_in,
+                                  uint32_t now_ms,
+                                  Alert_Output_t * const p_out)
+{
+    if ((p_in == NULL) || (p_out == NULL))
+    {
+        return;
+    }
+
+    if (!p_in->is_glasses_node)
+    {
+        /* Cane node: default primary buzzer for both nodes */
+        AlertManager_SetFallState(p_in->local_fall_latched || p_in->peer_fall_active,
+                                  p_in->local_alarm_paused, now_ms);
+        Alert_Type_t req = ALERT_NONE;
+        if (p_in->obstacle_active)
+        {
+            req = ALERT_OBSTACLE_PROXIMITY;
+        }
+        else if (p_in->sensor_fault)
+        {
+            req = ALERT_SENSOR_FAULT;
+        }
+        AlertManager_Arbitrate(req, p_in->obstacle_dist_mm, now_ms, p_out);
+        if (p_in->cane_buzzer_fault)
+        {
+            p_out->buzzer_active = false;
+            p_out->generated_freq_hz = 0U;
+            p_out->generated_duty_percent = 0U;
+        }
+    }
+    else
+    {
+        /* Glasses node */
+        bool cane_audio_healthy = p_in->cane_link_fresh && !p_in->cane_buzzer_fault;
+        if (cane_audio_healthy && !p_in->delivery_fallback)
+        {
+            /* Case 1: Cane connected & Cane buzzer healthy: Glasses buzzer stays silent */
+            AlertManager_SetFallState(false, false, now_ms);
+            AlertManager_Arbitrate(ALERT_NONE, 0U, now_ms, p_out);
+        }
+        else if (p_in->cane_link_fresh && p_in->cane_buzzer_fault)
+        {
+            /* Case 2: Cane buzzer failed -> Automatic switch-over to Glasses buzzer! */
+            AlertManager_SetFallState(p_in->local_fall_latched || p_in->peer_fall_active,
+                                      p_in->local_alarm_paused, now_ms);
+            Alert_Type_t req = ALERT_NONE;
+            if (p_in->obstacle_active)
+            {
+                req = ALERT_OBSTACLE_PROXIMITY;
+            }
+            else if (p_in->sensor_fault)
+            {
+                req = ALERT_SENSOR_FAULT;
+            }
+            AlertManager_Arbitrate(req, p_in->obstacle_dist_mm, now_ms, p_out);
+        }
+        else
+        {
+            /* Case 3: Cane link lost or receipt timed out */
+            AlertManager_SetFallState(false, false, now_ms);
+            Alert_Type_t req = ALERT_NONE;
+            if (p_in->local_fall_latched && p_in->delivery_fallback)
+            {
+                req = ALERT_FALL_DELIVERY_FAULT;
+            }
+            else if (!p_in->local_fall_latched && p_in->obstacle_active)
+            {
+                req = ALERT_OBSTACLE_PROXIMITY;
+            }
+            else if (!p_in->local_fall_latched && p_in->sensor_fault)
+            {
+                req = ALERT_SENSOR_FAULT;
+            }
+            AlertManager_Arbitrate(req, p_in->obstacle_dist_mm, now_ms, p_out);
+        }
+    }
+}

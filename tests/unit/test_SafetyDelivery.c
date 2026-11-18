@@ -147,6 +147,27 @@ void test_PreEventAndOldVersionReceiptsCannotConfirm(void)
     TEST_ASSERT_FALSE(SafetyDelivery_IsConfirmed(&s_delivery));
 }
 
+void test_CaneBuzzerFaultImmediatelyInvalidatesReceiptAndForcesFallback(void)
+{
+    SafetyDelivery_Start(&s_delivery, 0x1234U, 1U, 0U);
+    Ble_AdvancedThreatPacket_t packet = PeerReceipt(0xA001U, 0x1234U, 1U);
+    SafetyDelivery_ObservePeer(&s_delivery, &packet, 100U);
+    TEST_ASSERT_TRUE(SafetyDelivery_IsConfirmed(&s_delivery));
+    TEST_ASSERT_FALSE(SafetyDelivery_NeedsFallback(&s_delivery, 100U));
+
+    /* Cane buzzer fault reported at 200ms (< 750ms receipt timeout) */
+    packet.state_flags |= BLE_FLAG_BUZZER_FAULT;
+    SafetyDelivery_ObservePeer(&s_delivery, &packet, 200U);
+    TEST_ASSERT_FALSE(SafetyDelivery_IsConfirmed(&s_delivery));
+    TEST_ASSERT_TRUE(SafetyDelivery_NeedsFallback(&s_delivery, 200U));
+
+    /* Cane buzzer recovers at 300ms */
+    packet.state_flags &= ~BLE_FLAG_BUZZER_FAULT;
+    SafetyDelivery_ObservePeer(&s_delivery, &packet, 300U);
+    TEST_ASSERT_TRUE(SafetyDelivery_IsConfirmed(&s_delivery));
+    TEST_ASSERT_FALSE(SafetyDelivery_NeedsFallback(&s_delivery, 300U));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -159,5 +180,6 @@ int main(void)
     RUN_TEST(test_ReusedNibbleRequiresFreshEpochReceipt);
     RUN_TEST(test_WithdrawnReceiptRearmsFallbackWithoutClearingIncident);
     RUN_TEST(test_PreEventAndOldVersionReceiptsCannotConfirm);
+    RUN_TEST(test_CaneBuzzerFaultImmediatelyInvalidatesReceiptAndForcesFallback);
     return UNITY_END();
 }

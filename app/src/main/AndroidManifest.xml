@@ -18,6 +18,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
 
+    <!-- USB Host (optional, for Raspberry Pi Pico W serial diagnostics) -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
     <application
         android:name=".EchoGuardApplication"
         android:allowBackup="true"

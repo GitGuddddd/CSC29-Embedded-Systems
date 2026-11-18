@@ -125,6 +125,102 @@ void test_FallDetection_NeverComesToRest_TimesOutWithoutFall(void)
     TEST_ASSERT_EQUAL(FALL_STATE_IDLE, FallDetection_GetState());
 }
 
+void test_FallDetection_HeadDirectImpactWithoutFreefall_IsIgnored(void)
+{
+    Imu_Sample_t s = {0};
+    uint32_t now = 0U;
+
+    /* Upright standing baseline */
+    s.ax = 0.0f;
+    s.ay = 0.0f;
+    s.az = 1.0f;
+    (void)FallDetection_Step(&s, now);
+    TEST_ASSERT_EQUAL_STRING("IDLE", FallDetection_GetStateName());
+
+    /* Direct impact spike: 3.0g without prior free-fall */
+    now += 10U;
+    s.ax = 3.0f;
+    s.ay = 0.0f;
+    s.az = 0.0f;
+    bool fall_alert = FallDetection_Step(&s, now);
+
+    /* Head-mounted profile requires free-fall before impact; stays in IDLE */
+    TEST_ASSERT_FALSE(fall_alert);
+    TEST_ASSERT_EQUAL(FALL_STATE_IDLE, FallDetection_GetState());
+    TEST_ASSERT_EQUAL_STRING("IDLE", FallDetection_GetStateName());
+}
+
+void test_FallDetection_DynamicMotionDoesNotCorruptGravityReference(void)
+{
+    Imu_Sample_t s = {0};
+    uint32_t now = 0U;
+    bool fall_alert = false;
+
+    /* Upright standing baseline */
+    s.ax = 0.0f;
+    s.ay = 0.0f;
+    s.az = 1.0f;
+    (void)FallDetection_Step(&s, now);
+    TEST_ASSERT_EQUAL_STRING("IDLE", FallDetection_GetStateName());
+
+    /* Dynamic motion in IDLE: sensor experiences lateral acceleration (ax = 1.0g, az = 0.0g)
+     * accompanied by angular rotation (gx = 60.0 dps > 30.0 dps stillness threshold).
+     * Since the sensor is not still, s_ref must remain upright (s_ref_z = 1.0f, s_ref_x = 0.0f).
+     */
+    for (uint32_t i = 0U; i < 200U; i++)
+    {
+        now += 10U;
+        s.ax = 1.0f;
+        s.ay = 0.0f;
+        s.az = 0.0f;
+        s.gx = 60.0f;
+        s.gy = 0.0f;
+        s.gz = 0.0f;
+        (void)FallDetection_Step(&s, now);
+        TEST_ASSERT_EQUAL_STRING("IDLE", FallDetection_GetStateName());
+    }
+
+    /* Subsequent genuine fall sequence:
+     * Freefall: 0g for 70 ms
+     */
+    now += 10U;
+    s.ax = 0.0f;
+    s.ay = 0.0f;
+    s.az = 0.0f;
+    s.gx = 0.0f;
+    (void)FallDetection_Step(&s, now);
+    TEST_ASSERT_EQUAL_STRING("FREEFALL", FallDetection_GetStateName());
+
+    now += 60U;
+    (void)FallDetection_Step(&s, now);
+
+    /* Impact: 3.0g */
+    now += 10U;
+    s.ax = 3.0f;
+    (void)FallDetection_Step(&s, now);
+    TEST_ASSERT_EQUAL_STRING("SETTLING", FallDetection_GetStateName());
+
+    /* Settling for 800 ms */
+    now += 800U;
+    (void)FallDetection_Step(&s, now);
+    TEST_ASSERT_EQUAL_STRING("CHECK_STILL", FallDetection_GetStateName());
+
+    /* Rest on ground, tilted 90 degrees (ax = 1.0g, az = 0.0g) */
+    s.ax = 1.0f;
+    s.ay = 0.0f;
+    s.az = 0.0f;
+    for (uint8_t i = 0U; i < 50U; i++)
+    {
+        now += 10U;
+        fall_alert = FallDetection_Step(&s, now);
+    }
+
+    /* If s_ref had shifted to [1.0, 0.0, 0.0] during dynamic motion, tilt angle would
+     * be ~0 deg and fall_alert would be false. With s_ref uncorrupted, fall is confirmed. */
+    TEST_ASSERT_TRUE(fall_alert);
+    TEST_ASSERT_EQUAL_STRING("IDLE", FallDetection_GetStateName());
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -134,5 +230,7 @@ int main(void)
     RUN_TEST(test_FallDetection_CaneRollsAfterImpact_StillConfirmsFall);
     RUN_TEST(test_FallDetection_CaneLandsUpright_IsNotAFall);
     RUN_TEST(test_FallDetection_NeverComesToRest_TimesOutWithoutFall);
+    RUN_TEST(test_FallDetection_HeadDirectImpactWithoutFreefall_IsIgnored);
+    RUN_TEST(test_FallDetection_DynamicMotionDoesNotCorruptGravityReference);
     return UNITY_END();
 }

@@ -8,6 +8,8 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import com.cliftonzg.echoguard.core.ble.FallHistoryStore
 import com.cliftonzg.echoguard.core.ble.PreferencesFallHistoryStore
+import com.cliftonzg.echoguard.core.usb.UsbSerialController
+import com.cliftonzg.echoguard.core.usb.UsbSerialManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -42,4 +44,8 @@ object BluetoothModule {
             context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
         }
     }
+
+    @Provides
+    @Singleton
+    fun provideUsbSerialController(manager: UsbSerialManager): UsbSerialController = manager
 }

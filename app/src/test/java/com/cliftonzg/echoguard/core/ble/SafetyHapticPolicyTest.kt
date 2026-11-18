@@ -124,4 +124,49 @@ class SafetyHapticPolicyTest {
         val lost = node(packet(NodeType.GLASSES), LinkState.LINK_LOSS)
         assertEquals(HapticCue.FALL, policy.update(state(fall, lost), 0L))
     }
+
+    @Test fun `node with buzzer fault triggers sensor fault cue`() {
+        val policy = SafetyHapticPolicy()
+        val buzzerFault = node(packet(flags = SystemPacket.FLAG_BUZZER_FAULT))
+        assertEquals(HapticCue.SENSOR_FAULT, policy.update(state(buzzerFault), 0L))
+    }
+
+    @Test fun `buzzer fault cue is superseded by higher priority cues on same node`() {
+        val policy = SafetyHapticPolicy()
+        val fallWithFault = node(packet(flags = SystemPacket.FLAG_FALL_ALERT or SystemPacket.FLAG_BUZZER_FAULT))
+        assertEquals(HapticCue.FALL, policy.update(state(fallWithFault), 0L))
+
+        val policy2 = SafetyHapticPolicy()
+        val caneHazardWithFault = node(packet(flags = SystemPacket.FLAG_OBSTACLE_ACTIVE or SystemPacket.FLAG_BUZZER_FAULT))
+        assertEquals(HapticCue.CRITICAL, policy2.update(state(caneHazardWithFault), 0L))
+
+        val policy3 = SafetyHapticPolicy()
+        val glassesWarningWithFault = node(packet(
+            NodeType.GLASSES,
+            flags = SystemPacket.FLAG_OBSTACLE_ACTIVE or SystemPacket.FLAG_BUZZER_FAULT,
+            distance = 1000,
+        ))
+        assertEquals(HapticCue.WARNING, policy3.update(state(glassesWarningWithFault), 0L))
+    }
+
+    @Test fun `higher priority cue from peer node supersedes buzzer fault`() {
+        val policy = SafetyHapticPolicy()
+        val caneBuzzerFault = node(packet(flags = SystemPacket.FLAG_BUZZER_FAULT))
+        val glassesFall = node(packet(NodeType.GLASSES, flags = SystemPacket.FLAG_FALL_ALERT, fallSeq = 2))
+        assertEquals(HapticCue.FALL, policy.update(state(caneBuzzerFault, glassesFall), 0L))
+
+        val policy2 = SafetyHapticPolicy()
+        val glassesCritical = node(packet(NodeType.GLASSES, flags = SystemPacket.FLAG_OBSTACLE_ACTIVE, distance = 400))
+        assertEquals(HapticCue.CRITICAL, policy2.update(state(caneBuzzerFault, glassesCritical), 0L))
+
+        val policy3 = SafetyHapticPolicy()
+        val glassesWarning = node(packet(NodeType.GLASSES, flags = SystemPacket.FLAG_OBSTACLE_ACTIVE, distance = 1000))
+        assertEquals(HapticCue.WARNING, policy3.update(state(caneBuzzerFault, glassesWarning), 0L))
+    }
+
+    @Test fun `standby suppresses buzzer fault haptics`() {
+        val policy = SafetyHapticPolicy()
+        val standbyFault = node(packet(flags = SystemPacket.FLAG_STANDBY or SystemPacket.FLAG_BUZZER_FAULT))
+        assertNull(policy.update(state(standbyFault), 0L))
+    }
 }

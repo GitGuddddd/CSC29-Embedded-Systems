@@ -10,8 +10,11 @@ import android.bluetooth.le.ScanSettings
 import android.os.SystemClock
 import android.util.Log
 import com.cliftonzg.echoguard.core.ble.model.DiscoveredBleDevice
+import com.cliftonzg.echoguard.core.ble.model.LinkState
 import com.cliftonzg.echoguard.core.ble.model.MonitoringState
 import com.cliftonzg.echoguard.core.ble.model.SystemPacket
+import com.cliftonzg.echoguard.core.diagnostics.BleLogOutcome
+import com.cliftonzg.echoguard.core.diagnostics.DiagnosticLogStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,7 +30,9 @@ import javax.inject.Singleton
 class BleScannerEngine @Inject constructor(
     bluetoothAdapter: BluetoothAdapter?,
     fallHistoryStore: FallHistoryStore = MemoryFallHistoryStore(),
+    private val logStore: DiagnosticLogStore = DiagnosticLogStore(),
 ) {
+    fun diagnostics(): DiagnosticLogStore = logStore
     private val adapter = bluetoothAdapter
     private val lock = Any()
     private val engineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -64,6 +69,7 @@ class BleScannerEngine @Inject constructor(
                 publishLocked()
                 _scanError.value = "Bluetooth scan failed (code $errorCode). Try starting the scan again."
             }
+            logStore.logBleEvent("Scan failed: errorCode=$errorCode")
             Log.w("EchoGuardBLE", "Scan failed: $errorCode")
         }
     }
@@ -71,13 +77,39 @@ class BleScannerEngine @Inject constructor(
     private fun handleResult(generation: Long, result: ScanResult) {
         val now = SystemClock.elapsedRealtime()
         val capturedMs = result.timestampNanos / 1_000_000L
-        if (capturedMs > now || now - capturedMs >= DISCOVERY_TIMEOUT_MS) return
         val record = result.scanRecord ?: return
         val data = extractManufacturerData(record) ?: return
-        val packet = SystemPacket.parse(data, capturedMs) ?: return
         val address = try {
             result.device.address
         } catch (_: SecurityException) {
+            return
+        }
+        val rawHex = data.joinToString(" ") { "%02X".format(it) }
+        if (capturedMs > now || now - capturedMs >= DISCOVERY_TIMEOUT_MS) {
+            synchronized(lock) {
+                if (generation != scanGeneration || !_monitoringState.value.isScanning) return
+            }
+            logStore.logBle(
+                address = address,
+                rssi = result.rssi,
+                rawHex = rawHex,
+                outcome = BleLogOutcome.DROPPED,
+                detail = "Stale scan result (age=${now - capturedMs} ms)",
+            )
+            return
+        }
+        val packet = SystemPacket.parse(data, capturedMs)
+        if (packet == null) {
+            synchronized(lock) {
+                if (generation != scanGeneration || !_monitoringState.value.isScanning) return
+            }
+            logStore.logBle(
+                address = address,
+                rssi = result.rssi,
+                rawHex = rawHex,
+                outcome = BleLogOutcome.PARSE_ERROR,
+                detail = "SystemPacket.parse returned null (${data.size} bytes)",
+            )
             return
         }
         val device = DiscoveredBleDevice(
@@ -89,13 +121,35 @@ class BleScannerEngine @Inject constructor(
             nodeType = packet.nodeType,
             pairId = packet.pairId.takeIf { packet.compactFormat },
         )
-        synchronized(lock) {
+        val reason = synchronized(lock) {
             if (generation != scanGeneration || !_monitoringState.value.isScanning) return
             if (capturedMs >= (deviceMap[address]?.lastSeenMs ?: -1L)) {
                 deviceMap[address] = device
                 publishDiscoveryLocked()
             }
-            if (session.receive(address, packet, now)) publishLocked(now)
+            val rejectReason = session.receiveWithReason(address, packet, now)
+            if (rejectReason == ReceiveRejectReason.NONE) {
+                publishLocked(now)
+            }
+            rejectReason
+        }
+        if (reason == ReceiveRejectReason.NONE) {
+            val flagsHex = "0x%02X".format(packet.stateFlags)
+            logStore.logBle(
+                address = address,
+                rssi = result.rssi,
+                rawHex = rawHex,
+                outcome = BleLogOutcome.ACCEPTED,
+                detail = "${packet.nodeType.name} pair=${packet.pairId} seq=${packet.seqNum} fallSeq=${packet.rollingFallSeq} flags=$flagsHex dist=${packet.radarDistMm}mm ttc=${packet.ttcMs}ms rssi=${result.rssi}",
+            )
+        } else {
+            logStore.logBle(
+                address = address,
+                rssi = result.rssi,
+                rawHex = rawHex,
+                outcome = BleLogOutcome.DROPPED,
+                detail = "${reason.name} · ${packet.nodeType.name} pair=${packet.pairId} seq=${packet.seqNum}",
+            )
         }
     }
 
@@ -104,6 +158,7 @@ class BleScannerEngine @Inject constructor(
             session.select(device, SystemClock.elapsedRealtime())
             publishLocked()
         }
+        logStore.logBleEvent("Selected device: ${device.name} (${device.address}, pair=${device.pairId})")
     }
 
     fun disconnectSelectedDevice() {
@@ -111,6 +166,7 @@ class BleScannerEngine @Inject constructor(
             session.select(null, SystemClock.elapsedRealtime())
             publishLocked()
         }
+        logStore.logBleEvent("Disconnected / cleared selected device")
     }
 
     private fun extractManufacturerData(record: ScanRecord): ByteArray? {
@@ -127,10 +183,12 @@ class BleScannerEngine @Inject constructor(
         return try {
             if (adapter == null || !adapter.isEnabled) {
                 _scanError.value = "Bluetooth is unavailable or turned off."
+                logStore.logBleEvent("Scan start failed: Bluetooth unavailable or turned off")
                 return false
             }
             val currentScanner = adapter.bluetoothLeScanner ?: run {
                 _scanError.value = "Bluetooth scanning is unavailable."
+                logStore.logBleEvent("Scan start failed: BluetoothLeScanner unavailable")
                 return false
             }
             val settings = ScanSettings.Builder()
@@ -155,6 +213,7 @@ class BleScannerEngine @Inject constructor(
                 publishLocked()
             }
             currentScanner.startScan(filters, settings, callback)
+            logStore.logBleEvent("Scan started (LOW_LATENCY)")
             synchronized(lock) {
                 if (generation == scanGeneration && _monitoringState.value.isScanning) {
                     startWatchdogLocked(generation)
@@ -164,18 +223,24 @@ class BleScannerEngine @Inject constructor(
         } catch (_: SecurityException) {
             stopScanningInternal(clearRequest = false)
             _scanError.value = "Bluetooth permission is required to scan."
+            logStore.logBleEvent("Scan start failed: SecurityException")
             false
         } catch (error: RuntimeException) {
             stopScanningInternal(clearRequest = false)
             Log.w("EchoGuardBLE", "Could not start scan", error)
             _scanError.value = "Could not start Bluetooth scanning. Try again."
+            logStore.logBleEvent("Scan start failed: ${error.message ?: error::class.simpleName}")
             false
         }
     }
 
-    fun stopScanning() = stopScanningInternal(clearRequest = true)
+    fun stopScanning() {
+        stopScanningInternal(clearRequest = true)
+        logStore.logBleEvent("Scan stopped")
+    }
 
     fun onBluetoothStateChanged(enabled: Boolean) {
+        logStore.logBleEvent("Bluetooth state changed: ${if (enabled) "ON" else "OFF"}")
         if (enabled) {
             _scanError.value = null
             if (synchronized(lock) { scanRequested }) startScanning()
@@ -227,7 +292,15 @@ class BleScannerEngine @Inject constructor(
     }
 
     private fun publishLocked(nowMs: Long = SystemClock.elapsedRealtime()) {
-        _monitoringState.value = session.snapshot(nowMs)
+        val previous = _monitoringState.value
+        val next = session.snapshot(nowMs)
+        _monitoringState.value = next
+        next.nodes.forEach { node ->
+            val prevLink = previous.node(node.type)?.linkState
+            if (node.linkState == LinkState.LINK_LOSS && prevLink != LinkState.LINK_LOSS) {
+                logStore.logBleEvent("LINK_LOSS detected for ${node.type.name} (${node.address ?: "unknown"})")
+            }
+        }
     }
 
     private fun publishDiscoveryLocked() {

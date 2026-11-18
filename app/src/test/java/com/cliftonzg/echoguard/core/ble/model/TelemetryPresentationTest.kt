@@ -79,4 +79,76 @@ class TelemetryPresentationTest {
         )
         assertEquals(PeerReceiptState.LEGACY_UNAVAILABLE, state.glassesFallReceiptState)
     }
+
+    @Test fun `healthy cane reports cane as primary audio buzzer for pair`() {
+        val cane = report(NodeType.CANE, 0x2001L, 0L)
+        val state = MonitoringState(
+            selectedDevice = DiscoveredBleDevice("Cane", "C", -50, true, nodeType = NodeType.CANE, pairId = 1),
+            isScanning = true,
+            nodes = listOf(
+                NodeTelemetry(NodeType.CANE, "C", cane, LinkState.ACTIVE),
+                NodeTelemetry(NodeType.GLASSES, "G", report(NodeType.GLASSES, 0x1234L, 0L).copy(stateFlags = 0), LinkState.ACTIVE),
+            ),
+        )
+        val routing = state.audioRoutingPresentation()
+        assertEquals("Primary audio: Cane", routing.title)
+        assertEquals("Cane is primary audio buzzer for the pair.", routing.detail)
+        assertEquals(StatusTone.OK, routing.tone)
+    }
+
+    @Test fun `cane buzzer fault surfaces audio switched to glasses failover messaging`() {
+        val cane = report(NodeType.CANE, 0x2001L, 0L).copy(stateFlags = SystemPacket.FLAG_BUZZER_FAULT)
+        val caneNode = NodeTelemetry(NodeType.CANE, "C", cane, LinkState.ACTIVE)
+        val glassesNode = NodeTelemetry(NodeType.GLASSES, "G", report(NodeType.GLASSES, 0x1234L, 0L).copy(stateFlags = 0), LinkState.ACTIVE)
+        val state = MonitoringState(
+            selectedDevice = DiscoveredBleDevice("Cane", "C", -50, true, nodeType = NodeType.CANE, pairId = 1),
+            isScanning = true,
+            nodes = listOf(caneNode, glassesNode),
+        )
+        val routing = state.audioRoutingPresentation()
+        assertEquals("Buzzer failover", routing.title)
+        assertEquals("Cane buzzer fault · Audio switched to glasses", routing.detail)
+        assertEquals(StatusTone.CAUTION, routing.tone)
+
+        val nodePres = caneNode.presentation()
+        assertEquals("Buzzer fault", nodePres.title)
+        assertEquals("Cane buzzer fault · Audio switched to glasses", nodePres.detail)
+        assertEquals(StatusTone.CAUTION, nodePres.tone)
+
+        val summary = state.presentation()
+        assertEquals("Buzzer fault", summary.title)
+        assertEquals("Cane buzzer fault · Audio switched to glasses", summary.detail)
+        assertEquals(StatusTone.CAUTION, summary.tone)
+    }
+
+    @Test fun `cane buzzer fault during fall alert includes failover warning`() {
+        val glasses = report(NodeType.GLASSES, 0x1234L, 1L)
+        val caneWithFault = report(NodeType.CANE, 0x2001L, 0L, 0x1234L, 1L, true)
+            .copy(stateFlags = SystemPacket.FLAG_BUZZER_FAULT)
+        val state = MonitoringState(
+            selectedDevice = DiscoveredBleDevice("Cane", "C", -50, true, nodeType = NodeType.CANE, pairId = 1),
+            isScanning = true,
+            nodes = listOf(
+                NodeTelemetry(NodeType.CANE, "C", caneWithFault, LinkState.ACTIVE),
+                NodeTelemetry(NodeType.GLASSES, "G", glasses, LinkState.ACTIVE),
+            ),
+        )
+        val summary = state.presentation()
+        assertEquals("Fall alarm", summary.title)
+        assertTrue(summary.detail.contains("Cane buzzer fault · Audio switched to glasses"))
+    }
+
+    @Test fun `offline cane surfaces fallback audio routing`() {
+        val state = MonitoringState(
+            selectedDevice = DiscoveredBleDevice("Cane", "C", -50, true, nodeType = NodeType.CANE, pairId = 1),
+            isScanning = true,
+            nodes = listOf(
+                NodeTelemetry(NodeType.GLASSES, "G", report(NodeType.GLASSES, 0x1234L, 0L), LinkState.ACTIVE),
+            ),
+        )
+        val routing = state.audioRoutingPresentation()
+        assertEquals("Audio output: Glasses", routing.title)
+        assertEquals("Cane offline; glasses buzzer fallback active.", routing.detail)
+        assertEquals(StatusTone.NEUTRAL, routing.tone)
+    }
 }

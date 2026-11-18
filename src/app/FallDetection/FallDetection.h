@@ -26,6 +26,7 @@ typedef struct
     uint32_t impact_window_ms;
     uint32_t settle_ms;
     uint32_t still_ms;
+    bool allow_direct_impact;
 } Fall_Config_t;
 
 /* Global Link-time configurations */

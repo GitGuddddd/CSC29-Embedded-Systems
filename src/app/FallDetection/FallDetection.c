@@ -27,6 +27,7 @@ static Fall_MachineState_t s_state = FALL_STATE_IDLE;
 static Fall_Config_t s_active_cfg;
 static uint32_t s_t0_ms = 0U;
 static uint32_t s_still_start_ms = 0U;
+static uint32_t s_still_samples = 0U;
 
 static float s_ref_x = 0.0f;
 static float s_ref_y = 0.0f;
@@ -37,6 +38,13 @@ static float s_cur_y = 0.0f;
 static float s_cur_z = 0.0f;
 
 extern float sqrtf(float);
+
+static bool Is_Still(float a_sq, float g_sq)
+{
+    return (a_sq >= FALL_STILL_ACC_MIN_G_SQ) &&
+           (a_sq <= FALL_STILL_ACC_MAX_G_SQ) &&
+           (g_sq <= FALL_STILL_GYRO_DPS_SQ);
+}
 
 static float Vector_MagSq(float x, float y, float z)
 {
@@ -61,6 +69,7 @@ void FallDetection_Init(const Fall_Config_t * const p_cfg)
 {
     s_state = FALL_STATE_IDLE;
     s_t0_ms = 0U;
+    s_still_samples = 0U;
     s_ref_x = 0.0f;
     s_ref_y = 0.0f;
     s_ref_z = 1.0f;
@@ -106,16 +115,31 @@ bool __not_in_flash_func(FallDetection_Step)(const Imu_Sample_t * const p_sample
     {
         case FALL_STATE_IDLE:
         {
-            s_ref_x += 0.01f * (p_sample->ax - s_ref_x);
-            s_ref_y += 0.01f * (p_sample->ay - s_ref_y);
-            s_ref_z += 0.01f * (p_sample->az - s_ref_z);
+            if (Is_Still(a_sq, g_sq))
+            {
+                float gain;
+
+                if (s_still_samples < FALL_REF_FAST_SAMPLES)
+                {
+                    gain = FALL_REF_GAIN_FAST;
+                    s_still_samples++;
+                }
+                else
+                {
+                    gain = FALL_REF_GAIN_SLOW;
+                }
+
+                s_ref_x += gain * (p_sample->ax - s_ref_x);
+                s_ref_y += gain * (p_sample->ay - s_ref_y);
+                s_ref_z += gain * (p_sample->az - s_ref_z);
+            }
 
             if (a_sq < s_active_cfg.freefall_thresh_sq)
             {
                 s_state = FALL_STATE_FREEFALL;
                 s_t0_ms = now_ms;
             }
-            else if (a_sq > s_active_cfg.impact_thresh_sq)
+            else if (s_active_cfg.allow_direct_impact && (a_sq > s_active_cfg.impact_thresh_sq))
             {
                 s_state = FALL_STATE_SETTLING;
                 s_t0_ms = now_ms;
@@ -179,9 +203,7 @@ bool __not_in_flash_func(FallDetection_Step)(const Imu_Sample_t * const p_sample
             s_cur_y += 0.1f * (p_sample->ay - s_cur_y);
             s_cur_z += 0.1f * (p_sample->az - s_cur_z);
 
-            if ((a_sq < FALL_STILL_ACC_MIN_G_SQ) ||
-                (a_sq > FALL_STILL_ACC_MAX_G_SQ) ||
-                (g_sq > FALL_STILL_GYRO_DPS_SQ))
+            if (!Is_Still(a_sq, g_sq))
             {
                 if ((now_ms - s_still_start_ms) >= FALL_STILL_TIMEOUT_MS)
                 {

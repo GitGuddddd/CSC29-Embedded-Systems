@@ -23,7 +23,7 @@ typedef struct
     uint8_t active : 1;
     uint8_t peer_seen : 1;
     uint8_t receipt_confirmed : 1;
-    uint8_t reserved : 1;
+    uint8_t peer_buzzer_fault : 1;
 } SafetyDelivery_t;
 
 void SafetyDelivery_Init(SafetyDelivery_t * const p_delivery, uint16_t local_session_id);

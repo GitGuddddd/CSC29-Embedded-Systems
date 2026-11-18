@@ -15,6 +15,33 @@ static int16_t Decode_SignedMagnitude(uint16_t raw)
     return ((raw & 0x8000U) != 0U) ? (int16_t)(-magnitude) : magnitude;
 }
 
+static uint16_t Isqrt32(uint32_t n)
+{
+    uint32_t res = 0U;
+    uint32_t bit = 0x40000000U;
+
+    while (bit > n)
+    {
+        bit >>= 2;
+    }
+
+    while (bit != 0U)
+    {
+        if (n >= (res + bit))
+        {
+            n -= res + bit;
+            res = (res >> 1) + bit;
+        }
+        else
+        {
+            res >>= 1;
+        }
+        bit >>= 2;
+    }
+
+    return (uint16_t)res;
+}
+
 bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target_t * const p_targets, uint8_t * const p_count)
 {
     if ((p_frame == NULL) || (p_targets == NULL) || (p_count == NULL) || (len < 30U))
@@ -52,15 +79,18 @@ bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target
 
         uint16_t dist_res = (uint16_t)(((uint16_t)p_frame[offset + 7U] << 8) | p_frame[offset + 6U]);
 
-        (void)x;
         (void)dist_res;
 
         if (y > 0)
         {
-            p_targets[count].distance_mm = (uint16_t)y;
+            uint32_t x_sq = (uint32_t)((int32_t)x * (int32_t)x);
+            uint32_t y_sq = (uint32_t)((int32_t)y * (int32_t)y);
+            uint16_t dist_mm = Isqrt32(x_sq + y_sq);
+            p_targets[count].distance_mm = dist_mm;
             p_targets[count].speed_cms = speed;
             p_targets[count].is_valid = true;
             p_targets[count].angle_deg = 0;
+            p_targets[count].x_mm = x;
             count++;
         }
     }

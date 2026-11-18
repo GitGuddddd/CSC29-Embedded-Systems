@@ -40,7 +40,8 @@ static const BleComm_Profile_t s_profiles[] = {
 BleComm_ProfileId_t BleComm_SelectProfile(Sys_State_t state, uint8_t flags, bool link_lost)
 {
     if (link_lost || ((flags & (BLE_FLAG_FALL_ALERT | BLE_FLAG_ALARM_PAUSED |
-                               BLE_FLAG_SENSOR_FAULT | BLE_FLAG_OBSTACLE_ACTIVE)) != 0U))
+                               BLE_FLAG_SENSOR_FAULT | BLE_FLAG_OBSTACLE_ACTIVE |
+                               BLE_FLAG_BUZZER_FAULT)) != 0U))
     {
         return BLECOMM_PROFILE_FAST;
     }

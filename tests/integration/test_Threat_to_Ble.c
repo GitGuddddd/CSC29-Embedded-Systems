@@ -2,6 +2,15 @@
 #include "app/ThreatAssessment/ThreatAssessment.h"
 #include "services/BleComm/BleComm.h"
 #include "mock_BleRadio.h"
+#include "app/AlertManager/AlertManager.h"
+#include "app/AlertManager/AlertManager_Cfg.h"
+#include "drivers/Buzzer/Buzzer.h"
+#include "services/SafetyDelivery/SafetyDelivery.h"
+
+#include "hal/Hal_Pwm.c"
+#include "drivers/Buzzer/Buzzer.c"
+#include "services/SafetyDelivery/SafetyDelivery.c"
+#include "app/AlertManager/AlertManager.c"
 
 void setUp(void)
 {
@@ -90,6 +99,149 @@ void test_NoTargetDoesNotBecomeAZeroMillisecondCollision(void)
     TEST_ASSERT_EQUAL_UINT8(0U, decoded.state_flags);
 }
 
+void test_Scenario_CaneBuzzerFailure_AutomaticFailoverToGlasses(void)
+{
+    /* Initialize subsystem drivers */
+    Buzzer_Init(NULL);
+    TEST_ASSERT_TRUE(Buzzer_IsHealthy());
+    AlertManager_Init();
+
+    SafetyDelivery_t delivery;
+    SafetyDelivery_Init(&delivery, 0x4321U);
+
+    /* 1. Normal state: Head-fall latches on Glasses at t = 1000 ms */
+    uint32_t t = 1000U;
+    SafetyDelivery_Start(&delivery, 0x4321U, 2U, t);
+
+    /* Cane is healthy, receives head fall over BLE, and sends ACK with healthy buzzer */
+    Ble_AdvancedThreatPacket_t cane_pkt = {
+        .preamble = 0xAAU,
+        .device_id = 0x01U,
+        .pair_id = BLE_DEFAULT_PAIR_ID,
+        .node_type = BLE_NODE_TYPE_CANE,
+        .protocol_version = BLE_PROTOCOL_VERSION,
+        .session_id = 0x8888U,
+        .peer_ack_valid = Buzzer_IsHealthy(),
+        .peer_ack_session_id = 0x4321U,
+        .peer_ack_event_seq = 2U,
+        .state_flags = 0U
+    };
+    Ble_RawFrame_t frame;
+    BleComm_EncodeFrame(&cane_pkt, &frame);
+
+    Ble_AdvancedThreatPacket_t rx_pkt;
+    TEST_ASSERT_TRUE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &rx_pkt));
+    SafetyDelivery_ObservePeer(&delivery, &rx_pkt, t + 50U);
+    TEST_ASSERT_TRUE(SafetyDelivery_IsConfirmed(&delivery));
+    TEST_ASSERT_FALSE(SafetyDelivery_NeedsFallback(&delivery, t + 50U));
+
+    /* Dual-node audio arbitration in healthy state */
+    /* Glasses buzzer must remain SILENT by default (played ONLY on Cane) */
+    Alert_SyncInput_t sync_glasses = {
+        .is_glasses_node = true,
+        .local_fall_latched = true,
+        .local_alarm_paused = false,
+        .peer_fall_active = false,
+        .delivery_fallback = SafetyDelivery_NeedsFallback(&delivery, t + 50U),
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = ((rx_pkt.state_flags & BLE_FLAG_BUZZER_FAULT) != 0U),
+        .obstacle_active = false,
+        .obstacle_dist_mm = 0U,
+        .sensor_fault = false
+    };
+    Alert_Output_t out_glasses;
+    AlertManager_ArbitrateSynced(&sync_glasses, t + 50U, &out_glasses);
+    TEST_ASSERT_FALSE(out_glasses.buzzer_active);
+
+    /* Cane buzzer plays the emergency alarm */
+    Alert_SyncInput_t sync_cane = {
+        .is_glasses_node = false,
+        .local_fall_latched = false,
+        .local_alarm_paused = false,
+        .peer_fall_active = true,
+        .delivery_fallback = false,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = !Buzzer_IsHealthy(),
+        .obstacle_active = false,
+        .obstacle_dist_mm = 0U,
+        .sensor_fault = false
+    };
+    Alert_Output_t out_cane;
+    AlertManager_ArbitrateSynced(&sync_cane, t + 50U, &out_cane);
+    TEST_ASSERT_TRUE(out_cane.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out_cane.active_alert);
+    Buzzer_PlayToneAtDuty(out_cane.generated_freq_hz, out_cane.generated_duty_percent);
+    TEST_ASSERT_EQUAL_UINT16(out_cane.generated_freq_hz, Buzzer_GetActiveFrequencyHz());
+    TEST_ASSERT_EQUAL_UINT8(out_cane.generated_duty_percent, Buzzer_GetActiveDutyPercent());
+
+    /* 2. FAULT INJECTION: Cane buzzer hardware fails! */
+    t = 1100U;
+    Buzzer_InjectFault(true);
+    TEST_ASSERT_FALSE(Buzzer_IsHealthy());
+
+    /* Cane buzzer stops immediately */
+    Buzzer_PlayToneAtDuty(out_cane.generated_freq_hz, out_cane.generated_duty_percent);
+    TEST_ASSERT_EQUAL_UINT16(0U, Buzzer_GetActiveFrequencyHz());
+    TEST_ASSERT_EQUAL_UINT8(0U, Buzzer_GetActiveDutyPercent());
+
+    /* Cane updates BLE packet: peer_ack_valid is false, BLE_FLAG_BUZZER_FAULT is set */
+    cane_pkt.peer_ack_valid = Buzzer_IsHealthy();
+    cane_pkt.state_flags |= BLE_FLAG_BUZZER_FAULT;
+    BleComm_EncodeFrame(&cane_pkt, &frame);
+
+    /* Glasses decodes frame and observes buzzer fault */
+    TEST_ASSERT_TRUE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &rx_pkt));
+    TEST_ASSERT_BITS_HIGH(BLE_FLAG_BUZZER_FAULT, rx_pkt.state_flags);
+    SafetyDelivery_ObservePeer(&delivery, &rx_pkt, t);
+
+    /* Immediate fallback without waiting 750 ms */
+    TEST_ASSERT_FALSE(SafetyDelivery_IsConfirmed(&delivery));
+    TEST_ASSERT_TRUE(SafetyDelivery_NeedsFallback(&delivery, t));
+
+    /* Arbitration under Cane buzzer fault */
+    /* Cane buzzer is forced off */
+    sync_cane.cane_buzzer_fault = !Buzzer_IsHealthy();
+    AlertManager_ArbitrateSynced(&sync_cane, t, &out_cane);
+    TEST_ASSERT_FALSE(out_cane.buzzer_active);
+
+    /* Glasses automatically takes over audio output! */
+    sync_glasses.cane_buzzer_fault = ((rx_pkt.state_flags & BLE_FLAG_BUZZER_FAULT) != 0U);
+    sync_glasses.delivery_fallback = SafetyDelivery_NeedsFallback(&delivery, t);
+    AlertManager_ArbitrateSynced(&sync_glasses, t, &out_glasses);
+    TEST_ASSERT_TRUE(out_glasses.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out_glasses.active_alert);
+
+    /* 3. RECOVERY: Cane buzzer recovers! */
+    t = 1200U;
+    Buzzer_InjectFault(false);
+    TEST_ASSERT_TRUE(Buzzer_IsHealthy());
+
+    cane_pkt.peer_ack_valid = Buzzer_IsHealthy();
+    cane_pkt.state_flags &= ~BLE_FLAG_BUZZER_FAULT;
+    BleComm_EncodeFrame(&cane_pkt, &frame);
+
+    TEST_ASSERT_TRUE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &rx_pkt));
+    TEST_ASSERT_BITS_LOW(BLE_FLAG_BUZZER_FAULT, rx_pkt.state_flags);
+    SafetyDelivery_ObservePeer(&delivery, &rx_pkt, t);
+    TEST_ASSERT_TRUE(SafetyDelivery_IsConfirmed(&delivery));
+    TEST_ASSERT_FALSE(SafetyDelivery_NeedsFallback(&delivery, t));
+
+    /* Glasses buzzer returns to silent */
+    sync_glasses.cane_buzzer_fault = ((rx_pkt.state_flags & BLE_FLAG_BUZZER_FAULT) != 0U);
+    sync_glasses.delivery_fallback = SafetyDelivery_NeedsFallback(&delivery, t);
+    AlertManager_ArbitrateSynced(&sync_glasses, t, &out_glasses);
+    TEST_ASSERT_FALSE(out_glasses.buzzer_active);
+
+    /* Cane buzzer resumes playing */
+    sync_cane.cane_buzzer_fault = !Buzzer_IsHealthy();
+    AlertManager_ArbitrateSynced(&sync_cane, t, &out_cane);
+    TEST_ASSERT_TRUE(out_cane.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out_cane.active_alert);
+    Buzzer_PlayToneAtDuty(out_cane.generated_freq_hz, out_cane.generated_duty_percent);
+    TEST_ASSERT_EQUAL_UINT16(out_cane.generated_freq_hz, Buzzer_GetActiveFrequencyHz());
+    TEST_ASSERT_EQUAL_UINT8(out_cane.generated_duty_percent, Buzzer_GetActiveDutyPercent());
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -98,5 +250,6 @@ int main(void)
     RUN_TEST(test_LongTtcIsUnavailableButObstacleFlagRemainsActive);
     RUN_TEST(test_AllTwelveBitTtcValuesRoundTripExactly);
     RUN_TEST(test_NoTargetDoesNotBecomeAZeroMillisecondCollision);
+    RUN_TEST(test_Scenario_CaneBuzzerFailure_AutomaticFailoverToGlasses);
     return UNITY_END();
 }

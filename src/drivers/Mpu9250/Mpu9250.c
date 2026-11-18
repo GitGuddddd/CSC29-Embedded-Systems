@@ -2,6 +2,7 @@
 #include "Mpu9250_Cfg.h"
 #include "hal/Hal_I2c.h"
 #include <stddef.h>
+#include <math.h>
 
 #ifdef PICO_ON_DEVICE
 #include "pico/time.h"
@@ -26,6 +27,9 @@
 
 #define ACC_SENS_8G       (0.000244140625f) /* 8g range / 32768 */
 #define GYR_SENS_1000     (0.030517578125f) /* 1000dps range / 32768 */
+
+#define CAL_MAX_SPREAD_DPS (4.0f)
+#define CAL_MAX_BIAS_DPS   (10.0f)
 
 static float s_cal_gx = 0.0f;
 static float s_cal_gy = 0.0f;
@@ -198,6 +202,21 @@ void Mpu9250_CalibrateGyro(const Mpu9250_Config_t * const p_cfg, uint32_t n_samp
         return;
     }
 
+    float prev_gx = s_cal_gx;
+    float prev_gy = s_cal_gy;
+    float prev_gz = s_cal_gz;
+
+    s_cal_gx = 0.0f;
+    s_cal_gy = 0.0f;
+    s_cal_gz = 0.0f;
+
+    uint32_t good_samples = 0U;
+    float min_x = 0.0f;
+    float max_x = 0.0f;
+    float min_y = 0.0f;
+    float max_y = 0.0f;
+    float min_z = 0.0f;
+    float max_z = 0.0f;
     float sx = 0.0f;
     float sy = 0.0f;
     float sz = 0.0f;
@@ -207,13 +226,81 @@ void Mpu9250_CalibrateGyro(const Mpu9250_Config_t * const p_cfg, uint32_t n_samp
     {
         if (Mpu9250_ReadSample(p_cfg, &s))
         {
+            if (good_samples == 0U)
+            {
+                min_x = s.gx;
+                max_x = s.gx;
+                min_y = s.gy;
+                max_y = s.gy;
+                min_z = s.gz;
+                max_z = s.gz;
+            }
+            else
+            {
+                if (s.gx < min_x)
+                {
+                    min_x = s.gx;
+                }
+                if (s.gx > max_x)
+                {
+                    max_x = s.gx;
+                }
+                if (s.gy < min_y)
+                {
+                    min_y = s.gy;
+                }
+                if (s.gy > max_y)
+                {
+                    max_y = s.gy;
+                }
+                if (s.gz < min_z)
+                {
+                    min_z = s.gz;
+                }
+                if (s.gz > max_z)
+                {
+                    max_z = s.gz;
+                }
+            }
+
             sx += s.gx;
             sy += s.gy;
             sz += s.gz;
+            good_samples++;
         }
     }
 
-    s_cal_gx = sx / (float)n_samples;
-    s_cal_gy = sy / (float)n_samples;
-    s_cal_gz = sz / (float)n_samples;
+    if (good_samples == 0U)
+    {
+        s_cal_gx = prev_gx;
+        s_cal_gy = prev_gy;
+        s_cal_gz = prev_gz;
+        return;
+    }
+
+    float mean_x = sx / (float)good_samples;
+    float mean_y = sy / (float)good_samples;
+    float mean_z = sz / (float)good_samples;
+
+    float spread_x = max_x - min_x;
+    float spread_y = max_y - min_y;
+    float spread_z = max_z - min_z;
+
+    if ((spread_x > CAL_MAX_SPREAD_DPS) ||
+        (spread_y > CAL_MAX_SPREAD_DPS) ||
+        (spread_z > CAL_MAX_SPREAD_DPS) ||
+        (fabsf(mean_x) > CAL_MAX_BIAS_DPS) ||
+        (fabsf(mean_y) > CAL_MAX_BIAS_DPS) ||
+        (fabsf(mean_z) > CAL_MAX_BIAS_DPS))
+    {
+        s_cal_gx = prev_gx;
+        s_cal_gy = prev_gy;
+        s_cal_gz = prev_gz;
+    }
+    else
+    {
+        s_cal_gx = mean_x;
+        s_cal_gy = mean_y;
+        s_cal_gz = mean_z;
+    }
 }

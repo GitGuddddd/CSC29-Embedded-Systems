@@ -33,4 +33,9 @@
 /* Cos(45 degrees) */
 #define FALL_TILT_COS_THRESH      (0.707f)
 
+/* Two-phase reference learning constants */
+#define FALL_REF_GAIN_FAST        (0.01f)
+#define FALL_REF_GAIN_SLOW        (0.0005f)
+#define FALL_REF_FAST_SAMPLES     (3000U)
+
 #endif /* FALLDETECTION_CFG_H */

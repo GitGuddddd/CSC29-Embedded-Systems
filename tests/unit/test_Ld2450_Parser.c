@@ -209,6 +209,55 @@ void test_PartialHeadersAndBadFooterCannotPublishAnUninitializedBody(void)
     TEST_ASSERT_EQUAL_UINT32(0U, Ld2450_GetOverrunCount());
 }
 
+void test_Ld2450_DecodesLateralXAndEuclideanDistance(void)
+{
+    uint8_t frame[30] = {0};
+    frame[0] = 0xAAU;
+    frame[1] = 0xFFU;
+    frame[2] = 0x03U;
+    frame[3] = 0x00U;
+
+    /* Target 1: x = -300 mm (0x8000 | 300), y = 400 mm -> dist = 500 mm, speed = +25 cm/s */
+    uint16_t x1_raw = (uint16_t)(0x8000U | 300U);
+    uint16_t y1_raw = 400U;
+    uint16_t s1_raw = 25U;
+    frame[4] = (uint8_t)(x1_raw & 0xFFU);
+    frame[5] = (uint8_t)(x1_raw >> 8);
+    frame[6] = (uint8_t)(y1_raw & 0xFFU);
+    frame[7] = (uint8_t)(y1_raw >> 8);
+    frame[8] = (uint8_t)(s1_raw & 0xFFU);
+    frame[9] = (uint8_t)(s1_raw >> 8);
+
+    /* Target 2: x = +600 mm, y = 800 mm -> dist = 1000 mm, speed = -15 cm/s (0x8000 | 15) */
+    uint16_t x2_raw = 600U;
+    uint16_t y2_raw = 800U;
+    uint16_t s2_raw = (uint16_t)(0x8000U | 15U);
+    frame[12] = (uint8_t)(x2_raw & 0xFFU);
+    frame[13] = (uint8_t)(x2_raw >> 8);
+    frame[14] = (uint8_t)(y2_raw & 0xFFU);
+    frame[15] = (uint8_t)(y2_raw >> 8);
+    frame[16] = (uint8_t)(s2_raw & 0xFFU);
+    frame[17] = (uint8_t)(s2_raw >> 8);
+
+    frame[28] = 0x55U;
+    frame[29] = 0xCCU;
+
+    Radar_Target_t targets[3];
+    uint8_t count = 0U;
+    TEST_ASSERT_TRUE(Ld2450_ParseFrame(frame, sizeof(frame), targets, &count));
+    TEST_ASSERT_EQUAL_UINT8(2U, count);
+
+    TEST_ASSERT_TRUE(targets[0].is_valid);
+    TEST_ASSERT_EQUAL_INT16(-300, targets[0].x_mm);
+    TEST_ASSERT_EQUAL_UINT16(500U, targets[0].distance_mm);
+    TEST_ASSERT_EQUAL_INT16(25, targets[0].speed_cms);
+
+    TEST_ASSERT_TRUE(targets[1].is_valid);
+    TEST_ASSERT_EQUAL_INT16(600, targets[1].x_mm);
+    TEST_ASSERT_EQUAL_UINT16(1000U, targets[1].distance_mm);
+    TEST_ASSERT_EQUAL_INT16(-15, targets[1].speed_cms);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -222,5 +271,6 @@ int main(void)
     RUN_TEST(test_LatePollingDoesNotRefreshThreatWithStaleBufferedFrame);
     RUN_TEST(test_DmaFaultAndInvalidConfigurationAreReported);
     RUN_TEST(test_PartialHeadersAndBadFooterCannotPublishAnUninitializedBody);
+    RUN_TEST(test_Ld2450_DecodesLateralXAndEuclideanDistance);
     return UNITY_END();
 }

@@ -324,4 +324,84 @@ class SystemPacketTest {
         extended[10] = 0
         assertNull(SystemPacket.parse(extended))
     }
+
+    @Test fun `parse 6-byte compact packet decodes buzzer fault flag correctly`() {
+        val data = byteArrayOf(
+            0xA1.toByte(), // sync 0xA + pair 0x1
+            0xB0.toByte(), // Cane node (1 << 7), hbSeq=3, fallSeq=0 -> (1 << 7) | (3 << 4) = 0xB0
+            SystemPacket.FLAG_BUZZER_FAULT.toByte(), // 0x80
+            0xFF.toByte(),
+            0xFF.toByte(),
+            0xFF.toByte(),
+        )
+        val packet = requireNotNull(SystemPacket.parse(data))
+        assertTrue(packet.compactFormat)
+        assertEquals(1, packet.deviceId)
+        assertEquals(NodeType.CANE, packet.nodeType)
+        assertTrue(packet.isBuzzerFault)
+        assertFalse(packet.isSensorFault)
+        assertEquals(TelemetryStatus.SENSOR_FAULT, packet.status)
+    }
+
+    @Test fun `parse 11-byte advanced packet decodes buzzer fault flag correctly`() {
+        val data = byteArrayOf(
+            0xAA.toByte(), // preamble
+            0x01,          // deviceId
+            0x05, 0x00,    // seqNum = 5
+            SystemPacket.FLAG_BUZZER_FAULT.toByte(), // stateFlags = 0x80
+            0xE8.toByte(), 0x03, // dist = 1000 mm
+            0x00, 0x00,    // speed = 0
+            0xFF.toByte(), 0xFF.toByte(), // TTC = no threat (-1)
+        )
+        val packet = requireNotNull(SystemPacket.parse(data))
+        assertTrue(packet.isAdvanced)
+        assertTrue(packet.isBuzzerFault)
+        assertFalse(packet.isSensorFault)
+        assertEquals(TelemetryStatus.SENSOR_FAULT, packet.status)
+    }
+
+    @Test fun `buzzer fault status precedence adheres to threat and safety hierarchy`() {
+        // Fall alert supersedes buzzer fault
+        val fallFault = compact(SystemPacket.FLAG_FALL_ALERT or SystemPacket.FLAG_BUZZER_FAULT)
+        assertTrue(fallFault.isBuzzerFault)
+        assertTrue(fallFault.isFallAlert)
+        assertEquals(TelemetryStatus.FALL_ALARM, fallFault.status)
+
+        // Alarm paused supersedes buzzer fault
+        val pausedFault = compact(SystemPacket.FLAG_FALL_ALERT or SystemPacket.FLAG_ALARM_PAUSED or SystemPacket.FLAG_BUZZER_FAULT)
+        assertTrue(pausedFault.isBuzzerFault)
+        assertTrue(pausedFault.isAlarmPaused)
+        assertEquals(TelemetryStatus.FALL_PAUSED, pausedFault.status)
+
+        // Standby supersedes buzzer fault
+        val standbyFault = compact(SystemPacket.FLAG_STANDBY or SystemPacket.FLAG_BUZZER_FAULT)
+        assertTrue(standbyFault.isBuzzerFault)
+        assertTrue(standbyFault.isStandby)
+        assertEquals(TelemetryStatus.STANDBY, standbyFault.status)
+
+        // Cane ground hazard supersedes buzzer fault
+        val groundHazard = compact(SystemPacket.FLAG_OBSTACLE_ACTIVE or SystemPacket.FLAG_BUZZER_FAULT, 100)
+        assertTrue(groundHazard.isBuzzerFault)
+        assertEquals(TelemetryStatus.GROUND_HAZARD, groundHazard.status)
+
+        // Glasses critical obstacle supersedes buzzer fault
+        val glassesCritical = compact(SystemPacket.FLAG_OBSTACLE_ACTIVE or SystemPacket.FLAG_BUZZER_FAULT, 200, cane = false)
+        assertTrue(glassesCritical.isBuzzerFault)
+        assertEquals(TelemetryStatus.OBSTACLE_CRITICAL, glassesCritical.status)
+
+        // Glasses warning obstacle supersedes buzzer fault
+        val glassesWarning = SystemPacket(
+            magic = 0xAA, deviceId = 0x02, seqNum = 1, radarDistMm = 1000, checksum = 0,
+            stateFlags = SystemPacket.FLAG_OBSTACLE_ACTIVE or SystemPacket.FLAG_BUZZER_FAULT,
+            isAdvanced = true,
+        )
+        assertTrue(glassesWarning.isBuzzerFault)
+        assertEquals(ThreatLevel.WARNING, glassesWarning.threatLevel)
+        assertEquals(TelemetryStatus.OBSTACLE_WARNING, glassesWarning.status)
+
+        // Plain buzzer fault with no higher priority alerts maps to SENSOR_FAULT
+        val plainBuzzerFault = compact(SystemPacket.FLAG_BUZZER_FAULT)
+        assertTrue(plainBuzzerFault.isBuzzerFault)
+        assertEquals(TelemetryStatus.SENSOR_FAULT, plainBuzzerFault.status)
+    }
 }

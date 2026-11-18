@@ -186,6 +186,9 @@ static void vTask_SafetyPerception(void *pvParameters)
     BleComm_ProfileId_t last_sent_profile = BLECOMM_PROFILE_FAST;
     uint16_t buzzer_freq_hz = 0U;
     uint8_t buzzer_duty_percent = 0U;
+    bool peer_obstacle_active = false;
+    uint16_t peer_obstacle_dist_mm = 0xFFFFU;
+    bool peer_sensor_fault = false;
     bool peer_ack_valid = false;
     uint16_t peer_ack_session_id = 0U;
     uint8_t peer_ack_event_seq = 0U;
@@ -252,6 +255,9 @@ static void vTask_SafetyPerception(void *pvParameters)
             {
                 Watchdog_KickBleDeadman(received_ms);
                 last_glasses_ms = received_ms;
+                peer_obstacle_active = ((rx_pkt.state_flags & BLE_FLAG_OBSTACLE_ACTIVE) != 0U);
+                peer_obstacle_dist_mm = rx_pkt.nearest_dist_mm;
+                peer_sensor_fault = ((rx_pkt.state_flags & BLE_FLAG_SENSOR_FAULT) != 0U);
                 if (BleComm_TrackPeerFall(&peer_fall, &rx_pkt))
                 {
                     remote_fall = true;
@@ -483,16 +489,40 @@ static void vTask_SafetyPerception(void *pvParameters)
             Haptic_Request(HAPTIC_SRC_GROUND, ALERT_NONE);
         }
 
-        /* The mode manager is the sole alarm owner; the arbitrator renders each pulse. */
-        AlertManager_SetFallState(mode_out.fall_latched, mode_out.alarm_paused, now_ms);
+        bool is_link_lost = Watchdog_CheckBleLinkLoss(now_ms);
+        if (is_link_lost)
+        {
+            peer_obstacle_active = false;
+            peer_obstacle_dist_mm = 0xFFFFU;
+            peer_sensor_fault = false;
+        }
+        if (is_link_lost != prev_link_lost)
+        {
+            prev_link_lost = is_link_lost;
+            cane_status.link_lost = is_link_lost ? 1U : 0U;
+            if (is_link_lost)
+            {
+                printf("[WATCHDOG] BLE LINK LOSS DETECTED (>%u ms)\n", (unsigned int)WATCHDOG_CFG_DEADMAN_TIMEOUT_MS);
+            }
+        }
+        /* Link loss is reported over serial and BLE status, not through the grip motor. */
+        Haptic_Request(HAPTIC_SRC_LINK, ALERT_NONE);
+
+        /* The arbitrator renders the alarm or secondary cues using synced dual-node rules. */
+        Alert_SyncInput_t sync_in = {
+            .is_glasses_node = false,
+            .local_fall_latched = mode_out.fall_latched,
+            .local_alarm_paused = mode_out.alarm_paused,
+            .peer_fall_active = false,
+            .delivery_fallback = false,
+            .cane_link_fresh = !is_link_lost,
+            .cane_buzzer_fault = !Buzzer_IsHealthy(),
+            .obstacle_active = (mode.power != CANE_POWER_STANDBY) && peer_obstacle_active,
+            .obstacle_dist_mm = peer_obstacle_dist_mm,
+            .sensor_fault = (mode.power != CANE_POWER_STANDBY) && (imu.fault || peer_sensor_fault)
+        };
         Alert_Output_t alert_out;
-        /* The ToF only ever vibrates. The buzzer sounds for falls, plus a sparse cue
-         * when the IMU itself has failed (fall detection unavailable). ToF faults stay
-         * visible via serial, BLE fault flag and FAULT_DEGRADED mode.
-         */
-        bool technical_audio = imu.fault && (mode.power != CANE_POWER_STANDBY);
-        AlertManager_Arbitrate(technical_audio ? ALERT_SENSOR_FAULT : ALERT_NONE,
-                               0U, now_ms, &alert_out);
+        AlertManager_ArbitrateSynced(&sync_in, now_ms, &alert_out);
         uint16_t next_freq_hz = alert_out.buzzer_active ? alert_out.generated_freq_hz : 0U;
         uint8_t next_duty_percent = alert_out.buzzer_active ?
                                     alert_out.generated_duty_percent : 0U;
@@ -502,16 +532,16 @@ static void vTask_SafetyPerception(void *pvParameters)
             buzzer_freq_hz = next_freq_hz;
             buzzer_duty_percent = next_duty_percent;
         }
-        if (remote_fall && peer_event_identity_valid && mode_out.fall_latched)
+        if (remote_fall && peer_event_identity_valid && mode_out.fall_latched && Buzzer_IsHealthy())
         {
-            /* Receipt is emitted only after the mode manager latched the incident
-             * and the alarm request was rendered by the application path above.
+            /* Receipt is emitted only after the mode manager latched the incident,
+             * the buzzer is healthy, and the alarm request was rendered by the application path above.
              */
             peer_ack_valid = true;
             peer_ack_session_id = peer_event_session_id;
             peer_ack_event_seq = peer_event_seq;
         }
-        if (!peer_fall.extended || !peer_fall.active ||
+        if (!Buzzer_IsHealthy() || !peer_fall.extended || !peer_fall.active ||
             (peer_fall.session_id != peer_ack_session_id) ||
             (peer_fall.fall_seq != peer_ack_event_seq) ||
             ((uint32_t)(now_ms - last_glasses_ms) >= WATCHDOG_CFG_DEADMAN_TIMEOUT_MS))
@@ -540,25 +570,22 @@ static void vTask_SafetyPerception(void *pvParameters)
             {
                 Ground_StartCalibration(now_ms, calibrate_allowed, "serial", true);
             }
-        }
-
-        bool is_link_lost = Watchdog_CheckBleLinkLoss(now_ms);
-        if (is_link_lost != prev_link_lost)
-        {
-            prev_link_lost = is_link_lost;
-            cane_status.link_lost = is_link_lost ? 1U : 0U;
-            if (is_link_lost)
+            else if ((ch == (int)'b') || (ch == (int)'B'))
             {
-                printf("[WATCHDOG] BLE LINK LOSS DETECTED (>%u ms)\n", (unsigned int)WATCHDOG_CFG_DEADMAN_TIMEOUT_MS);
+                bool new_fault = Buzzer_IsHealthy();
+                Buzzer_InjectFault(new_fault);
+                printf("[TEST TRIGGER] Cane Buzzer Fault -> %s\n", new_fault ? "FAULT" : "OK");
             }
         }
-        /* Link loss is reported over serial and BLE status, not through the grip motor. */
-        Haptic_Request(HAPTIC_SRC_LINK, ALERT_NONE);
 
         uint8_t flags = mode_out.status_flags;
         if (mode_out.ground_enabled && mode_in.ground_hazard)
         {
             flags |= BLE_FLAG_OBSTACLE_ACTIVE;
+        }
+        if (!Buzzer_IsHealthy())
+        {
+            flags |= BLE_FLAG_BUZZER_FAULT;
         }
         BleComm_ProfileId_t profile = BleComm_SelectProfile(s_sys_mode, flags, is_link_lost);
         uint32_t telemetry_period_ms = BleComm_GetProfile(profile)->payload_period_ms;

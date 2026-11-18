@@ -51,7 +51,12 @@ void SafetyDelivery_ObservePeer(SafetyDelivery_t * const p_delivery,
         return;
     }
 
-    bool matching = (p_packet->protocol_version == BLE_PROTOCOL_VERSION) &&
+    bool peer_buzzer_fault = (p_packet->node_type == BLE_NODE_TYPE_CANE) &&
+                             ((p_packet->state_flags & BLE_FLAG_BUZZER_FAULT) != 0U);
+    p_delivery->peer_buzzer_fault = peer_buzzer_fault ? 1U : 0U;
+
+    bool matching = !peer_buzzer_fault &&
+                    (p_packet->protocol_version == BLE_PROTOCOL_VERSION) &&
                     (p_packet->node_type == BLE_NODE_TYPE_CANE) &&
                     (p_packet->session_id != 0U) && p_packet->peer_ack_valid &&
                     (p_delivery->local_session_id != 0U) &&
@@ -60,7 +65,7 @@ void SafetyDelivery_ObservePeer(SafetyDelivery_t * const p_delivery,
     if (!matching || (p_delivery->peer_seen &&
         (p_packet->session_id != p_delivery->peer_session_id)))
     {
-        /* Reboot, downgrade or withdrawal invalidates the current receipt lease. */
+        /* Reboot, downgrade, buzzer fault or withdrawal invalidates the current receipt lease. */
         p_delivery->receipt_confirmed = false;
         p_delivery->receipt_peer_session_id = 0U;
     }
@@ -89,6 +94,11 @@ bool SafetyDelivery_NeedsFallback(const SafetyDelivery_t * const p_delivery,
     if ((p_delivery == NULL) || !p_delivery->active)
     {
         return false;
+    }
+    if (p_delivery->peer_seen && (p_delivery->peer_buzzer_fault != 0U) &&
+        ((uint32_t)(now_ms - p_delivery->last_peer_ms) < SAFETYDELIVERY_CFG_PEER_TIMEOUT_MS))
+    {
+        return true;
     }
     if (SafetyDelivery_IsConfirmed(p_delivery))
     {

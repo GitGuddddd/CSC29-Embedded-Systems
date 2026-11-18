@@ -35,10 +35,21 @@ fun NodeTelemetry.presentation(): TelemetryPresentation {
             },
             StatusTone.NEUTRAL,
         )
-        TelemetryStatus.SENSOR_FAULT -> TelemetryPresentation(
-            "Sensing degraded", "Sensor or data-path fault reported. The affected component is not identified in this packet.",
-            StatusTone.CAUTION,
-        )
+        TelemetryStatus.SENSOR_FAULT -> when {
+            type == NodeType.CANE && report.isBuzzerFault && !report.isSensorFault -> TelemetryPresentation(
+                "Buzzer fault", "Cane buzzer fault · Audio switched to glasses", StatusTone.CAUTION,
+            )
+            type == NodeType.CANE && report.isBuzzerFault -> TelemetryPresentation(
+                "Sensing degraded", "Sensor fault reported. Cane buzzer fault · Audio switched to glasses.", StatusTone.CAUTION,
+            )
+            report.isBuzzerFault -> TelemetryPresentation(
+                "Buzzer fault", "Buzzer hardware fault reported.", StatusTone.CAUTION,
+            )
+            else -> TelemetryPresentation(
+                "Sensing degraded", "Sensor or data-path fault reported. The affected component is not identified in this packet.",
+                StatusTone.CAUTION,
+            )
+        }
         TelemetryStatus.GROUND_HAZARD -> TelemetryPresentation(
             "Ground hazard", "The cane's calibrated detector reports a ground-height hazard.", StatusTone.ALERT,
         )
@@ -77,8 +88,11 @@ fun MonitoringState.presentation(): TelemetryPresentation {
             PeerReceiptState.LEGACY_UNAVAILABLE -> " This legacy packet cannot confirm cane receipt."
             PeerReceiptState.NOT_APPLICABLE -> ""
         }
+        val buzzerRouting = if (fresh.any { it.type == NodeType.CANE && it.packet?.isBuzzerFault == true }) {
+            " Cane buzzer fault · Audio switched to glasses."
+        } else ""
         return TelemetryPresentation(
-            "Fall alarm", "Reported by ${activeFalls.labels()}. Incident remains latched.$receipt", StatusTone.ALERT,
+            "Fall alarm", "Reported by ${activeFalls.labels()}. Incident remains latched.$receipt$buzzerRouting", StatusTone.ALERT,
         )
     }
     val staleFalls = nodes.filter { !it.isFresh && it.packet?.hasLatchedFall == true }
@@ -99,9 +113,26 @@ fun MonitoringState.presentation(): TelemetryPresentation {
         "Telemetry link lost", "${lost.labels()}: no fresh heartbeat for at least 500 ms.", StatusTone.CAUTION,
     )
     val faults = fresh.filter { it.packet?.status == TelemetryStatus.SENSOR_FAULT }
-    if (faults.isNotEmpty()) return TelemetryPresentation(
-        "Sensing degraded", "${faults.labels()}: sensor or data-path fault reported.", StatusTone.CAUTION,
-    )
+    if (faults.isNotEmpty()) {
+        val caneBuzzerFault = faults.firstOrNull { it.type == NodeType.CANE && it.packet?.isBuzzerFault == true }
+        return if (caneBuzzerFault != null && faults.all { it.packet?.isSensorFault != true }) {
+            TelemetryPresentation(
+                "Buzzer fault",
+                "Cane buzzer fault · Audio switched to glasses",
+                StatusTone.CAUTION,
+            )
+        } else if (caneBuzzerFault != null) {
+            TelemetryPresentation(
+                "Sensing degraded",
+                "${faults.labels()}: sensor fault reported. Cane buzzer fault · Audio switched to glasses.",
+                StatusTone.CAUTION,
+            )
+        } else {
+            TelemetryPresentation(
+                "Sensing degraded", "${faults.labels()}: sensor or data-path fault reported.", StatusTone.CAUTION,
+            )
+        }
+    }
     hazards.firstOrNull()?.let { return it.presentation() }
     if (selectedLinkState == LinkState.WAITING) return TelemetryPresentation(
         "Waiting for selected node", "A radio selection is not a fresh heartbeat.", StatusTone.NEUTRAL,
@@ -115,6 +146,29 @@ fun MonitoringState.presentation(): TelemetryPresentation {
     return fresh.firstOrNull()?.presentation() ?: TelemetryPresentation(
         "Waiting for telemetry", "No fresh node data is available.", StatusTone.NEUTRAL,
     )
+}
+
+fun MonitoringState.audioRoutingPresentation(): TelemetryPresentation {
+    val cane = node(NodeType.CANE)
+    val canePacket = cane?.packet
+    val caneOnline = cane?.isFresh == true && canePacket != null
+    return when {
+        caneOnline && canePacket!!.isBuzzerFault -> TelemetryPresentation(
+            "Buzzer failover",
+            "Cane buzzer fault · Audio switched to glasses",
+            StatusTone.CAUTION,
+        )
+        caneOnline -> TelemetryPresentation(
+            "Primary audio: Cane",
+            "Cane is primary audio buzzer for the pair.",
+            StatusTone.OK,
+        )
+        else -> TelemetryPresentation(
+            "Audio output: Glasses",
+            "Cane offline; glasses buzzer fallback active.",
+            StatusTone.NEUTRAL,
+        )
+    }
 }
 
 private fun List<NodeTelemetry>.labels(): String = joinToString { it.type.label }

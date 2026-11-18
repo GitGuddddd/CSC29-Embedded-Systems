@@ -15,4 +15,9 @@
 
 #define THREAT_RADAR_TIMEOUT_MS      (500U)
 
+#define THREAT_CORRIDOR_HALF_MM      (1500)
+#define THREAT_SIDE_DEADZONE_MM      (425)
+#define THREAT_SIDE_HYSTERESIS_MM    (75)
+#define THREAT_LANE_HOLD_MS          (200U)
+
 #endif /* THREATASSESSMENT_CFG_H */

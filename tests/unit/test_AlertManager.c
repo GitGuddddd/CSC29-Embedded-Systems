@@ -133,6 +133,151 @@ void test_AlertManager_DeliveryFallbackIsSparseAndLowDuty(void)
     TEST_ASSERT_TRUE(out.buzzer_active);
 }
 
+void test_AlertManager_Synced_DefaultPlaysOnlyOnCane(void)
+{
+    Alert_Output_t out_glasses;
+    Alert_Output_t out_cane;
+
+    /* 1. Glasses-initiated obstacle */
+    Alert_SyncInput_t in_glasses_obs = {
+        .is_glasses_node = true,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = false,
+        .delivery_fallback = false,
+        .obstacle_active = true,
+        .obstacle_dist_mm = 800U
+    };
+    AlertManager_ArbitrateSynced(&in_glasses_obs, 1000U, &out_glasses);
+    TEST_ASSERT_FALSE(out_glasses.buzzer_active);
+
+    Alert_SyncInput_t in_cane_obs = {
+        .is_glasses_node = false,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = false,
+        .obstacle_active = true,
+        .obstacle_dist_mm = 800U
+    };
+    AlertManager_ArbitrateSynced(&in_cane_obs, 1000U, &out_cane);
+    TEST_ASSERT_TRUE(out_cane.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_OBSTACLE_PROXIMITY, out_cane.active_alert);
+
+    /* 2. Glasses-initiated head-fall */
+    AlertManager_Init();
+    Alert_SyncInput_t in_glasses_fall = {
+        .is_glasses_node = true,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = false,
+        .delivery_fallback = false,
+        .local_fall_latched = true
+    };
+    AlertManager_ArbitrateSynced(&in_glasses_fall, 2000U, &out_glasses);
+    TEST_ASSERT_FALSE(out_glasses.buzzer_active);
+
+    Alert_SyncInput_t in_cane_fall = {
+        .is_glasses_node = false,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = false,
+        .peer_fall_active = true
+    };
+    AlertManager_ArbitrateSynced(&in_cane_fall, 2000U, &out_cane);
+    TEST_ASSERT_TRUE(out_cane.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out_cane.active_alert);
+}
+
+void test_AlertManager_Synced_CaneBuzzerFaultFailoverToGlasses(void)
+{
+    Alert_Output_t out_glasses;
+    Alert_Output_t out_cane;
+
+    /* 1. Head Fall failover */
+    AlertManager_Init();
+    Alert_SyncInput_t in_cane_fall = {
+        .is_glasses_node = false,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = true,
+        .peer_fall_active = true
+    };
+    AlertManager_ArbitrateSynced(&in_cane_fall, 1000U, &out_cane);
+    TEST_ASSERT_FALSE(out_cane.buzzer_active);
+    TEST_ASSERT_EQUAL_UINT16(0U, out_cane.generated_freq_hz);
+
+    Alert_SyncInput_t in_glasses_fall = {
+        .is_glasses_node = true,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = true,
+        .delivery_fallback = true,
+        .local_fall_latched = true
+    };
+    AlertManager_ArbitrateSynced(&in_glasses_fall, 1000U, &out_glasses);
+    TEST_ASSERT_TRUE(out_glasses.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out_glasses.active_alert);
+
+    /* 2. Cane Fall failover */
+    AlertManager_Init();
+    Alert_SyncInput_t in_cane_local_fall = {
+        .is_glasses_node = false,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = true,
+        .local_fall_latched = true
+    };
+    AlertManager_ArbitrateSynced(&in_cane_local_fall, 2000U, &out_cane);
+    TEST_ASSERT_FALSE(out_cane.buzzer_active);
+
+    Alert_SyncInput_t in_glasses_cane_fall = {
+        .is_glasses_node = true,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = true,
+        .peer_fall_active = true
+    };
+    AlertManager_ArbitrateSynced(&in_glasses_cane_fall, 2000U, &out_glasses);
+    TEST_ASSERT_TRUE(out_glasses.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out_glasses.active_alert);
+
+    /* 3. Obstacle Proximity failover */
+    AlertManager_Init();
+    Alert_SyncInput_t in_cane_obs = {
+        .is_glasses_node = false,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = true,
+        .obstacle_active = true,
+        .obstacle_dist_mm = 600U
+    };
+    AlertManager_ArbitrateSynced(&in_cane_obs, 3000U, &out_cane);
+    TEST_ASSERT_FALSE(out_cane.buzzer_active);
+
+    Alert_SyncInput_t in_glasses_obs = {
+        .is_glasses_node = true,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = true,
+        .obstacle_active = true,
+        .obstacle_dist_mm = 600U
+    };
+    AlertManager_ArbitrateSynced(&in_glasses_obs, 3000U, &out_glasses);
+    TEST_ASSERT_TRUE(out_glasses.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_OBSTACLE_PROXIMITY, out_glasses.active_alert);
+
+    /* 4. Sensor Fault failover */
+    AlertManager_Init();
+    Alert_SyncInput_t in_cane_fault = {
+        .is_glasses_node = false,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = true,
+        .sensor_fault = true
+    };
+    AlertManager_ArbitrateSynced(&in_cane_fault, 4000U, &out_cane);
+    TEST_ASSERT_FALSE(out_cane.buzzer_active);
+
+    Alert_SyncInput_t in_glasses_fault = {
+        .is_glasses_node = true,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = true,
+        .sensor_fault = true
+    };
+    AlertManager_ArbitrateSynced(&in_glasses_fault, 4000U, &out_glasses);
+    TEST_ASSERT_TRUE(out_glasses.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_SENSOR_FAULT, out_glasses.active_alert);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -142,5 +287,7 @@ int main(void)
     RUN_TEST(test_AlertManager_TenPulses_AndInterBurstSilence);
     RUN_TEST(test_AlertManager_TechnicalFaultHasTwoPulses);
     RUN_TEST(test_AlertManager_DeliveryFallbackIsSparseAndLowDuty);
+    RUN_TEST(test_AlertManager_Synced_DefaultPlaysOnlyOnCane);
+    RUN_TEST(test_AlertManager_Synced_CaneBuzzerFaultFailoverToGlasses);
     return UNITY_END();
 }

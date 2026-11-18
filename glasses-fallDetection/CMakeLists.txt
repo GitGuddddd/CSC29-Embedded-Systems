@@ -36,12 +36,13 @@ pico_sdk_init()
 # Add executable. Default name is the project name, version 0.1
 
 add_executable(glasses_test
-    # main.c
-    glasses_node.c
+    glasses_main.c
     mpu9250.c
     buzzer.c
     fall_detect.c
     alert.c
+    node_status.c
+    protocol.c
 )
 
 # Add the standard library to the build

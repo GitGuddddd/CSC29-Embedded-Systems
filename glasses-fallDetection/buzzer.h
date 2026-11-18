@@ -1,10 +1,21 @@
+/**
+ * @file    buzzer.h
+ * @brief   PWM driver for the buzzer.
+ */
+
 #ifndef BUZZER_H
 #define BUZZER_H
 
 #include <stdint.h>
-#include "pico/types.h"
 
-void buzzer_init(uint pin);
-void buzzer_tone(uint32_t freq_hz);   // 0 = silent
+/* Sets up PWM on the given GPIO pin. The buzzer starts silent. */
+void buzzer_init (uint32_t pin);
 
-#endif
+/* Plays a square wave of the given frequency in Hz. A frequency below
+ * 20 Hz, including 0, means silent. */
+void buzzer_tone (uint32_t freq_hz);
+
+#endif /* BUZZER_H */
+
+/* end of buzzer.h */
+

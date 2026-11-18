@@ -367,6 +367,88 @@ test_ttc_is_none_for_a_departing_target (void)
 }
 
 static void
+test_ttc_holds_a_brief_speed_dropout (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    // OPEN-26: a real approaching reading establishes a held speed.
+    make_frame(targets, 1500, -20);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+    TEST_ASSERT_TRUE(out.lane_ttc_ms[RTE_SIDE_CENTER] < RTE_TTC_NONE_MS);
+
+    // The lane is still live every frame (d_mm keeps updating, unlike
+    // test_ttc_is_none_while_the_lane_is_only_held's vanished target) -
+    // but this one frame's own speed_cms is unusable. 50 ms later, well
+    // inside the hold window: ttc_ms must use the held closing speed
+    // (20 cm/s) together with THIS frame's distance (1490 mm), not the
+    // stale distance from the first frame.
+    make_frame(targets, 1490, 0);
+    threat_assessment_update(&g_state, targets, 50u, &out);
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL_UINT16(1490u, out.d_mm);
+    TEST_ASSERT_EQUAL_UINT16(threat_assessment_ttc_ms(1490u, 20),
+                             out.lane_ttc_ms[RTE_SIDE_CENTER]);
+}
+
+static void
+test_ttc_drops_to_none_once_the_speed_hold_expires (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    make_frame(targets, 1500, -20);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+
+    // Speed reading goes unusable starting at t=50 (the hold's pending
+    // timer starts here).
+    make_frame(targets, 1490, 0);
+    threat_assessment_update(&g_state, targets, 50u, &out);
+    TEST_ASSERT_TRUE(out.lane_ttc_ms[RTE_SIDE_CENTER] < RTE_TTC_NONE_MS);
+
+    // 201 ms after the dropout started (50 + 201 = 251): past
+    // THREAT_ASSESSMENT_LANE_HOLD_MS (200 ms), same window the existing
+    // occupancy hold uses. A brief dropout is smoothed over; a sustained
+    // one must still end up at NONE, not hold forever.
+    make_frame(targets, 1480, 0);
+    threat_assessment_update(&g_state, targets, 251u, &out);
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL_UINT16(1480u, out.d_mm);
+    TEST_ASSERT_EQUAL_UINT16(RTE_TTC_NONE_MS,
+                             out.lane_ttc_ms[RTE_SIDE_CENTER]);
+}
+
+static void
+test_ttc_hold_does_not_resume_across_a_full_occupancy_gap (void)
+{
+    rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
+    threat_assessment_out_t out;
+
+    make_frame(targets, 1500, -20);
+    threat_assessment_update(&g_state, targets, 0u, &out);
+    TEST_ASSERT_TRUE(out.lane_ttc_ms[RTE_SIDE_CENTER] < RTE_TTC_NONE_MS);
+
+    // The target vanishes entirely (no live reading at all this frame,
+    // unlike the two tests above where it stayed live with a bad speed
+    // reading) - the lane stays BLOCKED via hold_pending_ms, and this
+    // must clear the held speed too, not just report NONE for now.
+    make_empty_frame(targets);
+    threat_assessment_update(&g_state, targets, 50u, &out);
+    TEST_ASSERT_EQUAL_UINT16(RTE_TTC_NONE_MS,
+                             out.lane_ttc_ms[RTE_SIDE_CENTER]);
+
+    // A new live reading reappears, itself unusable (speed 0). If the
+    // speed hold had not been cleared above, this would wrongly reuse
+    // the first frame's 20 cm/s from a completely different approach.
+    make_frame(targets, 1400, 0);
+    threat_assessment_update(&g_state, targets, 100u, &out);
+    TEST_ASSERT_TRUE(out.b_active);
+    TEST_ASSERT_EQUAL_UINT16(1400u, out.d_mm);
+    TEST_ASSERT_EQUAL_UINT16(RTE_TTC_NONE_MS,
+                             out.lane_ttc_ms[RTE_SIDE_CENTER]);
+}
+
+static void
 test_two_independent_lane_hold_timers_overlap (void)
 {
     rte_radar_target_t targets[RTE_RADAR_NUM_TARGETS];
@@ -733,6 +815,9 @@ main (void)
     RUN_TEST(test_ttc_uses_live_speed_of_its_own_lane);
     RUN_TEST(test_ttc_is_none_while_the_lane_is_only_held);
     RUN_TEST(test_ttc_is_none_for_a_departing_target);
+    RUN_TEST(test_ttc_holds_a_brief_speed_dropout);
+    RUN_TEST(test_ttc_drops_to_none_once_the_speed_hold_expires);
+    RUN_TEST(test_ttc_hold_does_not_resume_across_a_full_occupancy_gap);
     RUN_TEST(test_two_independent_lane_hold_timers_overlap);
     RUN_TEST(test_process_frame_sends_audio_and_ble);
     RUN_TEST(test_radar_fault_forces_clear_only_when_active);

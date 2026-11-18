@@ -36,7 +36,14 @@
  *         the single-lane scoping OPEN-23 used (whichever lane drives
  *         d_mm) was dropped because the nearest lane by distance is not
  *         always the one closing in soonest - a farther, faster-closing
- *         lane's TTC would otherwise never reach BLE at all.
+ *         lane's TTC would otherwise never reach BLE at all. OPEN-26
+ *         (18 Nov): when a lane has a live target this frame but that
+ *         frame's own speed_cms alone is unusable, the last usable
+ *         closing speed from *this same lane* is reused for up to
+ *         THREAT_ASSESSMENT_LANE_HOLD_MS before ttc_ms falls back to
+ *         RTE_TTC_NONE_MS - bench evidence (18 Nov) showed the LD2450's
+ *         speed reading flickering frame to frame during otherwise
+ *         smooth, continuous motion (see docs/deviations.md OPEN-26).
  *   FR6   grip state from the cane: HELD and UNKNOWN keep the alert active,
  *         only RELEASED silences it (and ends an active alert with one
  *         OBSTACLE(CLEAR)). The state starts as UNKNOWN. Unchanged by
@@ -71,6 +78,21 @@ typedef struct
     uint32_t hold_pending_ms; /**< Time this lane first read clear/empty
                                     while still blocked, or UINT32_MAX when
                                     no clear is pending. */
+
+    // OPEN-26 (18 Nov): a second, separate hold for the *speed* reading
+    // only - bench evidence showed the LD2450's own per-frame speed_cms
+    // dropping to unusable for a frame or two even while this lane has a
+    // live target every frame (see docs/deviations.md OPEN-26). This is
+    // unrelated to hold_pending_ms above (occupancy): a lane can be live
+    // and BLOCKED every frame while its speed reading alone flickers.
+    int32_t  held_closing_cms;     /**< Last usable (>0) closing speed
+                                         seen in this lane, or 0 if none
+                                         yet / the hold has expired. */
+    uint32_t speed_hold_pending_ms; /**< Time this lane's live reading
+                                          first went unusable while still
+                                          holding a speed, or UINT32_MAX
+                                          when this frame's own reading is
+                                          itself usable (nothing to time). */
 } threat_assessment_lane_t;
 
 /** State of Glasses_Threat: CLEAR (b_active false) or OBSTACLE_ACTIVE. */

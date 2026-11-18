@@ -147,22 +147,50 @@ main_glasses_stub_ble_task (void * p_arg)
             }
             else
             {
-                // OPEN-25 (14 Nov): one line per lane now, not one
-                // combined distance/TTC - RTE_LANE_NONE_MM/RTE_TTC_
-                // NONE_MS (0xFFFF) print as 65535 for a lane that is not
-                // BLOCKED, which is fine for this bring-up-only print.
-                gr_printf(">>> BLE task <- obstacle ACTIVE L d=%" PRIu32
-                          "mm TTC=%" PRIu32 "ms\n",
-                          (uint32_t) msg.d_mm[RTE_SIDE_LEFT],
-                          (uint32_t) msg.ttc_ms[RTE_SIDE_LEFT]);
-                gr_printf(">>> BLE task <- obstacle ACTIVE M d=%" PRIu32
-                          "mm TTC=%" PRIu32 "ms\n",
-                          (uint32_t) msg.d_mm[RTE_SIDE_CENTER],
-                          (uint32_t) msg.ttc_ms[RTE_SIDE_CENTER]);
-                gr_printf(">>> BLE task <- obstacle ACTIVE R d=%" PRIu32
-                          "mm TTC=%" PRIu32 "ms\n",
-                          (uint32_t) msg.d_mm[RTE_SIDE_RIGHT],
-                          (uint32_t) msg.ttc_ms[RTE_SIDE_RIGHT]);
+                // OPEN-25 (14 Nov): one line per lane, not one combined
+                // distance/TTC. 18 Nov: a lane that is not BLOCKED
+                // (RTE_LANE_NONE_MM) now prints "clear" instead of the
+                // raw 0xFFFF sentinel as "65535mm"/"65535ms" - that read
+                // as "ACTIVE ... NONE" on the same line, which looks
+                // self-contradictory on the bench. "ACTIVE"/"CLEAR"
+                // above already says whether an alert is happening at
+                // all; each lane line below only says what that one
+                // lane itself is doing.
+                if (RTE_LANE_NONE_MM == msg.d_mm[RTE_SIDE_LEFT])
+                {
+                    gr_printf(">>> BLE task <- L clear\n");
+                }
+                else
+                {
+                    gr_printf(">>> BLE task <- L d=%" PRIu32 "mm TTC=%"
+                              PRIu32 "ms\n",
+                              (uint32_t) msg.d_mm[RTE_SIDE_LEFT],
+                              (uint32_t) msg.ttc_ms[RTE_SIDE_LEFT]);
+                }
+
+                if (RTE_LANE_NONE_MM == msg.d_mm[RTE_SIDE_CENTER])
+                {
+                    gr_printf(">>> BLE task <- M clear\n");
+                }
+                else
+                {
+                    gr_printf(">>> BLE task <- M d=%" PRIu32 "mm TTC=%"
+                              PRIu32 "ms\n",
+                              (uint32_t) msg.d_mm[RTE_SIDE_CENTER],
+                              (uint32_t) msg.ttc_ms[RTE_SIDE_CENTER]);
+                }
+
+                if (RTE_LANE_NONE_MM == msg.d_mm[RTE_SIDE_RIGHT])
+                {
+                    gr_printf(">>> BLE task <- R clear\n");
+                }
+                else
+                {
+                    gr_printf(">>> BLE task <- R d=%" PRIu32 "mm TTC=%"
+                              PRIu32 "ms\n",
+                              (uint32_t) msg.d_mm[RTE_SIDE_RIGHT],
+                              (uint32_t) msg.ttc_ms[RTE_SIDE_RIGHT]);
+                }
             }
         }
     }

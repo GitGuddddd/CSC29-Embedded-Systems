@@ -54,9 +54,12 @@ static void threat_assessment_hold_lane (threat_assessment_lane_t * p_lane,
 static uint32_t threat_assessment_pick_lane (
     const threat_assessment_t * p_state);
 static void threat_assessment_lane_out (
-    const threat_assessment_t * p_state,
+    threat_assessment_t * p_state,
     const threat_assessment_scan_t * p_scan,
-    threat_assessment_out_t * p_out);
+    uint32_t now_ms, threat_assessment_out_t * p_out);
+static int32_t threat_assessment_hold_closing (
+    threat_assessment_lane_t * p_lane, int32_t closing_cms,
+    uint32_t now_ms);
 static uint8_t threat_assessment_build_cue (
     const threat_assessment_t * p_state);
 static uint8_t threat_assessment_direction_cue (
@@ -73,6 +76,8 @@ threat_assessment_init_lane (threat_assessment_lane_t * p_lane)
     p_lane->b_blocked = false;
     p_lane->last_d_mm = 0u;
     p_lane->hold_pending_ms = UINT32_MAX;
+    p_lane->held_closing_cms = 0;
+    p_lane->speed_hold_pending_ms = UINT32_MAX;
 }
 
 /*!
@@ -210,7 +215,7 @@ threat_assessment_update (threat_assessment_t * p_state,
         p_out->b_post_obstacle = true;
         p_out->d_mm = (uint16_t) threat_assessment_pick_lane(p_state);
         p_out->cue = threat_assessment_build_cue(p_state);
-        threat_assessment_lane_out(p_state, &scan, p_out);
+        threat_assessment_lane_out(p_state, &scan, now_ms, p_out);
     }
     else if (b_was_active)
     {
@@ -373,6 +378,76 @@ threat_assessment_ttc_ms (uint32_t d_mm, int32_t closing_cms)
     }
 
     return (ttc_ms);
+}
+
+/*!
+ * @brief Smooth a lane's closing speed over a short dropped-reading gap.
+ *
+ * OPEN-26 (18 Nov): bench captures (18 Nov, serial logs attached to the
+ * session) showed the LD2450's own per-frame speed_cms repeatedly
+ * dropping to unusable (<= 0 after threat_assessment_closing_cms()'s
+ * sign convention) for a frame or two, even while the target was
+ * visibly, continuously approaching frame to frame by d_mm alone - this
+ * made lane_ttc_ms flicker between a real value and RTE_TTC_NONE_MS on
+ * almost every other frame. Only called from threat_assessment_lane_out()
+ * while this lane has a live target *this frame* (p_scan's xxx_mm !=
+ * UINT32_MAX) - a lane with no live target at all this frame is a
+ * different case (occupancy itself held via hold_pending_ms) that must
+ * still report RTE_TTC_NONE_MS unchanged from OPEN-23/25; that case
+ * resets this lane's held state instead of calling this function, so a
+ * later live reading never resumes using a speed held across that gap.
+ *
+ * Deliberately reuses THREAT_ASSESSMENT_LANE_HOLD_MS rather than a
+ * second constant: this is the same bench-reasoned "how long is a brief
+ * sensor dropout" judgement as the existing occupancy hold, just applied
+ * to the speed reading instead of to occupancy itself.
+ *
+ * @param[in,out] p_lane       This lane's persistent state.
+ * @param[in]     closing_cms  This frame's own closing speed, from
+ *                              threat_assessment_closing_cms().
+ * @param[in]     now_ms       Time this frame was received.
+ *
+ * @return closing_cms to feed threat_assessment_ttc_ms(): this frame's
+ *         own reading when it is itself usable (> 0); the last usable
+ *         reading from this same lane while within
+ *         THREAT_ASSESSMENT_LANE_HOLD_MS of it; or 0 (never approaching)
+ *         once that window has passed with nothing usable.
+ */
+static int32_t
+threat_assessment_hold_closing (threat_assessment_lane_t * p_lane,
+                                int32_t closing_cms, uint32_t now_ms)
+{
+    int32_t result;
+
+    if (closing_cms > 0)
+    {
+        p_lane->held_closing_cms = closing_cms;
+        p_lane->speed_hold_pending_ms = UINT32_MAX;
+        result = closing_cms;
+    }
+    else
+    {
+        if (UINT32_MAX == p_lane->speed_hold_pending_ms)
+        {
+            p_lane->speed_hold_pending_ms = now_ms;
+        }
+
+        // Unsigned subtraction stays correct when the clock wraps.
+        uint32_t held_ms = now_ms - p_lane->speed_hold_pending_ms;
+
+        if ((p_lane->held_closing_cms > 0) &&
+            (held_ms <= THREAT_ASSESSMENT_LANE_HOLD_MS))
+        {
+            result = p_lane->held_closing_cms;
+        }
+        else
+        {
+            p_lane->held_closing_cms = 0;
+            result = 0;
+        }
+    }
+
+    return (result);
 }
 
 /*!
@@ -561,15 +636,27 @@ threat_assessment_pick_lane (const threat_assessment_t * p_state)
  * last_d_mm but RTE_TTC_NONE_MS for ttc_ms, same rule OPEN-23 used for
  * the single picked lane.
  *
- * @param[in]  p_state  Decision state.
- * @param[in]  p_scan   This frame's scan result (OPEN-23).
- * @param[out] p_out    lane_d_mm/lane_ttc_ms updated for each BLOCKED
- *                      lane.
+ * OPEN-26 (18 Nov): each lane's TTC now goes through
+ * threat_assessment_hold_closing() first, so a brief drop in this
+ * frame's own speed_cms (while the lane still has a live target) no
+ * longer flickers ttc_ms straight to RTE_TTC_NONE_MS and back. A lane
+ * with no live target at all this frame is unaffected - it already
+ * fell straight to RTE_TTC_NONE_MS before OPEN-26 and still does; its
+ * held speed is explicitly reset so a later live reading cannot resume
+ * using a speed held across that gap.
+ *
+ * @param[in,out] p_state  Decision state (lanes' held-speed state is
+ *                          updated here, via threat_assessment_hold_
+ *                          closing(), as well as read).
+ * @param[in]     p_scan   This frame's scan result (OPEN-23).
+ * @param[in]     now_ms   Time this frame was received.
+ * @param[out]    p_out    lane_d_mm/lane_ttc_ms updated for each BLOCKED
+ *                          lane.
  */
 static void
-threat_assessment_lane_out (const threat_assessment_t * p_state,
+threat_assessment_lane_out (threat_assessment_t * p_state,
                             const threat_assessment_scan_t * p_scan,
-                            threat_assessment_out_t * p_out)
+                            uint32_t now_ms, threat_assessment_out_t * p_out)
 {
     if (p_state->left.b_blocked)
     {
@@ -579,8 +666,16 @@ threat_assessment_lane_out (const threat_assessment_t * p_state,
 
         if (UINT32_MAX != p_scan->left_mm)
         {
+            int32_t closing_cms = threat_assessment_hold_closing(
+                &p_state->left, p_scan->left_closing_cms, now_ms);
+
             p_out->lane_ttc_ms[RTE_SIDE_LEFT] = threat_assessment_ttc_ms(
-                p_state->left.last_d_mm, p_scan->left_closing_cms);
+                p_state->left.last_d_mm, closing_cms);
+        }
+        else
+        {
+            p_state->left.held_closing_cms = 0;
+            p_state->left.speed_hold_pending_ms = UINT32_MAX;
         }
     }
 
@@ -591,8 +686,16 @@ threat_assessment_lane_out (const threat_assessment_t * p_state,
 
         if (UINT32_MAX != p_scan->middle_mm)
         {
+            int32_t closing_cms = threat_assessment_hold_closing(
+                &p_state->middle, p_scan->middle_closing_cms, now_ms);
+
             p_out->lane_ttc_ms[RTE_SIDE_CENTER] = threat_assessment_ttc_ms(
-                p_state->middle.last_d_mm, p_scan->middle_closing_cms);
+                p_state->middle.last_d_mm, closing_cms);
+        }
+        else
+        {
+            p_state->middle.held_closing_cms = 0;
+            p_state->middle.speed_hold_pending_ms = UINT32_MAX;
         }
     }
 
@@ -603,8 +706,16 @@ threat_assessment_lane_out (const threat_assessment_t * p_state,
 
         if (UINT32_MAX != p_scan->right_mm)
         {
+            int32_t closing_cms = threat_assessment_hold_closing(
+                &p_state->right, p_scan->right_closing_cms, now_ms);
+
             p_out->lane_ttc_ms[RTE_SIDE_RIGHT] = threat_assessment_ttc_ms(
-                p_state->right.last_d_mm, p_scan->right_closing_cms);
+                p_state->right.last_d_mm, closing_cms);
+        }
+        else
+        {
+            p_state->right.held_closing_cms = 0;
+            p_state->right.speed_hold_pending_ms = UINT32_MAX;
         }
     }
 }

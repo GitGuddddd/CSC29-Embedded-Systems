@@ -67,6 +67,8 @@ void BleRadio_RequestWork(void)
 }
 
 bool BleRadio_IsReady(void) { return s_ready; }
+bool BleRadio_IsAdvertising(void) { return s_ready; }
+bool BleRadio_IsScanning(void) { return s_ready; }
 
 void BleRadio_Configure(const BleRadio_Settings_t * const p_settings)
 {

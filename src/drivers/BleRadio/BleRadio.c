@@ -32,12 +32,13 @@ static BleRadio_RxCallback_t s_rx_callback;
 static atomic_bool s_ready;
 static atomic_bool s_work_pending;
 static uint8_t s_advertising_data[BLERADIO_MAX_AD_BYTES];
+static uint8_t s_advertising_data_len;
 static uint8_t s_scan_response[BLERADIO_MAX_AD_BYTES];
 static uint8_t s_scan_response_len;
 static BleRadio_Settings_t s_applied;
 static bool s_configured;
-static bool s_advertising;
-static bool s_scanning;
+static atomic_bool s_advertising;
+static atomic_bool s_scanning;
 
 static void Check_WorkerContext(void)
 {
@@ -71,8 +72,9 @@ static void Radio_PacketCallback(uint8_t packet_type, uint16_t channel,
         bool ready = (btstack_event_state_get_state(p_packet) == HCI_STATE_WORKING);
         atomic_store_explicit(&s_ready, ready, memory_order_release);
         s_configured = false;
-        s_advertising = false;
-        s_scanning = false;
+        s_advertising_data_len = 0U;
+        atomic_store_explicit(&s_advertising, false, memory_order_release);
+        atomic_store_explicit(&s_scanning, false, memory_order_release);
         if (ready)
         {
             gap_scan_response_set_data(s_scan_response_len, s_scan_response);
@@ -102,6 +104,7 @@ static uint32_t Radio_StartWorker(void * p_context)
     sm_init();
     s_hci_registration.callback = Radio_PacketCallback;
     hci_add_event_handler(&s_hci_registration);
+    gap_set_scan_duplicate_filter(false);
     int status = hci_power_control(HCI_POWER_ON);
     return (status == 0) ? 0U : 1U;
 }
@@ -169,6 +172,16 @@ bool BleRadio_IsReady(void)
     return atomic_load_explicit(&s_ready, memory_order_acquire);
 }
 
+bool BleRadio_IsAdvertising(void)
+{
+    return atomic_load_explicit(&s_advertising, memory_order_acquire);
+}
+
+bool BleRadio_IsScanning(void)
+{
+    return atomic_load_explicit(&s_scanning, memory_order_acquire);
+}
+
 void BleRadio_Configure(const BleRadio_Settings_t * const p_settings)
 {
     Check_WorkerContext();
@@ -185,23 +198,24 @@ void BleRadio_Configure(const BleRadio_Settings_t * const p_settings)
                         (p_settings->scan_window_units != s_applied.scan_window_units);
     if (adv_changed)
     {
-        if (s_advertising)
+        if (atomic_load_explicit(&s_advertising, memory_order_relaxed))
         {
             gap_advertisements_enable(0);
-            s_advertising = false;
+            atomic_store_explicit(&s_advertising, false, memory_order_release);
         }
+        static bd_addr_t k_null_addr = {0};
         gap_advertisements_set_params(p_settings->advertising_units, p_settings->advertising_units,
-                                       BLERADIO_ADV_SCAN_IND, 0U, NULL, 0x07U, 0U);
+                                       BLERADIO_ADV_SCAN_IND, 0U, k_null_addr, 0x07U, 0U);
     }
     if (scan_changed)
     {
-        if (s_scanning)
+        if (atomic_load_explicit(&s_scanning, memory_order_relaxed))
         {
             gap_stop_scan();
         }
         gap_set_scan_parameters(0U, p_settings->scan_interval_units, p_settings->scan_window_units);
         gap_start_scan();
-        s_scanning = true;
+        atomic_store_explicit(&s_scanning, true, memory_order_release);
     }
     s_applied = *p_settings;
     s_configured = true;
@@ -215,11 +229,15 @@ void BleRadio_SetAdvertisingData(const uint8_t * const p_data, uint8_t len)
     {
         return;
     }
-    memcpy(s_advertising_data, p_data, len);
-    gap_advertisements_set_data(len, s_advertising_data);
-    if (!s_advertising)
+    if ((len != s_advertising_data_len) || (memcmp(s_advertising_data, p_data, len) != 0))
+    {
+        memcpy(s_advertising_data, p_data, len);
+        s_advertising_data_len = len;
+        gap_advertisements_set_data(len, s_advertising_data);
+    }
+    if (!atomic_load_explicit(&s_advertising, memory_order_relaxed))
     {
         gap_advertisements_enable(1);
-        s_advertising = true;
+        atomic_store_explicit(&s_advertising, true, memory_order_release);
     }
 }

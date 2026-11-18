@@ -27,8 +27,8 @@ class TelemetrySessionTest {
 
     @Test fun `each node owns a separate heartbeat sequence and timeout`() {
         assertTrue(session.receive(caneDevice.address, packet(seq = 6), 0L))
-        assertTrue(session.receive(GLASSES_ADDRESS, packet(NodeType.GLASSES, seq = 6, at = 490L), 490L))
-        val state = session.snapshot(500L)
+        assertTrue(session.receive(GLASSES_ADDRESS, packet(NodeType.GLASSES, seq = 6, at = 990L), 990L))
+        val state = session.snapshot(1000L)
         assertEquals(LinkState.LINK_LOSS, state.node(NodeType.CANE)?.linkState)
         assertEquals(LinkState.ACTIVE, state.node(NodeType.GLASSES)?.linkState)
         assertEquals(LinkState.LINK_LOSS, state.selectedLinkState)
@@ -48,8 +48,8 @@ class TelemetrySessionTest {
         assertTrue(session.receive(caneDevice.address, packet(at = 0L), 0L))
         assertFalse(session.receive(caneDevice.address, packet(at = 300L), 300L))
         assertFalse(session.receive(caneDevice.address, packet(at = 800L), 800L))
-        assertEquals(LinkState.ACTIVE, session.snapshot(499L).selectedLinkState)
-        assertEquals(LinkState.LINK_LOSS, session.snapshot(500L).selectedLinkState)
+        assertEquals(LinkState.ACTIVE, session.snapshot(999L).selectedLinkState)
+        assertEquals(LinkState.LINK_LOSS, session.snapshot(1000L).selectedLinkState)
     }
 
     @Test fun `compact counters rebase after gap and same-sequence state changes survive wrap`() {
@@ -63,11 +63,11 @@ class TelemetrySessionTest {
 
     @Test fun `batched stale and future results cannot claim a fresh link`() {
         assertTrue(session.receive(caneDevice.address, packet(seq = 1, at = 100L), 100L))
-        assertFalse(session.receive(caneDevice.address, packet(seq = 2, at = 200L), 800L))
-        assertFalse(session.receive(caneDevice.address, packet(seq = 2, at = 900L), 800L))
-        assertTrue(session.receive(caneDevice.address, packet(seq = 2, at = 800L), 850L))
-        assertFalse(session.receive(caneDevice.address, packet(seq = 3, at = 790L), 850L))
-        assertEquals(800L, session.snapshot(850L).node(NodeType.CANE)?.packet?.receivedAt)
+        assertFalse(session.receive(caneDevice.address, packet(seq = 2, at = 200L), 1300L))
+        assertFalse(session.receive(caneDevice.address, packet(seq = 2, at = 1400L), 1300L))
+        assertTrue(session.receive(caneDevice.address, packet(seq = 2, at = 1300L), 1350L))
+        assertFalse(session.receive(caneDevice.address, packet(seq = 3, at = 1290L), 1350L))
+        assertEquals(1300L, session.snapshot(1350L).node(NodeType.CANE)?.packet?.receivedAt)
     }
 
     @Test fun `stop and restart retain duplicate detection but reject old scan batches`() {

@@ -24,5 +24,7 @@ bool BleRadio_IsReady(void);
 /* Worker-context-only operations. The driver owns persistent HCI data buffers. */
 void BleRadio_Configure(const BleRadio_Settings_t * const p_settings);
 void BleRadio_SetAdvertisingData(const uint8_t * const p_data, uint8_t len);
+bool BleRadio_IsAdvertising(void);
+bool BleRadio_IsScanning(void);
 
 #endif /* BLERADIO_H */

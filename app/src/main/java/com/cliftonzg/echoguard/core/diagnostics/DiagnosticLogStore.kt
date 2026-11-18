@@ -1,5 +1,6 @@
 package com.cliftonzg.echoguard.core.diagnostics
 
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -112,6 +113,15 @@ class DiagnosticLogStore @Inject constructor() {
                 _bleLogs.value = bleBuffer.toList()
             }
         }
+        runCatching {
+            val msg = "[${outcome.name}] addr=${address.ifEmpty { "-" }} rssi=${rssi ?: "-"} $detail" +
+                if (rawHex.isNotEmpty()) " raw=$rawHex" else ""
+            when (outcome) {
+                BleLogOutcome.ACCEPTED -> Log.d(TAG_BLE, msg)
+                BleLogOutcome.EVENT -> Log.i(TAG_BLE, msg)
+                BleLogOutcome.DROPPED, BleLogOutcome.PARSE_ERROR -> Log.w(TAG_BLE, msg)
+            }
+        }
     }
 
     fun logBleEvent(detail: String, timestampMs: Long = System.currentTimeMillis()) {
@@ -144,6 +154,9 @@ class DiagnosticLogStore @Inject constructor() {
             )
             _serialLogs.value = serialBuffer.toList()
         }
+        runCatching {
+            Log.d(TAG_SERIAL, if (isOutgoing) "TX: $line" else "RX: $line")
+        }
     }
 
     fun setUsbStatus(status: UsbSerialStatus) {
@@ -168,6 +181,8 @@ class DiagnosticLogStore @Inject constructor() {
     }
 
     companion object {
+        const val TAG_BLE = "EchoGuardBLE"
+        const val TAG_SERIAL = "EchoGuardSerial"
         const val MAX_BLE_ENTRIES = 200
         const val MAX_SERIAL_ENTRIES = 400
     }

@@ -188,7 +188,8 @@ data class SystemPacket(
         val statusChanged = stateFlags != previous.stateFlags ||
             rollingFallSeq != previous.rollingFallSeq || sessionId != previous.sessionId ||
             eventId != previous.eventId || peerAckValid != previous.peerAckValid ||
-            peerAckSessionId != previous.peerAckSessionId || peerAckEventId != previous.peerAckEventId
+            peerAckSessionId != previous.peerAckSessionId || peerAckEventId != previous.peerAckEventId ||
+            radarDistMm != previous.radarDistMm || ttcMs != previous.ttcMs
         if (delta == 0) return statusChanged
         return delta <= 4 || receivedAt - previous.receivedAt >= SEQUENCE_REBASE_MS
     }
@@ -203,7 +204,7 @@ data class SystemPacket(
         const val FLAG_STANDBY = 0x20
         const val FLAG_PARKED_BY_USER = 0x40
         const val FLAG_BUZZER_FAULT = 0x80
-        const val LINK_TIMEOUT_MS = 500L
+        const val LINK_TIMEOUT_MS = 1000L
         const val SEQUENCE_REBASE_MS = 250L
         const val PROTOCOL_VERSION = 2
         const val SAFETY_EXTENSION_MARKER = 0xE2

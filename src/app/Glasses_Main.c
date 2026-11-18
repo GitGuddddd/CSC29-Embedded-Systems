@@ -11,6 +11,7 @@
 #include "drivers/Mpu9250/Mpu9250.h"
 #include "drivers/Ld2450/Ld2450.h"
 #include "drivers/Buzzer/Buzzer.h"
+#include "drivers/BleRadio/BleRadio.h"
 #include "services/BleComm/BleComm.h"
 #include "services/BleComm/BleComm_Cfg.h"
 #include "services/ImuSupervisor/ImuSupervisor.h"
@@ -306,6 +307,15 @@ static void vTask_GlassesPerception(void *pvParameters)
                 AlertManager_AcknowledgeReset();
                 SafetyDelivery_Clear(&fall_delivery);
                 IncidentRetention_Store(false, BleComm_GetSessionId(), head_fall.sequence);
+            }
+            else if ((ch == (int)'s') || (ch == (int)'S'))
+            {
+                printf("[STATUS] up=%u mode=%u ready=%u adv=%u scan=%u imu_f=%u radar_to=%u cane_seen=%u tx_seq=%u\n",
+                       (unsigned)now_ms, (unsigned)s_glasses_mode,
+                       (unsigned)BleRadio_IsReady(), (unsigned)BleRadio_IsAdvertising(),
+                       (unsigned)BleRadio_IsScanning(), (unsigned)imu.fault,
+                       (unsigned)((now_ms - last_valid_radar_frame_ms) >= 500U || Ld2450_HasRxFault()),
+                       (unsigned)cane_seen, (unsigned)glasses_tx_seq);
             }
         }
 

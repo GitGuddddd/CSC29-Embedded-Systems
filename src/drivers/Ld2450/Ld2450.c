@@ -11,8 +11,10 @@
 static int16_t Decode_SignedMagnitude(uint16_t raw)
 {
     int16_t magnitude = (int16_t)(raw & 0x7FFFU);
-    /* The masked magnitude is at most 32767; its negation also fits int16_t. */
-    return ((raw & 0x8000U) != 0U) ? (int16_t)(-magnitude) : magnitude;
+    /* HLK-LD2450 sign-magnitude convention: bit 15 = 1 is positive, bit 15 = 0 is negative.
+     * The masked magnitude is at most 32767; its negation also fits int16_t.
+     */
+    return ((raw & 0x8000U) != 0U) ? magnitude : (int16_t)(-magnitude);
 }
 
 static uint16_t Isqrt32(uint32_t n)

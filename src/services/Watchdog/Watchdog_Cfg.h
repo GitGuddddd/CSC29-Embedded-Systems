@@ -7,7 +7,7 @@
  * Compliance: Barr-C:2018
  */
 
-#define WATCHDOG_CFG_DEADMAN_TIMEOUT_MS  (500U)
+#define WATCHDOG_CFG_DEADMAN_TIMEOUT_MS  (1000U)
 #define WATCHDOG_CFG_HW_TIMEOUT_MS       (2000U)
 #define WATCHDOG_CFG_STARTUP_TIMEOUT_MS  (8000U) /* RP2040 maximum is about 8388 ms. */
 

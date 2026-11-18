@@ -77,13 +77,15 @@ void test_ControllerStartupCachesLatestState_AndProgramsRealIntervalUnits(void)
     TEST_ASSERT_EQUAL_UINT32(0U, MockBleRadio_GetState()->data_count);
     MockBleRadio_SetReady(true);
     TEST_ASSERT_EQUAL_HEX16(0x0140U, MockBleRadio_GetState()->settings.advertising_units);
-    TEST_ASSERT_EQUAL_HEX16(0x0080U, MockBleRadio_GetState()->settings.scan_window_units);
+    TEST_ASSERT_EQUAL_HEX16((uint16_t)((BLECOMM_CFG_SCAN_NORMAL_MS * 8U) / 5U),
+                            MockBleRadio_GetState()->settings.scan_window_units);
 
     s_packet.state_flags = BLE_FLAG_FALL_ALERT;
     TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_FALL_CONFIRMED, false));
     Service(10U);
     TEST_ASSERT_EQUAL_HEX16(0x00A0U, MockBleRadio_GetState()->settings.advertising_units);
-    TEST_ASSERT_EQUAL_HEX16(0x00A0U, MockBleRadio_GetState()->settings.scan_window_units);
+    TEST_ASSERT_EQUAL_HEX16((uint16_t)((BLECOMM_CFG_SCAN_URGENT_MS * 8U) / 5U),
+                            MockBleRadio_GetState()->settings.scan_window_units);
 
     s_packet.state_flags = 0U;
     TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_ACTIVE, false));
@@ -145,8 +147,8 @@ void test_FrozenPeerAdvertisementsDoNotRefreshDeadman_AfterSequenceRebase(void)
     TEST_ASSERT_TRUE(BleComm_PopReceivedPacket(&received, &received_ms));
     TEST_ASSERT_EQUAL_UINT32(400U, received_ms);
     Watchdog_KickBleDeadman(received_ms);
-    TEST_ASSERT_FALSE(Watchdog_CheckBleLinkLoss(899U));
-    TEST_ASSERT_TRUE(Watchdog_CheckBleLinkLoss(900U));
+    TEST_ASSERT_FALSE(Watchdog_CheckBleLinkLoss(1399U));
+    TEST_ASSERT_TRUE(Watchdog_CheckBleLinkLoss(1400U));
 }
 
 void test_RxQueueFull_DoesNotConsumeSequenceBeforeDelivery(void)

@@ -25,6 +25,8 @@ static uint8_t s_last_rx_protocol;
 static uint16_t s_last_rx_ack_session;
 static uint8_t s_last_rx_ack_event;
 static bool s_last_rx_ack_valid;
+static uint16_t s_last_rx_dist_mm = 0xFFFFU;
+static uint16_t s_last_rx_ttc_20ms = BLE_TTC_NO_THREAT;
 static uint16_t s_session_id;
 static bool s_session_rollover;
 
@@ -443,6 +445,8 @@ void BleComm_Init(const BleComm_Config_t * const p_cfg)
     s_last_rx_ack_session = 0U;
     s_last_rx_ack_event = 0U;
     s_last_rx_ack_valid = false;
+    s_last_rx_dist_mm = 0xFFFFU;
+    s_last_rx_ttc_20ms = BLE_TTC_NO_THREAT;
 #ifdef PICO_ON_DEVICE
     s_session_id = (uint16_t)(get_rand_32() & UINT16_MAX);
     if (s_session_id == 0U)
@@ -529,7 +533,9 @@ bool BleComm_ReceivePacketAt(const Ble_AdvancedThreatPacket_t * const p_pkt, uin
                                   (p_pkt->session_id != s_last_rx_session) ||
                                   (p_pkt->peer_ack_valid != s_last_rx_ack_valid) ||
                                   (p_pkt->peer_ack_session_id != s_last_rx_ack_session) ||
-                                  (p_pkt->peer_ack_event_seq != s_last_rx_ack_event);
+                                  (p_pkt->peer_ack_event_seq != s_last_rx_ack_event) ||
+                                  (p_pkt->nearest_dist_mm != s_last_rx_dist_mm) ||
+                                  (p_pkt->ttc_20ms != s_last_rx_ttc_20ms);
             if (((delta == 0U) && !state_changed) ||
                 ((delta > 4U) && ((uint32_t)(now_ms - s_last_rx_ms) < BLECOMM_CFG_RX_REBASE_MS)))
             {
@@ -567,6 +573,8 @@ bool BleComm_ReceivePacketAt(const Ble_AdvancedThreatPacket_t * const p_pkt, uin
     s_last_rx_ack_valid = p_pkt->peer_ack_valid;
     s_last_rx_ack_session = p_pkt->peer_ack_session_id;
     s_last_rx_ack_event = p_pkt->peer_ack_event_seq;
+    s_last_rx_dist_mm = p_pkt->nearest_dist_mm;
+    s_last_rx_ttc_20ms = p_pkt->ttc_20ms;
     return true;
 }
 

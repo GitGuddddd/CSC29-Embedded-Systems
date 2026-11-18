@@ -23,10 +23,12 @@ void test_Ld2450_ParseValidFrame(void)
     frame[2] = 0x03U;
     frame[3] = 0x00U;
 
-    /* Target 1: x=0, y=1500mm, speed=25 cm/s, dist_res=0 */
+    /* Target 1: x=0, y=+1500mm (0x8000 | 1500), speed=+25 cm/s (0x8000 | 25), dist_res=0 */
     frame[4] = 0x00; frame[5] = 0x00; /* x */
-    frame[6] = (uint8_t)(1500 & 0xFF); frame[7] = (uint8_t)((1500 >> 8) & 0xFF); /* y = 1500 */
-    frame[8] = 25; frame[9] = 0; /* speed = 25 */
+    uint16_t y_raw = (uint16_t)(0x8000U | 1500U);
+    uint16_t s_raw = (uint16_t)(0x8000U | 25U);
+    frame[6] = (uint8_t)(y_raw & 0xFFU); frame[7] = (uint8_t)(y_raw >> 8); /* y = +1500 */
+    frame[8] = (uint8_t)(s_raw & 0xFFU); frame[9] = (uint8_t)(s_raw >> 8); /* speed = +25 */
     frame[10] = 0; frame[11] = 0;
 
     /* Footer at 28, 29 */
@@ -63,8 +65,9 @@ static void MakeFrame(uint8_t * const p_frame, uint16_t distance_mm)
     p_frame[0] = 0xAAU;
     p_frame[1] = 0xFFU;
     p_frame[2] = 0x03U;
-    p_frame[6] = (uint8_t)(distance_mm & 0xFFU);
-    p_frame[7] = (uint8_t)(distance_mm >> 8);
+    uint16_t y_raw = (distance_mm > 0U) ? (uint16_t)(0x8000U | distance_mm) : 0U;
+    p_frame[6] = (uint8_t)(y_raw & 0xFFU);
+    p_frame[7] = (uint8_t)(y_raw >> 8);
     p_frame[28] = 0x55U;
     p_frame[29] = 0xCCU;
 }
@@ -217,10 +220,10 @@ void test_Ld2450_DecodesLateralXAndEuclideanDistance(void)
     frame[2] = 0x03U;
     frame[3] = 0x00U;
 
-    /* Target 1: x = -300 mm (0x8000 | 300), y = 400 mm -> dist = 500 mm, speed = +25 cm/s */
-    uint16_t x1_raw = (uint16_t)(0x8000U | 300U);
-    uint16_t y1_raw = 400U;
-    uint16_t s1_raw = 25U;
+    /* Target 1: x = -300 mm (300U), y = +400 mm (0x8000 | 400) -> dist = 500 mm, speed = +25 cm/s (0x8000 | 25) */
+    uint16_t x1_raw = 300U;
+    uint16_t y1_raw = (uint16_t)(0x8000U | 400U);
+    uint16_t s1_raw = (uint16_t)(0x8000U | 25U);
     frame[4] = (uint8_t)(x1_raw & 0xFFU);
     frame[5] = (uint8_t)(x1_raw >> 8);
     frame[6] = (uint8_t)(y1_raw & 0xFFU);
@@ -228,10 +231,10 @@ void test_Ld2450_DecodesLateralXAndEuclideanDistance(void)
     frame[8] = (uint8_t)(s1_raw & 0xFFU);
     frame[9] = (uint8_t)(s1_raw >> 8);
 
-    /* Target 2: x = +600 mm, y = 800 mm -> dist = 1000 mm, speed = -15 cm/s (0x8000 | 15) */
-    uint16_t x2_raw = 600U;
-    uint16_t y2_raw = 800U;
-    uint16_t s2_raw = (uint16_t)(0x8000U | 15U);
+    /* Target 2: x = +600 mm (0x8000 | 600), y = +800 mm (0x8000 | 800) -> dist = 1000 mm, speed = -15 cm/s (15U) */
+    uint16_t x2_raw = (uint16_t)(0x8000U | 600U);
+    uint16_t y2_raw = (uint16_t)(0x8000U | 800U);
+    uint16_t s2_raw = 15U;
     frame[12] = (uint8_t)(x2_raw & 0xFFU);
     frame[13] = (uint8_t)(x2_raw >> 8);
     frame[14] = (uint8_t)(y2_raw & 0xFFU);

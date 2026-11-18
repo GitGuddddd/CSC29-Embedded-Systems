@@ -189,6 +189,10 @@ static void vTask_SafetyPerception(void *pvParameters)
     bool peer_obstacle_active = false;
     uint16_t peer_obstacle_dist_mm = 0xFFFFU;
     bool peer_sensor_fault = false;
+    /* Who raised the latched fall: the cane buzzer only sounds cane-detected falls.
+     * Defaults to true so a retained or unknown-source incident still sounds locally.
+     */
+    bool cane_fall_is_local = true;
     bool peer_ack_valid = false;
     uint16_t peer_ack_session_id = 0U;
     uint8_t peer_ack_event_seq = 0U;
@@ -322,6 +326,15 @@ static void vTask_SafetyPerception(void *pvParameters)
         {
             freefall_active = false;
             FallDetection_Reset();
+        }
+        if (local_fall)
+        {
+            cane_fall_is_local = true;
+        }
+        else if (remote_fall && !mode_out.fall_latched)
+        {
+            /* A new incident raised only by the glasses: the glasses buzzer owns it. */
+            cane_fall_is_local = false;
         }
         if (local_fall)
         {
@@ -508,18 +521,24 @@ static void vTask_SafetyPerception(void *pvParameters)
         /* Link loss is reported over serial and BLE status, not through the grip motor. */
         Haptic_Request(HAPTIC_SRC_LINK, ALERT_NONE);
 
+        if (!mode_out.fall_latched)
+        {
+            cane_fall_is_local = true;
+        }
         /* The arbitrator renders the alarm or secondary cues using synced dual-node rules. */
         Alert_SyncInput_t sync_in = {
             .is_glasses_node = false,
-            .local_fall_latched = mode_out.fall_latched,
+            .local_fall_latched = mode_out.fall_latched && cane_fall_is_local,
             .local_alarm_paused = mode_out.alarm_paused,
-            .peer_fall_active = false,
+            .peer_fall_active = mode_out.fall_latched && !cane_fall_is_local,
             .delivery_fallback = false,
             .cane_link_fresh = !is_link_lost,
             .cane_buzzer_fault = !Buzzer_IsHealthy(),
-            .obstacle_active = (mode.power != CANE_POWER_STANDBY) && peer_obstacle_active,
-            .obstacle_dist_mm = peer_obstacle_dist_mm,
-            .sensor_fault = (mode.power != CANE_POWER_STANDBY) && (imu.fault || peer_sensor_fault)
+            .obstacle_active = false,
+            .obstacle_dist_mm = 0xFFFFU,
+            .sensor_fault = (mode.power != CANE_POWER_STANDBY) &&
+                            ((mode_out.status_flags & BLE_FLAG_SENSOR_FAULT) != 0U),
+            .peer_sensor_fault = (mode.power != CANE_POWER_STANDBY) && peer_sensor_fault
         };
         Alert_Output_t alert_out;
         AlertManager_ArbitrateSynced(&sync_in, now_ms, &alert_out);

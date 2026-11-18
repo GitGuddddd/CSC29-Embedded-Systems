@@ -135,13 +135,13 @@ void test_Scenario_CaneBuzzerFailure_AutomaticFailoverToGlasses(void)
     TEST_ASSERT_TRUE(SafetyDelivery_IsConfirmed(&delivery));
     TEST_ASSERT_FALSE(SafetyDelivery_NeedsFallback(&delivery, t + 50U));
 
-    /* Dual-node audio arbitration in healthy state */
-    /* Glasses buzzer must remain SILENT by default (played ONLY on Cane) */
+    /* Dual-node audio arbitration in healthy state for a Cane-detected fall */
+    /* Glasses buzzer must remain SILENT when the fall is Cane-detected */
     Alert_SyncInput_t sync_glasses = {
         .is_glasses_node = true,
-        .local_fall_latched = true,
+        .local_fall_latched = false,
         .local_alarm_paused = false,
-        .peer_fall_active = false,
+        .peer_fall_active = true,
         .delivery_fallback = SafetyDelivery_NeedsFallback(&delivery, t + 50U),
         .cane_link_fresh = true,
         .cane_buzzer_fault = ((rx_pkt.state_flags & BLE_FLAG_BUZZER_FAULT) != 0U),
@@ -153,12 +153,12 @@ void test_Scenario_CaneBuzzerFailure_AutomaticFailoverToGlasses(void)
     AlertManager_ArbitrateSynced(&sync_glasses, t + 50U, &out_glasses);
     TEST_ASSERT_FALSE(out_glasses.buzzer_active);
 
-    /* Cane buzzer plays the emergency alarm */
+    /* Cane buzzer plays the Cane-detected emergency alarm */
     Alert_SyncInput_t sync_cane = {
         .is_glasses_node = false,
-        .local_fall_latched = false,
+        .local_fall_latched = true,
         .local_alarm_paused = false,
-        .peer_fall_active = true,
+        .peer_fall_active = false,
         .delivery_fallback = false,
         .cane_link_fresh = true,
         .cane_buzzer_fault = !Buzzer_IsHealthy(),

@@ -34,6 +34,7 @@ void Hal_Pwm_Init(uint8_t pin, uint32_t freq_hz, uint8_t duty_percent)
     uint32_t wrap = (clock_freq / (divider * freq_hz)) - 1;
 
     pwm_set_clkdiv(slice_num, (float)divider);
+    pwm_set_counter(slice_num, 0U);
     pwm_set_wrap(slice_num, (uint16_t)wrap);
     pwm_set_chan_level(slice_num, channel, (uint16_t)((wrap * duty_percent) / 100));
     pwm_set_enabled(slice_num, true);
@@ -59,6 +60,7 @@ void Hal_Pwm_SetFrequency(uint8_t pin, uint32_t freq_hz, uint8_t duty_percent)
     uint32_t divider = 16;
     uint32_t wrap = (clock_freq / (divider * freq_hz)) - 1;
 
+    pwm_set_counter(slice_num, 0U);
     pwm_set_wrap(slice_num, (uint16_t)wrap);
     pwm_set_chan_level(slice_num, channel, (uint16_t)((wrap * duty_percent) / 100));
     pwm_set_enabled(slice_num, true);

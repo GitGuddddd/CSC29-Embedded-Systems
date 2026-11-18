@@ -138,7 +138,7 @@ void test_AlertManager_Synced_DefaultPlaysOnlyOnCane(void)
     Alert_Output_t out_glasses;
     Alert_Output_t out_cane;
 
-    /* 1. Glasses-initiated obstacle */
+    /* 1. Glasses-initiated obstacle plays on Glasses only */
     Alert_SyncInput_t in_glasses_obs = {
         .is_glasses_node = true,
         .cane_link_fresh = true,
@@ -148,20 +148,20 @@ void test_AlertManager_Synced_DefaultPlaysOnlyOnCane(void)
         .obstacle_dist_mm = 800U
     };
     AlertManager_ArbitrateSynced(&in_glasses_obs, 1000U, &out_glasses);
-    TEST_ASSERT_FALSE(out_glasses.buzzer_active);
+    TEST_ASSERT_TRUE(out_glasses.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_OBSTACLE_PROXIMITY, out_glasses.active_alert);
 
     Alert_SyncInput_t in_cane_obs = {
         .is_glasses_node = false,
         .cane_link_fresh = true,
         .cane_buzzer_fault = false,
-        .obstacle_active = true,
-        .obstacle_dist_mm = 800U
+        .obstacle_active = false,
+        .obstacle_dist_mm = 0U
     };
     AlertManager_ArbitrateSynced(&in_cane_obs, 1000U, &out_cane);
-    TEST_ASSERT_TRUE(out_cane.buzzer_active);
-    TEST_ASSERT_EQUAL(ALERT_OBSTACLE_PROXIMITY, out_cane.active_alert);
+    TEST_ASSERT_FALSE(out_cane.buzzer_active);
 
-    /* 2. Glasses-initiated head-fall */
+    /* 2. Glasses-initiated head-fall plays on Glasses only */
     AlertManager_Init();
     Alert_SyncInput_t in_glasses_fall = {
         .is_glasses_node = true,
@@ -171,17 +171,40 @@ void test_AlertManager_Synced_DefaultPlaysOnlyOnCane(void)
         .local_fall_latched = true
     };
     AlertManager_ArbitrateSynced(&in_glasses_fall, 2000U, &out_glasses);
-    TEST_ASSERT_FALSE(out_glasses.buzzer_active);
+    TEST_ASSERT_TRUE(out_glasses.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out_glasses.active_alert);
 
-    Alert_SyncInput_t in_cane_fall = {
+    Alert_SyncInput_t in_cane_peer_fall = {
         .is_glasses_node = false,
         .cane_link_fresh = true,
         .cane_buzzer_fault = false,
+        .local_fall_latched = false,
         .peer_fall_active = true
     };
-    AlertManager_ArbitrateSynced(&in_cane_fall, 2000U, &out_cane);
+    AlertManager_ArbitrateSynced(&in_cane_peer_fall, 2000U, &out_cane);
+    TEST_ASSERT_FALSE(out_cane.buzzer_active);
+
+    /* 3. Cane-initiated fall plays on Cane only */
+    AlertManager_Init();
+    Alert_SyncInput_t in_cane_local_fall = {
+        .is_glasses_node = false,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = false,
+        .local_fall_latched = true
+    };
+    AlertManager_ArbitrateSynced(&in_cane_local_fall, 3000U, &out_cane);
     TEST_ASSERT_TRUE(out_cane.buzzer_active);
     TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out_cane.active_alert);
+
+    Alert_SyncInput_t in_glasses_peer_fall = {
+        .is_glasses_node = true,
+        .cane_link_fresh = true,
+        .cane_buzzer_fault = false,
+        .local_fall_latched = false,
+        .peer_fall_active = true
+    };
+    AlertManager_ArbitrateSynced(&in_glasses_peer_fall, 3000U, &out_glasses);
+    TEST_ASSERT_FALSE(out_glasses.buzzer_active);
 }
 
 void test_AlertManager_Synced_CaneBuzzerFaultFailoverToGlasses(void)
@@ -278,6 +301,78 @@ void test_AlertManager_Synced_CaneBuzzerFaultFailoverToGlasses(void)
     TEST_ASSERT_EQUAL(ALERT_SENSOR_FAULT, out_glasses.active_alert);
 }
 
+void test_AlertManager_Synced_FaultRoutingPerNode_AndBothOnCaneOnly(void)
+{
+    Alert_Output_t out_cane;
+    Alert_Output_t out_glasses;
+
+    /* 1. Cane fault only -> Cane buzzes, Glasses silent */
+    AlertManager_Init();
+    Alert_SyncInput_t cane_only_cane = {
+        .is_glasses_node = false,
+        .cane_link_fresh = true,
+        .sensor_fault = true,
+        .peer_sensor_fault = false
+    };
+    AlertManager_ArbitrateSynced(&cane_only_cane, 1000U, &out_cane);
+    TEST_ASSERT_TRUE(out_cane.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_SENSOR_FAULT, out_cane.active_alert);
+
+    AlertManager_Init();
+    Alert_SyncInput_t cane_only_glasses = {
+        .is_glasses_node = true,
+        .cane_link_fresh = true,
+        .sensor_fault = false,
+        .peer_sensor_fault = true
+    };
+    AlertManager_ArbitrateSynced(&cane_only_glasses, 1000U, &out_glasses);
+    TEST_ASSERT_FALSE(out_glasses.buzzer_active);
+
+    /* 2. Glasses fault only -> Glasses buzzes, Cane silent */
+    AlertManager_Init();
+    Alert_SyncInput_t glasses_only_cane = {
+        .is_glasses_node = false,
+        .cane_link_fresh = true,
+        .sensor_fault = false,
+        .peer_sensor_fault = true
+    };
+    AlertManager_ArbitrateSynced(&glasses_only_cane, 2000U, &out_cane);
+    TEST_ASSERT_FALSE(out_cane.buzzer_active);
+
+    AlertManager_Init();
+    Alert_SyncInput_t glasses_only_glasses = {
+        .is_glasses_node = true,
+        .cane_link_fresh = true,
+        .sensor_fault = true,
+        .peer_sensor_fault = false
+    };
+    AlertManager_ArbitrateSynced(&glasses_only_glasses, 2000U, &out_glasses);
+    TEST_ASSERT_TRUE(out_glasses.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_SENSOR_FAULT, out_glasses.active_alert);
+
+    /* 3. Both have fault -> ONLY Cane buzzes, Glasses silent */
+    AlertManager_Init();
+    Alert_SyncInput_t both_cane = {
+        .is_glasses_node = false,
+        .cane_link_fresh = true,
+        .sensor_fault = true,
+        .peer_sensor_fault = true
+    };
+    AlertManager_ArbitrateSynced(&both_cane, 3000U, &out_cane);
+    TEST_ASSERT_TRUE(out_cane.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_SENSOR_FAULT, out_cane.active_alert);
+
+    AlertManager_Init();
+    Alert_SyncInput_t both_glasses = {
+        .is_glasses_node = true,
+        .cane_link_fresh = true,
+        .sensor_fault = true,
+        .peer_sensor_fault = true
+    };
+    AlertManager_ArbitrateSynced(&both_glasses, 3000U, &out_glasses);
+    TEST_ASSERT_FALSE(out_glasses.buzzer_active);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -289,5 +384,6 @@ int main(void)
     RUN_TEST(test_AlertManager_DeliveryFallbackIsSparseAndLowDuty);
     RUN_TEST(test_AlertManager_Synced_DefaultPlaysOnlyOnCane);
     RUN_TEST(test_AlertManager_Synced_CaneBuzzerFaultFailoverToGlasses);
+    RUN_TEST(test_AlertManager_Synced_FaultRoutingPerNode_AndBothOnCaneOnly);
     return UNITY_END();
 }

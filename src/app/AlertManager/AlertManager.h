@@ -42,6 +42,7 @@ typedef struct
     bool obstacle_active;
     uint16_t obstacle_dist_mm;
     bool sensor_fault;
+    bool peer_sensor_fault;
 } Alert_SyncInput_t;
 
 void AlertManager_ArbitrateSynced(const Alert_SyncInput_t * const p_in,

@@ -361,7 +361,8 @@ static void vTask_GlassesPerception(void *pvParameters)
             .cane_buzzer_fault = cane_buzzer_fault,
             .obstacle_active = obstacle,
             .obstacle_dist_mm = current_threat.nearest_distance_mm,
-            .sensor_fault = !standby && (imu.fault || radar_timeout || cane_sensor_fault)
+            .sensor_fault = !standby && (imu.fault || radar_timeout),
+            .peer_sensor_fault = !standby && cane_sensor_fault
         };
         Alert_Output_t alert_out;
         AlertManager_ArbitrateSynced(&sync_in, now_ms, &alert_out);

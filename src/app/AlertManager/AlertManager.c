@@ -160,11 +160,12 @@ void AlertManager_Arbitrate(Alert_Type_t requested_alert,
         return;
     }
 
-    /* Priority 4: Obstacle Proximity (Glasses Buzzer) */
+    /* Priority 4: Obstacle Proximity (150 ms on / 350 ms off per FR9) */
     if (requested_alert == ALERT_OBSTACLE_PROXIMITY)
     {
         p_out->active_alert = ALERT_OBSTACLE_PROXIMITY;
-        p_out->buzzer_active = true;
+        p_out->buzzer_active = ((uint32_t)(now_ms - s_request_start_ms) %
+                                ALERT_OBSTACLE_PERIOD_MS) < ALERT_OBSTACLE_PULSE_MS;
         p_out->generated_freq_hz = AlertManager_MapDistanceToPitch(param);
         p_out->generated_duty_percent = ALERT_STANDARD_DUTY_PERCENT;
         return;
@@ -204,19 +205,15 @@ void AlertManager_ArbitrateSynced(const Alert_SyncInput_t * const p_in,
 
     if (!p_in->is_glasses_node)
     {
-        /* Cane node: default primary buzzer for both nodes */
-        AlertManager_SetFallState(p_in->local_fall_latched || p_in->peer_fall_active,
+        /* Cane node: plays only cane-detected falls and cane faults */
+        AlertManager_SetFallState(p_in->local_fall_latched,
                                   p_in->local_alarm_paused, now_ms);
         Alert_Type_t req = ALERT_NONE;
-        if (p_in->obstacle_active)
-        {
-            req = ALERT_OBSTACLE_PROXIMITY;
-        }
-        else if (p_in->sensor_fault)
+        if (p_in->sensor_fault)
         {
             req = ALERT_SENSOR_FAULT;
         }
-        AlertManager_Arbitrate(req, p_in->obstacle_dist_mm, now_ms, p_out);
+        AlertManager_Arbitrate(req, 0U, now_ms, p_out);
         if (p_in->cane_buzzer_fault)
         {
             p_out->buzzer_active = false;
@@ -227,16 +224,9 @@ void AlertManager_ArbitrateSynced(const Alert_SyncInput_t * const p_in,
     else
     {
         /* Glasses node */
-        bool cane_audio_healthy = p_in->cane_link_fresh && !p_in->cane_buzzer_fault;
-        if (cane_audio_healthy && !p_in->delivery_fallback)
+        if (p_in->cane_link_fresh && p_in->cane_buzzer_fault)
         {
-            /* Case 1: Cane connected & Cane buzzer healthy: Glasses buzzer stays silent */
-            AlertManager_SetFallState(false, false, now_ms);
-            AlertManager_Arbitrate(ALERT_NONE, 0U, now_ms, p_out);
-        }
-        else if (p_in->cane_link_fresh && p_in->cane_buzzer_fault)
-        {
-            /* Case 2: Cane buzzer failed -> Automatic switch-over to Glasses buzzer! */
+            /* Cane buzzer failed -> Failover: Glasses plays its own alarms plus Cane's */
             AlertManager_SetFallState(p_in->local_fall_latched || p_in->peer_fall_active,
                                       p_in->local_alarm_paused, now_ms);
             Alert_Type_t req = ALERT_NONE;
@@ -244,7 +234,7 @@ void AlertManager_ArbitrateSynced(const Alert_SyncInput_t * const p_in,
             {
                 req = ALERT_OBSTACLE_PROXIMITY;
             }
-            else if (p_in->sensor_fault)
+            else if (p_in->sensor_fault || p_in->peer_sensor_fault)
             {
                 req = ALERT_SENSOR_FAULT;
             }
@@ -252,18 +242,17 @@ void AlertManager_ArbitrateSynced(const Alert_SyncInput_t * const p_in,
         }
         else
         {
-            /* Case 3: Cane link lost or receipt timed out */
-            AlertManager_SetFallState(false, false, now_ms);
+            /* Normal / Link-independent: Glasses plays Glasses-detected head fall and
+             * radar obstacle on its own buzzer, and its own sensor fault unless Cane also has one.
+             */
+            AlertManager_SetFallState(p_in->local_fall_latched,
+                                      p_in->local_alarm_paused, now_ms);
             Alert_Type_t req = ALERT_NONE;
-            if (p_in->local_fall_latched && p_in->delivery_fallback)
-            {
-                req = ALERT_FALL_DELIVERY_FAULT;
-            }
-            else if (!p_in->local_fall_latched && p_in->obstacle_active)
+            if (p_in->obstacle_active)
             {
                 req = ALERT_OBSTACLE_PROXIMITY;
             }
-            else if (!p_in->local_fall_latched && p_in->sensor_fault)
+            else if (p_in->sensor_fault && !p_in->peer_sensor_fault)
             {
                 req = ALERT_SENSOR_FAULT;
             }

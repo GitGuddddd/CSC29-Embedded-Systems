@@ -20,6 +20,8 @@
 #define ALERT_FAULT_PULSE_MS           (150U)
 #define ALERT_FAULT_GAP_MS             (200U)
 #define ALERT_FAULT_PERIOD_MS          (5000U)
+#define ALERT_OBSTACLE_PULSE_MS        (150U)
+#define ALERT_OBSTACLE_PERIOD_MS       (500U)
 #define ALERT_DELIVERY_PULSE_MS         (100U)
 #define ALERT_DELIVERY_PERIOD_MS       (2000U)
 
@@ -33,7 +35,7 @@
 #define ALERT_FALL_FREQ_B_HZ           (4000U)
 #define ALERT_FAULT_FREQ_HZ            (1000U)
 #define ALERT_DELIVERY_FREQ_HZ         (1500U)
-#define ALERT_STANDARD_DUTY_PERCENT      (50U)
+#define ALERT_STANDARD_DUTY_PERCENT      (12U)
 #define ALERT_DELIVERY_DUTY_PERCENT      (10U)
 
 #endif /* ALERTMANAGER_CFG_H */

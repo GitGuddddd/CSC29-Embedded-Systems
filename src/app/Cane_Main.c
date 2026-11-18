@@ -23,6 +23,7 @@
 #include "services/Watchdog/Watchdog_Cfg.h"
 #include "app/FallDetection/FallDetection.h"
 #include "app/GroundProjection/GroundProjection.h"
+#include "app/GroundProjection/GroundProjection_Cfg.h"
 #include "app/AlertManager/AlertManager.h"
 #include "app/CaneMode/CaneMode.h"
 
@@ -49,6 +50,15 @@ static bool s_is_l1x = false;
 static Sys_State_t s_sys_mode = SYS_STATE_INIT;
 
 #define CANE_TOF_RECOVERY_MS      (3000U)
+
+/* Any free fall while the grip is released is a dropped cane: alarm at once, without
+ * waiting for impact/stillness/tilt. Tracked independently of the FallDetection state
+ * machine so a prior bump (SETTLING/CHECK_STILL) cannot hide it. 0.5 g / 30 ms is three
+ * consecutive 100 Hz samples (~4 mm of fall) and rejects a single glitched sample.
+ * A held cane still uses the full fall pipeline.
+ */
+#define CANE_RELEASED_FREEFALL_G_SQ (0.25f)   /* (0.5 g)^2 */
+#define CANE_RELEASED_FREEFALL_MS   (30U)
 
 static uint32_t GetCurrentTimeMs(void)
 {
@@ -79,7 +89,33 @@ static bool Tof_Reinit(void)
     return (s_is_l0x || s_is_l1x);
 }
 
-static void Ground_StartCalibration(uint32_t now_ms, bool grip_held, const char * p_source)
+/* True only for a calibration the user explicitly asked for (button/serial). */
+static bool s_cal_feedback = false;
+
+/* While gripped, the motor is reserved for uneven ground (step down / step up).
+ * Link loss, sensor faults and calibration prompts are not felt in the handle.
+ */
+static Alert_Type_t Ground_HapticCue(const Gp_Detector_t * const p_d)
+{
+    if (!p_d->is_armed || !p_d->is_calibrated)
+    {
+        return ALERT_NONE;
+    }
+    switch (p_d->state)
+    {
+        case GP_STATE_STEP_DOWN:
+        /* No return within range over calibrated ground = drop deeper than the ToF can see. */
+        case GP_STATE_NO_GROUND:
+            return ALERT_CLIFF_WARNING;
+        case GP_STATE_STEP_UP: /* raised ground or an obstacle under the beam */
+            return ALERT_CLIFF_STEP_UP;
+        default:
+            return ALERT_NONE;
+    }
+}
+
+static void Ground_StartCalibration(uint32_t now_ms, bool grip_held, const char * p_source,
+                                    bool announce)
 {
     if (!grip_held)
     {
@@ -88,7 +124,11 @@ static void Ground_StartCalibration(uint32_t now_ms, bool grip_held, const char 
     }
 
     GroundProjection_StartCalibration(&s_ground_detector, now_ms);
-    Haptic_PlayOnce(ALERT_CAL_STARTED, now_ms);
+    s_cal_feedback = announce;
+    if (announce)
+    {
+        Haptic_PlayOnce(ALERT_CAL_STARTED, now_ms);
+    }
     printf("[GROUND] Calibrating (%s): hold the cane still on level ground...\n", p_source);
 }
 
@@ -116,6 +156,10 @@ static void vTask_SafetyPerception(void *pvParameters)
     ImuSupervisor_Init(&imu, &Mpu9250_Config_Cane, CANE_PIN_I2C0_SDA, CANE_PIN_I2C0_SCL, start_ms);
     CaneMode_t mode;
     CaneMode_Init(&mode, start_ms);
+    /* Standby would sleep the IMU; a released cane must always detect free fall. */
+    CaneMode_SetStandbyEnabled(&mode, false);
+    /* Picking the cane back up clears the alarm (no 15 s pause) and resumes detection. */
+    CaneMode_SetGripClearsAlarm(&mode, true);
     if (incident_restored)
     {
         CaneMode_RestoreIncident(&mode);
@@ -127,6 +171,8 @@ static void vTask_SafetyPerception(void *pvParameters)
     uint32_t last_tof_reinit_ms = last_tof_alive_ms;
     uint32_t last_telemetry_ms = 0U;
     uint32_t last_cmd_ms = 0U;
+    bool freefall_active = false;
+    uint32_t freefall_start_ms = 0U;
 
     Grip_State_t prev_grip = GRIP_STATE_RELEASED;
     uint16_t last_dist_mm = 0xFFFFU;
@@ -232,9 +278,43 @@ static void vTask_SafetyPerception(void *pvParameters)
         if (imu.sample_valid && mode_out.fall_detection_enabled)
         {
             local_fall = FallDetection_Step(&imu.sample, now_ms);
+
+            /* Free fall may begin during the 20 ms touch debounce, so time it
+             * regardless of grip and fire once the release is committed.
+             */
+            const Imu_Sample_t * const p_s = &imu.sample;
+            float a_sq = (p_s->ax * p_s->ax) + (p_s->ay * p_s->ay) + (p_s->az * p_s->az);
+            if (a_sq < CANE_RELEASED_FREEFALL_G_SQ)
+            {
+                if (!freefall_active)
+                {
+                    freefall_active = true;
+                    freefall_start_ms = now_ms;
+                }
+            }
+            else
+            {
+                freefall_active = false;
+            }
+            if (!local_fall && freefall_active && (current_grip == GRIP_STATE_RELEASED) &&
+                ((uint32_t)(now_ms - freefall_start_ms) >= CANE_RELEASED_FREEFALL_MS))
+            {
+                printf("[FALL] Released cane in free fall for %u ms -> alarm\n",
+                       (unsigned int)(now_ms - freefall_start_ms));
+                local_fall = true;
+            }
         }
-        else if (!imu.sample_valid)
+        else
         {
+            freefall_active = false;
+            if (!imu.sample_valid)
+            {
+                FallDetection_Reset();
+            }
+        }
+        if (local_fall)
+        {
+            freefall_active = false;
             FallDetection_Reset();
         }
         if (local_fall)
@@ -264,25 +344,29 @@ static void vTask_SafetyPerception(void *pvParameters)
                 read_ok = Vl53l1x_ReadDistanceMm(&Vl53l1x_Config_Cane, &dist_mm);
             }
 
-            if (read_ok && dist_mm > 20U && dist_mm != 0xFFFFU)
+            if (read_ok && (dist_mm >= GP_MIN_RANGE_MM) && (dist_mm != 0xFFFFU))
             {
                 if (cane_status.tof_obstructed != 0U)
                 {
-                    printf("[TOF RECOVERY] Optical Sensor cleared (Distance: %u mm)\n", dist_mm);
+                    printf("[TOF] Close object cleared (Distance: %u mm)\n", dist_mm);
                     cane_status.tof_obstructed = 0U;
                 }
                 last_dist_mm = dist_mm;
                 GroundProjection_Feed(&s_ground_detector, GP_RANGE_VALID, dist_mm, now_ms);
             }
-            else if (read_ok && dist_mm <= 20U)
+            else if (read_ok && (dist_mm < GP_MIN_RANGE_MM))
             {
+                /* Anything nearer than the classifier minimum (incl. <= 20 mm "obstructed")
+                 * is an object right under the beam: classify it as the closest valid
+                 * range so it votes STEP_UP (vibration), never INVALID -> SENSOR_FAULT.
+                 */
                 if (cane_status.tof_obstructed == 0U)
                 {
                     cane_status.tof_obstructed = 1U;
-                    printf("[TOF FAULT] Optical Sensor Obstructed (<= 20 mm)! Triggering Caution Warning\n");
+                    printf("[TOF] Object very close (%u mm) -> obstacle\n", dist_mm);
                 }
-                last_dist_mm = 0U;
-                GroundProjection_Feed(&s_ground_detector, GP_RANGE_INVALID, 0U, now_ms);
+                last_dist_mm = dist_mm;
+                GroundProjection_Feed(&s_ground_detector, GP_RANGE_VALID, GP_MIN_RANGE_MM, now_ms);
             }
             else if (read_ok && dist_mm == 0xFFFFU)
             {
@@ -320,17 +404,37 @@ static void vTask_SafetyPerception(void *pvParameters)
             Gp_CalEvent_t cal_event = GroundProjection_TakeCalEvent(&s_ground_detector);
             if (cal_event == GP_CAL_EVENT_DONE)
             {
-                Haptic_PlayOnce(ALERT_CAL_DONE, now_ms);
+                if (s_cal_feedback)
+                {
+                    Haptic_PlayOnce(ALERT_CAL_DONE, now_ms);
+                }
                 printf("[GROUND] Calibration complete. Baseline: %u mm\n", s_ground_detector.baseline_mm);
             }
             else if (cal_event != GP_CAL_EVENT_NONE)
             {
-                Haptic_PlayOnce(ALERT_CAL_FAILED, now_ms);
+                if (s_cal_feedback)
+                {
+                    Haptic_PlayOnce(ALERT_CAL_FAILED, now_ms);
+                }
+                printf("[GROUND] Calibration ended: %s\n", GroundProjection_GetCalEventName(cal_event));
+            }
+            if (cal_event != GP_CAL_EVENT_NONE)
+            {
+                s_cal_feedback = false;
+            }
+            /* Without a baseline no hazard can be classified, so a failed automatic
+             * calibration (cane moving, timeout) silently retries while still gripped.
+             */
+            if ((cal_event != GP_CAL_EVENT_NONE) && (cal_event != GP_CAL_EVENT_DONE) &&
+                !s_ground_detector.is_calibrated && s_ground_detector.is_armed)
+            {
+                Ground_StartCalibration(now_ms, true, "retry", false);
             }
 
-            Alert_Type_t ground_req = (cane_status.tof_obstructed != 0U) ?
-                                      ALERT_SENSOR_FAULT : GroundProjection_GetHapticRequest(&s_ground_detector);
-            Haptic_Request(HAPTIC_SRC_GROUND, ground_req);
+            /* Close objects and no-ground vibrate; stale/missing ToF stays visible via
+             * serial, the BLE sensor-fault flag and FAULT_DEGRADED mode (no vibration).
+             */
+            Haptic_Request(HAPTIC_SRC_GROUND, Ground_HapticCue(&s_ground_detector));
         }
 
         /* Recovery I/O can take longer than one period; stale IMU data must not
@@ -338,7 +442,8 @@ static void vTask_SafetyPerception(void *pvParameters)
          */
         now_ms = GetCurrentTimeMs();
         GroundProjection_Tick(&s_ground_detector, now_ms);
-        bool ground_fault = (cane_status.tof_obstructed != 0U) || (!s_is_l0x && !s_is_l1x) ||
+        /* A close object is an obstacle (vibration), not a technical fault. */
+        bool ground_fault = (!s_is_l0x && !s_is_l1x) ||
                             (s_ground_detector.state == GP_STATE_SENSOR_FAULT);
         CaneMode_Input_t mode_in = {
             .grip = current_grip,
@@ -369,7 +474,8 @@ static void vTask_SafetyPerception(void *pvParameters)
         GroundProjection_SetArmed(&s_ground_detector, mode_out.ground_enabled, now_ms);
         if (mode_out.ground_enabled && !ground_was_armed && !s_ground_detector.is_calibrated)
         {
-            Ground_StartCalibration(now_ms, true, "first grip");
+            /* Silent auto-calibration: first touch after boot must not vibrate. */
+            Ground_StartCalibration(now_ms, true, "first grip", false);
         }
         Haptic_SetGripHeld(mode_out.ground_enabled);
         if (!mode_out.ground_enabled)
@@ -380,7 +486,11 @@ static void vTask_SafetyPerception(void *pvParameters)
         /* The mode manager is the sole alarm owner; the arbitrator renders each pulse. */
         AlertManager_SetFallState(mode_out.fall_latched, mode_out.alarm_paused, now_ms);
         Alert_Output_t alert_out;
-        bool technical_audio = mode_out.degraded && (mode.power != CANE_POWER_STANDBY);
+        /* The ToF only ever vibrates. The buzzer sounds for falls, plus a sparse cue
+         * when the IMU itself has failed (fall detection unavailable). ToF faults stay
+         * visible via serial, BLE fault flag and FAULT_DEGRADED mode.
+         */
+        bool technical_audio = imu.fault && (mode.power != CANE_POWER_STANDBY);
         AlertManager_Arbitrate(technical_audio ? ALERT_SENSOR_FAULT : ALERT_NONE,
                                0U, now_ms, &alert_out);
         uint16_t next_freq_hz = alert_out.buzzer_active ? alert_out.generated_freq_hz : 0U;
@@ -423,12 +533,12 @@ static void vTask_SafetyPerception(void *pvParameters)
             bool calibrate_allowed = mode_out.ground_enabled;
             if (CalButton_Update(Hal_Gpio_Read(CANE_PIN_CAL_BTN), now_ms) == CALBTN_EVENT_GROUND_HOLD)
             {
-                Ground_StartCalibration(now_ms, calibrate_allowed, "button");
+                Ground_StartCalibration(now_ms, calibrate_allowed, "button", true);
             }
             int ch = getchar_timeout_us(0);
             if ((ch == (int)'c') || (ch == (int)'C'))
             {
-                Ground_StartCalibration(now_ms, calibrate_allowed, "serial");
+                Ground_StartCalibration(now_ms, calibrate_allowed, "serial", true);
             }
         }
 
@@ -442,7 +552,8 @@ static void vTask_SafetyPerception(void *pvParameters)
                 printf("[WATCHDOG] BLE LINK LOSS DETECTED (>%u ms)\n", (unsigned int)WATCHDOG_CFG_DEADMAN_TIMEOUT_MS);
             }
         }
-        Haptic_Request(HAPTIC_SRC_LINK, is_link_lost ? ALERT_LINK_LOSS : ALERT_NONE);
+        /* Link loss is reported over serial and BLE status, not through the grip motor. */
+        Haptic_Request(HAPTIC_SRC_LINK, ALERT_NONE);
 
         uint8_t flags = mode_out.status_flags;
         if (mode_out.ground_enabled && mode_in.ground_hazard)

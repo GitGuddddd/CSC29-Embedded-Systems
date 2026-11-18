@@ -66,6 +66,8 @@ typedef struct
     bool park_override;
     bool parked_by_user;
     bool wake_armed;
+    bool standby_enabled; /* false: never park/sleep the IMU, so fall detection never stops */
+    bool grip_clears_alarm; /* true: a fresh grip clears (not pauses) the fall alarm */
     uint32_t pause_start_ms;
     uint32_t last_step_ms;
     CaneMode_Timer_t park;
@@ -78,6 +80,14 @@ typedef struct
 void CaneMode_Init(CaneMode_t * const p_mode, uint32_t now_ms);
 /* Restored incidents resume audible and require normal guarded recovery. */
 void CaneMode_RestoreIncident(CaneMode_t * const p_mode);
+/* Default enabled. When disabled, upright parking never sleeps the IMU and the paused-alarm
+ * park override clears the incident while monitoring continues.
+ */
+void CaneMode_SetStandbyEnabled(CaneMode_t * const p_mode, bool enabled);
+/* Default false (grip pauses for at most 15 s). When true, a fresh grip after the cane was
+ * released clears the incident and fall/ground detection resume immediately.
+ */
+void CaneMode_SetGripClearsAlarm(CaneMode_t * const p_mode, bool enabled);
 void CaneMode_Step(CaneMode_t * const p_mode, const CaneMode_Input_t * const p_in,
                    uint32_t now_ms, CaneMode_Output_t * const p_out);
 const char * CaneMode_GetStateName(Sys_State_t state);

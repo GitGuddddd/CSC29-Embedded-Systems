@@ -382,6 +382,29 @@ void test_GroundProjection_CalibrationStampedAtZero_ReportsFailureInsteadOfSilen
     TEST_ASSERT_FALSE(d.is_calibrated);
 }
 
+void test_GroundProjection_CancelledCalibration_DoesNotReplayOnNextGrip(void)
+{
+    Gp_Detector_t d;
+    GroundProjection_Init(&d, 0U);
+    GroundProjection_SetArmed(&d, true, 0U);
+    GroundProjection_StartCalibration(&d, 0U);
+    for (uint32_t i = 0U; i < GP_CAL_SAMPLES; i++)
+    {
+        GroundProjection_Feed(&d, GP_RANGE_VALID, 1000U, i * 10U);
+    }
+    TEST_ASSERT_EQUAL(GP_CAL_EVENT_DONE, GroundProjection_TakeCalEvent(&d));
+
+    /* Recalibration started, then the user lets go (Cane_Main: cancel, then disarm). */
+    GroundProjection_StartCalibration(&d, 1000U);
+    GroundProjection_CancelCalibration(&d, 1100U);
+    GroundProjection_SetArmed(&d, false, 1100U);
+
+    /* Later grip re-arms without restarting calibration (already calibrated). */
+    GroundProjection_SetArmed(&d, true, 60000U);
+    TEST_ASSERT_EQUAL(GP_CAL_EVENT_NONE, GroundProjection_TakeCalEvent(&d));
+    TEST_ASSERT_TRUE(d.is_calibrated);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -402,5 +425,6 @@ int main(void)
     RUN_TEST(test_GroundProjection_SensorLostDuringCalibration_ReportsSensorFault);
     RUN_TEST(test_GroundProjection_BootCalibration_StampedWithBootTime_Completes);
     RUN_TEST(test_GroundProjection_CalibrationStampedAtZero_ReportsFailureInsteadOfSilence);
+    RUN_TEST(test_GroundProjection_CancelledCalibration_DoesNotReplayOnNextGrip);
     return UNITY_END();
 }

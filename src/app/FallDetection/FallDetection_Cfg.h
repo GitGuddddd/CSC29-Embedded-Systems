@@ -18,6 +18,11 @@
 #define FALL_SETTLE_MS            (800U)
 #define FALL_STILL_MS             (500U)
 
+/* After an impact the device may roll or bounce. Motion restarts the stillness
+ * window instead of discarding the incident, until this long after CHECK_STILL began.
+ */
+#define FALL_STILL_TIMEOUT_MS     (5000U)
+
 /* Stillness acceleration tolerance: (1.0 +/- 0.15)g -> [0.85^2, 1.15^2] */
 #define FALL_STILL_ACC_MIN_G_SQ   (0.7225f)
 #define FALL_STILL_ACC_MAX_G_SQ   (1.3225f)

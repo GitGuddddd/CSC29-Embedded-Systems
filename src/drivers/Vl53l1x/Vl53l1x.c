@@ -83,7 +83,11 @@ bool Vl53l1x_Init(const Vl53l1x_Config_t * const p_cfg)
     (void)Hal_I2c_WriteReg16(p_cfg->i2c_port, p_cfg->dev_addr, VL53L1X_REG_SYSTEM_INTERRUPT_CLEAR, 0x01U);
 
     /* Narrow the SPAD Region-of-Interest (ROI) to center 4x4 (15 degree FoV) */
-    uint8_t roi_cmd[] = {0x03U, 0x03U}; /* TopLeft (3,3) BottomRight (12,12) pseudo-register equivalent */
+    /* 0x007F ROI_CONFIG__USER_ROI_CENTRE_SPAD = 199 (optical centre, ST ULD default);
+     * 0x0080 ROI_CONFIG__USER_ROI_REQUESTED_GLOBAL_XY_SIZE = ((Y-1)<<4)|(X-1) = 0x33 (4x4).
+     * The previous {0x03, 0x03} selected corner SPAD 3 with a 1x4 window (off-axis, weak).
+     */
+    uint8_t roi_cmd[] = {199U, 0x33U};
     (void)Hal_I2c_WriteRegs16(p_cfg->i2c_port, p_cfg->dev_addr, VL53L1X_REG_ROI_CONFIG, roi_cmd, 2U);
 
     /* Start continuous ranging mode (write 0x40 to SYSTEM__MODE_START 0x0087) */

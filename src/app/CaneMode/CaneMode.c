@@ -84,7 +84,30 @@ void CaneMode_Init(CaneMode_t * const p_mode, uint32_t now_ms)
         p_mode->power = CANE_POWER_STARTING;
         p_mode->alarm = CANE_ALARM_CLEAR;
         p_mode->previous_grip = GRIP_STATE_UNKNOWN;
+        p_mode->standby_enabled = true;
         p_mode->last_step_ms = now_ms;
+    }
+}
+
+void CaneMode_SetGripClearsAlarm(CaneMode_t * const p_mode, bool enabled)
+{
+    if (p_mode != NULL)
+    {
+        p_mode->grip_clears_alarm = enabled;
+    }
+}
+
+void CaneMode_SetStandbyEnabled(CaneMode_t * const p_mode, bool enabled)
+{
+    if (p_mode != NULL)
+    {
+        p_mode->standby_enabled = enabled;
+        if (!enabled)
+        {
+            p_mode->park_requested = false;
+            p_mode->park_override = false;
+            p_mode->park.running = false;
+        }
     }
 }
 
@@ -205,8 +228,17 @@ void CaneMode_Step(CaneMode_t * const p_mode, const CaneMode_Input_t * const p_i
             }
             if (rising && p_mode->acknowledge_armed)
             {
-                p_mode->alarm = CANE_ALARM_PAUSED;
-                p_mode->pause_start_ms = now_ms;
+                if (p_mode->grip_clears_alarm)
+                {
+                    /* Picked back up: incident over, resume fall/ground detection now. */
+                    p_mode->alarm = CANE_ALARM_CLEAR;
+                    p_out->reset_fall_detection = true;
+                }
+                else
+                {
+                    p_mode->alarm = CANE_ALARM_PAUSED;
+                    p_mode->pause_start_ms = now_ms;
+                }
                 p_mode->override_armed = false;
                 p_mode->override_holding = false;
                 Reset_Qualifications(p_mode);
@@ -248,8 +280,20 @@ void CaneMode_Step(CaneMode_t * const p_mode, const CaneMode_Input_t * const p_i
                 if (Qualify(&p_mode->hold, held && p_mode->override_holding && still &&
                             !pose_fault && !p_in->fall_pending, CANEMODE_PARK_HOLD_MS, now_ms))
                 {
-                    p_mode->park_requested = true;
-                    p_mode->park_override = true;
+                    if (p_mode->standby_enabled)
+                    {
+                        p_mode->park_requested = true;
+                        p_mode->park_override = true;
+                    }
+                    else
+                    {
+                        /* Deliberate "leave it lying" gesture: clear, keep monitoring. */
+                        p_mode->alarm = CANE_ALARM_CLEAR;
+                        p_mode->override_armed = false;
+                        p_mode->override_holding = false;
+                        p_out->reset_fall_detection = true;
+                        Reset_Qualifications(p_mode);
+                    }
                 }
             }
         }
@@ -257,8 +301,8 @@ void CaneMode_Step(CaneMode_t * const p_mode, const CaneMode_Input_t * const p_i
     else if (!new_fall && (p_mode->power == CANE_POWER_MONITORING))
     {
         /* Elapsed release time alone never disables a pending fall detector. */
-        if (Qualify(&p_mode->park, released && park_upright && !pose_fault && !p_in->fall_pending,
-                    CANEMODE_PARK_MS, now_ms))
+        if (Qualify(&p_mode->park, p_mode->standby_enabled && released && park_upright &&
+                    !pose_fault && !p_in->fall_pending, CANEMODE_PARK_MS, now_ms))
         {
             p_mode->park_requested = true;
             p_mode->park_override = false;

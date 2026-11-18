@@ -1,3 +1,19 @@
+# == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
+if(WIN32)
+    set(USERHOME $ENV{USERPROFILE})
+else()
+    set(USERHOME $ENV{HOME})
+endif()
+set(sdkVersion 2.3.1)
+set(toolchainVersion 15_2_Rel1)
+set(picotoolVersion 2.3.1)
+set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+if (EXISTS ${picoVscode})
+    include(${picoVscode})
+endif()
+# ====================================================================================
+set(PICO_BOARD pico_w CACHE STRING "Board type")
+
 cmake_minimum_required(VERSION 3.13)
 
 # -------------------------------------------------------------
@@ -29,7 +45,7 @@ endif()
 # Check if we are building for RP2040 target
 if (NOT BUILD_TESTS AND PICO_SDK_PATH AND EXISTS "${PICO_SDK_PATH}/pico_sdk_init.cmake")
     message(STATUS "[Build Target] Raspberry Pi Pico SDK detected: ${PICO_SDK_PATH}")
-    include(${CMAKE_CURRENT_SOURCE_DIR}/soup/pico_sdk/pico_sdk_import.cmake)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/pico_sdk_import.cmake)
     project(SmartMobilityAid_AUTOSAR C CXX ASM)
     set(CMAKE_C_STANDARD 11)
     set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -66,8 +82,6 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/config
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/rte
-    ${CMAKE_CURRENT_SOURCE_DIR}/soup
-    ${CMAKE_CURRENT_SOURCE_DIR}/soup/unity/src
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/harness
 )
 
@@ -252,10 +266,22 @@ set_property(SOURCE src/services/BleComm/BleComm_Policy.c APPEND PROPERTY
 if (NOT BUILD_FOR_PICO_TARGET)
 enable_testing()
 
-add_library(unity STATIC
-    soup/unity/src/unity.c
+# Unity is fetched at a pinned release (like FreeRTOS above) instead of being vendored.
+# Offline: pass -DFETCHCONTENT_SOURCE_DIR_UNITY=<path to a Unity checkout>.
+include(FetchContent)
+FetchContent_Declare(
+    Unity
+    GIT_REPOSITORY https://github.com/ThrowTheSwitch/Unity.git
+    GIT_TAG        v2.6.0
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR  do-not-add-subdirectory  # download only; we build the one source file below
 )
-target_include_directories(unity PUBLIC soup/unity/src tests/harness)
+FetchContent_MakeAvailable(Unity)
+
+add_library(unity STATIC
+    ${unity_SOURCE_DIR}/src/unity.c
+)
+target_include_directories(unity PUBLIC ${unity_SOURCE_DIR}/src tests/harness)
 
 # ----------------- Unit Tests -----------------
 add_executable(test_CaneMode

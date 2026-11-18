@@ -26,6 +26,7 @@ static const char * s_state_names[] = {
 static Fall_MachineState_t s_state = FALL_STATE_IDLE;
 static Fall_Config_t s_active_cfg;
 static uint32_t s_t0_ms = 0U;
+static uint32_t s_still_start_ms = 0U;
 
 static float s_ref_x = 0.0f;
 static float s_ref_y = 0.0f;
@@ -164,6 +165,7 @@ bool __not_in_flash_func(FallDetection_Step)(const Imu_Sample_t * const p_sample
             {
                 s_state = FALL_STATE_CHECK_STILL;
                 s_t0_ms = now_ms;
+                s_still_start_ms = now_ms;
                 s_cur_x = p_sample->ax;
                 s_cur_y = p_sample->ay;
                 s_cur_z = p_sample->az;
@@ -181,7 +183,19 @@ bool __not_in_flash_func(FallDetection_Step)(const Imu_Sample_t * const p_sample
                 (a_sq > FALL_STILL_ACC_MAX_G_SQ) ||
                 (g_sq > FALL_STILL_GYRO_DPS_SQ))
             {
-                s_state = FALL_STATE_IDLE;
+                if ((now_ms - s_still_start_ms) >= FALL_STILL_TIMEOUT_MS)
+                {
+                    /* Never came to rest (e.g. picked up and carried): not a fall. */
+                    s_state = FALL_STATE_IDLE;
+                }
+                else
+                {
+                    /* Rolling/bouncing after impact: restart the stillness window. */
+                    s_t0_ms = now_ms;
+                    s_cur_x = p_sample->ax;
+                    s_cur_y = p_sample->ay;
+                    s_cur_z = p_sample->az;
+                }
             }
             else if ((now_ms - s_t0_ms) >= s_active_cfg.still_ms)
             {

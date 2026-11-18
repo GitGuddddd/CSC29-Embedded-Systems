@@ -55,6 +55,15 @@ void GroundProjection_SetArmed(Gp_Detector_t * const p_d, bool armed, uint32_t n
     p_d->is_armed = armed;
     p_d->last_sample_ms = now_ms;
 
+    if (!armed)
+    {
+        /* Nobody can feel a calibration outcome while the cane is released. A pending
+         * event (e.g. CANCELLED on let-go) must not replay as a CAL_FAILED buzz on the
+         * next grip, which only re-arms without restarting calibration once calibrated.
+         */
+        p_d->cal_event = GP_CAL_EVENT_NONE;
+    }
+
     Reset_Votes(p_d);
     Reset_History(p_d);
     Reset_CalibrationSamples(p_d);

@@ -387,6 +387,66 @@ void test_RestoredIncidentResumesAudibleAndRequiresNormalGuardedClearance(void)
     TEST_ASSERT_EQUAL(SYS_STATE_FALL_MUTED, s_out.state);
 }
 
+void test_StandbyDisabled_ReleasedUprightCaneNeverSleeps_FallDetectionStaysOn(void)
+{
+    CaneMode_SetStandbyEnabled(&s_mode, false);
+    Grip(GRIP_STATE_RELEASED);
+    Upright();
+    Advance(60000U);
+    TEST_ASSERT_FALSE(s_out.imu_sleep_requested);
+    TEST_ASSERT_TRUE(s_out.fall_detection_enabled);
+    TEST_ASSERT_EQUAL(SYS_STATE_UNGRIPPED_WATCH, s_out.state);
+}
+
+void test_StandbyDisabled_OverrideClearsIncidentWithoutSleeping(void)
+{
+    CaneMode_SetStandbyEnabled(&s_mode, false);
+    Pause();
+    Grip(GRIP_STATE_RELEASED);
+    Advance(100U);
+    Grip(GRIP_STATE_HELD);
+    Advance(3000U);
+    TEST_ASSERT_FALSE(s_out.imu_sleep_requested);
+    TEST_ASSERT_FALSE(s_out.fall_latched);
+    TEST_ASSERT_TRUE(s_out.fall_detection_enabled);
+    TEST_ASSERT_BITS_LOW(BLE_FLAG_STANDBY, s_out.status_flags);
+}
+
+void test_GripClearsAlarm_RegripClearsIncidentAndResumesDetection(void)
+{
+    CaneMode_SetStandbyEnabled(&s_mode, false);
+    CaneMode_SetGripClearsAlarm(&s_mode, true);
+    Grip(GRIP_STATE_RELEASED);
+    Fall();
+    TEST_ASSERT_TRUE(s_out.fall_latched);
+    TEST_ASSERT_FALSE(s_out.fall_detection_enabled);
+
+    Grip(GRIP_STATE_HELD); /* still horizontal: grip alone clears */
+    TEST_ASSERT_FALSE(s_out.fall_latched);
+    TEST_ASSERT_TRUE(s_out.reset_fall_detection);
+    TEST_ASSERT_BITS_LOW(BLE_FLAG_FALL_ALERT | BLE_FLAG_ALARM_PAUSED, s_out.status_flags);
+    Advance(10U);
+    TEST_ASSERT_TRUE(s_out.fall_detection_enabled);
+    TEST_ASSERT_TRUE(s_out.ground_enabled);
+
+    /* Stays clear well past the old 15 s pause window, and a new fall re-latches. */
+    Advance(20000U);
+    TEST_ASSERT_FALSE(s_out.fall_latched);
+    Fall();
+    TEST_ASSERT_TRUE(s_out.fall_latched);
+}
+
+void test_GripClearsAlarm_PinnedGripStillCannotClear(void)
+{
+    CaneMode_SetGripClearsAlarm(&s_mode, true);
+    Fall(); /* fall while already held: needs release + regrip (or upright recovery) */
+    Advance(500U);
+    TEST_ASSERT_TRUE(s_out.fall_latched);
+    Grip(GRIP_STATE_RELEASED);
+    Grip(GRIP_STATE_HELD);
+    TEST_ASSERT_FALSE(s_out.fall_latched);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -411,5 +471,9 @@ int main(void)
     RUN_TEST(test_TofFault_DoesNotPreventImuVerifiedRecovery);
     RUN_TEST(test_MovingAgain_CancelsUncommittedNormalParking);
     RUN_TEST(test_RestoredIncidentResumesAudibleAndRequiresNormalGuardedClearance);
+    RUN_TEST(test_StandbyDisabled_ReleasedUprightCaneNeverSleeps_FallDetectionStaysOn);
+    RUN_TEST(test_StandbyDisabled_OverrideClearsIncidentWithoutSleeping);
+    RUN_TEST(test_GripClearsAlarm_RegripClearsIncidentAndResumesDetection);
+    RUN_TEST(test_GripClearsAlarm_PinnedGripStillCannotClear);
     return UNITY_END();
 }

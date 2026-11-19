@@ -9,6 +9,6 @@
 
 /* Allows multiple urgent advertising/scan opportunities plus the return receipt. */
 #define SAFETYDELIVERY_CFG_RECEIPT_TIMEOUT_MS (750U)
-#define SAFETYDELIVERY_CFG_PEER_TIMEOUT_MS    (500U)
+#define SAFETYDELIVERY_CFG_PEER_TIMEOUT_MS    (1000U)
 
 #endif /* SAFETYDELIVERY_CFG_H */

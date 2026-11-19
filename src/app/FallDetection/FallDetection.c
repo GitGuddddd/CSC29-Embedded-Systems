@@ -1,6 +1,7 @@
 #include "FallDetection.h"
 #include "FallDetection_Cfg.h"
 #include <stddef.h>
+#include <math.h>
 
 #ifdef PICO_ON_DEVICE
 #include "pico.h"
@@ -20,7 +21,8 @@ static const char * s_state_names[] = {
     "FREEFALL",
     "WAIT_IMPACT",
     "SETTLING",
-    "CHECK_STILL"
+    "CHECK_STILL",
+    "ALERT_PENDING"
 };
 
 static Fall_MachineState_t s_state = FALL_STATE_IDLE;
@@ -28,6 +30,8 @@ static Fall_Config_t s_active_cfg;
 static uint32_t s_t0_ms = 0U;
 static uint32_t s_still_start_ms = 0U;
 static uint32_t s_still_samples = 0U;
+static uint32_t s_recover_t0_ms = 0U;
+static bool s_pending_moved = false;
 
 static float s_ref_x = 0.0f;
 static float s_ref_y = 0.0f;
@@ -36,8 +40,6 @@ static float s_ref_z = 1.0f;
 static float s_cur_x = 0.0f;
 static float s_cur_y = 0.0f;
 static float s_cur_z = 0.0f;
-
-extern float sqrtf(float);
 
 static bool Is_Still(float a_sq, float g_sq)
 {
@@ -51,7 +53,8 @@ static float Vector_MagSq(float x, float y, float z)
     return (x * x) + (y * y) + (z * z);
 }
 
-static float Vector_CosineSimilarity(float ax, float ay, float az, float bx, float by, float bz)
+static float Vector_CosineSimilarity(float ax, float ay, float az,
+                                     float bx, float by, float bz)
 {
     float dot = (ax * bx) + (ay * by) + (az * bz);
     float mag_a_sq = Vector_MagSq(ax, ay, az);
@@ -88,6 +91,7 @@ void FallDetection_Reset(void)
 {
     s_state = FALL_STATE_IDLE;
     s_t0_ms = 0U;
+    s_still_samples = 0U;   /* Re-arm fast reference learning. */
 }
 
 Fall_MachineState_t FallDetection_GetState(void)
@@ -100,7 +104,8 @@ const char * FallDetection_GetStateName(void)
     return s_state_names[s_state];
 }
 
-bool __not_in_flash_func(FallDetection_Step)(const Imu_Sample_t * const p_sample, uint32_t now_ms)
+bool __not_in_flash_func(FallDetection_Step)(
+    const Imu_Sample_t * const p_sample, uint32_t now_ms)
 {
     if (p_sample == NULL)
     {
@@ -139,10 +144,15 @@ bool __not_in_flash_func(FallDetection_Step)(const Imu_Sample_t * const p_sample
                 s_state = FALL_STATE_FREEFALL;
                 s_t0_ms = now_ms;
             }
-            else if (s_active_cfg.allow_direct_impact && (a_sq > s_active_cfg.impact_thresh_sq))
+            else if (s_active_cfg.allow_direct_impact &&
+                     (a_sq > s_active_cfg.impact_thresh_sq))
             {
                 s_state = FALL_STATE_SETTLING;
                 s_t0_ms = now_ms;
+            }
+            else
+            {
+                /* No fall cue on this sample: stay in IDLE. */
             }
             break;
         }
@@ -180,6 +190,10 @@ bool __not_in_flash_func(FallDetection_Step)(const Imu_Sample_t * const p_sample
             {
                 s_state = FALL_STATE_IDLE;
             }
+            else
+            {
+                /* Still inside the impact window: keep waiting. */
+            }
             break;
         }
 
@@ -207,12 +221,16 @@ bool __not_in_flash_func(FallDetection_Step)(const Imu_Sample_t * const p_sample
             {
                 if ((now_ms - s_still_start_ms) >= FALL_STILL_TIMEOUT_MS)
                 {
-                    /* Never came to rest (e.g. picked up and carried): not a fall. */
+                    /* Never came to rest (e.g. picked up and carried):
+                     * not a fall.
+                     */
                     s_state = FALL_STATE_IDLE;
                 }
                 else
                 {
-                    /* Rolling/bouncing after impact: restart the stillness window. */
+                    /* Rolling/bouncing after impact: restart the
+                     * stillness window.
+                     */
                     s_t0_ms = now_ms;
                     s_cur_x = p_sample->ax;
                     s_cur_y = p_sample->ay;
@@ -222,12 +240,69 @@ bool __not_in_flash_func(FallDetection_Step)(const Imu_Sample_t * const p_sample
             else if ((now_ms - s_t0_ms) >= s_active_cfg.still_ms)
             {
                 s_state = FALL_STATE_IDLE;
-                float cos_sim = Vector_CosineSimilarity(s_ref_x, s_ref_y, s_ref_z,
-                                                        s_cur_x, s_cur_y, s_cur_z);
+                float cos_sim =
+                    Vector_CosineSimilarity(s_ref_x, s_ref_y, s_ref_z,
+                                            s_cur_x, s_cur_y, s_cur_z);
                 if (cos_sim < FALL_TILT_COS_THRESH)
                 {
-                    fall_confirmed = true;
+                    if (s_active_cfg.pending_ms > 0U)
+                    {
+                        /* Give the user a chance to recover first. */
+                        s_state = FALL_STATE_ALERT_PENDING;
+                        s_t0_ms = now_ms;
+                        s_recover_t0_ms = now_ms;
+                        s_pending_moved = false;
+                    }
+                    else
+                    {
+                        fall_confirmed = true;
+                    }
                 }
+            }
+            else
+            {
+                /* Still, but not for long enough yet: keep timing. */
+            }
+            break;
+        }
+
+        case FALL_STATE_ALERT_PENDING:
+        {
+            s_cur_x += 0.1f * (p_sample->ax - s_cur_x);
+            s_cur_y += 0.1f * (p_sample->ay - s_cur_y);
+            s_cur_z += 0.1f * (p_sample->az - s_cur_z);
+
+            if (!Is_Still(a_sq, g_sq))
+            {
+                s_pending_moved = true;
+            }
+
+            float cos_sim =
+                Vector_CosineSimilarity(s_ref_x, s_ref_y, s_ref_z,
+                                        s_cur_x, s_cur_y, s_cur_z);
+            if (cos_sim < FALL_TILT_COS_THRESH)
+            {
+                /* Still tilted: restart the recovery timer. */
+                s_recover_t0_ms = now_ms;
+            }
+
+            if (s_pending_moved &&
+                ((now_ms - s_recover_t0_ms) >= FALL_RECOVER_MS))
+            {
+                /* Moved and back near the normal pose: the user got up,
+                 * so the fall is cancelled and never reported.
+                 */
+                s_state = FALL_STATE_IDLE;
+            }
+            else if ((now_ms - s_t0_ms) >= s_active_cfg.pending_ms)
+            {
+                /* No recovery in time: report the fall. */
+                s_state = FALL_STATE_IDLE;
+                fall_confirmed = true;
+            }
+            else
+            {
+                /* Keep waiting for recovery or the timeout. */
             }
             break;
         }

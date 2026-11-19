@@ -14,6 +14,7 @@ const Fall_Config_t FallConfig_Head = {
     .impact_window_ms    = FALL_IMPACT_WINDOW_MS,
     .settle_ms           = FALL_SETTLE_MS,
     .still_ms            = FALL_STILL_MS,
+    .pending_ms          = FALL_PENDING_MS,
     .allow_direct_impact = false
 };
 
@@ -24,5 +25,6 @@ const Fall_Config_t FallConfig_Cane = {
     .impact_window_ms    = 800U,
     .settle_ms           = 600U,
     .still_ms            = 400U,
+    .pending_ms          = 0U,    /* Cane reports falls immediately */
     .allow_direct_impact = true
 };

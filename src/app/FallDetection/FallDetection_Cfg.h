@@ -4,7 +4,8 @@
 /*
  * \file FallDetection_Cfg.h
  * \brief Compile-time thresholds for FallDetection SWC
- * Uses squared thresholds to prevent software float emulation on Cortex-M0+ (Barr-C:2018)
+ * Uses squared thresholds to avoid square roots on the Cortex-M0+
+ * (no FPU). Compliance: Barr-C:2018
  */
 
 /* 0.5g -> 0.25g^2 */
@@ -19,9 +20,20 @@
 #define FALL_STILL_MS             (500U)
 
 /* After an impact the device may roll or bounce. Motion restarts the stillness
- * window instead of discarding the incident, until this long after CHECK_STILL began.
+ * window instead of discarding the incident, until this long after
+ * CHECK_STILL began.
  */
 #define FALL_STILL_TIMEOUT_MS     (5000U)
+
+/* ALERT_PENDING: after a fall is confirmed, wait this long before reporting
+ * it (buzzer and BLE). The fall is cancelled if the user recovers first.
+ */
+#define FALL_PENDING_MS           (5000U)
+
+/* Recovery during ALERT_PENDING: the head has moved, and has been back within
+ * 45 degrees of the normal pose for this long.
+ */
+#define FALL_RECOVER_MS           (1000U)
 
 /* Stillness acceleration tolerance: (1.0 +/- 0.15)g -> [0.85^2, 1.15^2] */
 #define FALL_STILL_ACC_MIN_G_SQ   (0.7225f)

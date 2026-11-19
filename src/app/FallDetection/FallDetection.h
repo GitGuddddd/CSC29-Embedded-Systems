@@ -15,7 +15,8 @@ typedef enum
     FALL_STATE_FREEFALL,
     FALL_STATE_WAIT_IMPACT,
     FALL_STATE_SETTLING,
-    FALL_STATE_CHECK_STILL
+    FALL_STATE_CHECK_STILL,
+    FALL_STATE_ALERT_PENDING
 } Fall_MachineState_t;
 
 typedef struct
@@ -26,6 +27,7 @@ typedef struct
     uint32_t impact_window_ms;
     uint32_t settle_ms;
     uint32_t still_ms;
+    uint32_t pending_ms;    /* 0 = report the fall straight from CHECK_STILL */
     bool allow_direct_impact;
 } Fall_Config_t;
 

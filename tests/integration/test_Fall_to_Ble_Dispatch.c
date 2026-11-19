@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "app/FallDetection/FallDetection.h"
+#include "app/FallDetection/FallDetection_Cfg.h"
 #include "services/BleComm/BleComm.h"
 #include <string.h>
 
@@ -43,10 +44,11 @@ void test_Integration_FallToBleDispatch(void)
 
     /* Still on ground, tilted 90 degrees */
     s.ax = 1.0f; s.ay = 0.0f; s.az = 0.0f;
-    for (uint8_t i = 0U; i < 50U; i++)
+    /* Stillness, then ALERT_PENDING with no recovery. */
+    for (uint32_t i = 0U; i < ((FALL_STILL_MS + FALL_PENDING_MS) / 10U); i++)
     {
         now += 10U;
-        fall_detected = FallDetection_Step(&s, now);
+        fall_detected |= FallDetection_Step(&s, now);
     }
 
     TEST_ASSERT_TRUE(fall_detected);

@@ -40,7 +40,21 @@ contain closing speed, so the UI does not display the decoder's synthetic zero a
 a measured 0 cm/s. Rolling fall sequence numbers are labeled as sequences, not
 lifetime incident totals.
 
-The compact TTC range is 0–81880 ms at 20 ms resolution, with `0xFFF` unavailable.
+The cane's v2 frame keeps raw slant distance in the original 2 mm field. The
+12-bit slot used for TTC on the glasses carries optional cane geometry. Bit 11 marks
+geometry, bit 10 marks a valid projection, and bits 0–9 store the beam angle from
+vertical in 0.2° steps (0–900). An angle of 0° means the beam points straight down.
+`0xFFF` means geometry is unavailable, including
+on older cane firmware. Frame length and receipt layout stay the same.
+
+The phone displays the raw distance, beam angle, and vertical distance on the cane
+card. It calculates vertical distance as `max(raw mm, 30 mm) × cos(beam angle)`
+only when the cane marks the projection valid. The wire resolution can cause a
+small difference from the projection printed by the cane's serial log. An angle
+outside the cane's valid range can still appear beside an unavailable vertical
+distance.
+
+The glasses' compact TTC range is 0–81880 ms at 20 ms resolution, with `0xFFF` unavailable.
 Firmware keeps the 12-bit tick unit through the threat/transport pipeline and checks
 overflow before assigning it; Android expands ticks to its 32-bit millisecond value for
 display. No-target and out-of-range results do not become zero or wrapped urgent TTCs.

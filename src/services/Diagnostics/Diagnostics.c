@@ -10,9 +10,13 @@
 
 void Diagnostics_Task(void * p_parameters)
 {
-    (void)p_parameters;
+    const Diagnostics_Config_t * const p_cfg = p_parameters;
     for (;;)
     {
+        if ((p_cfg != NULL) && (p_cfg->drain_log != NULL))
+        {
+            p_cfg->drain_log();
+        }
         /* SDK flush takes its USB mutex and pumps TinyUSB even before CDC connects.
          * Using this path, rather than a concurrent raw tud_task(), preserves the
          * SDK's synchronization with printf/getchar on the two cores.

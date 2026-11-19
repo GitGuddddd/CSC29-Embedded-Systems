@@ -272,6 +272,46 @@ void test_CompactReceiptDecoderRejectsReservedAndUnscopedAcknowledgements(void)
     TEST_ASSERT_FALSE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &decoded));
 }
 
+void test_CaneGeometryUsesExistingSlotAndPreservesSafetyReceipt(void)
+{
+    TEST_ASSERT_EQUAL_HEX16(0x0800U, BleComm_PackCaneGeometry(0U, false));
+    TEST_ASSERT_EQUAL_HEX16(0x0F84U, BleComm_PackCaneGeometry(900U, true));
+    TEST_ASSERT_EQUAL_HEX16(BLE_TTC_NO_THREAT, BleComm_PackCaneGeometry(901U, true));
+    TEST_ASSERT_EQUAL_HEX16(BLE_TTC_NO_THREAT, BleComm_PackCaneGeometry(UINT16_MAX, false));
+
+    s_packet.heartbeat_seq = 3U;
+    s_packet.rolling_fall_seq = 6U;
+    s_packet.state_flags = BLE_FLAG_CANE_HELD | BLE_FLAG_FALL_ALERT;
+    s_packet.nearest_dist_mm = 1200U;
+    s_packet.ttc_20ms = BleComm_PackCaneGeometry(150U, true) & 0x0FFFU;
+    s_packet.session_id = 0x1234U;
+    s_packet.peer_ack_valid = true;
+    s_packet.peer_ack_session_id = 0x5678U;
+    s_packet.peer_ack_event_seq = 4U;
+    s_packet.session_rollover = true;
+
+    static const uint8_t expected[] = {
+        0xA1U, 0xB6U, 0x11U, 0x58U, 0x26U, 0xC9U,
+        0xE2U, 0x34U, 0x12U, 0x78U, 0x56U, 0x34U
+    };
+    Ble_RawFrame_t frame;
+    BleComm_EncodeFrame(&s_packet, &frame);
+    TEST_ASSERT_EQUAL_UINT32(sizeof(expected), sizeof(frame));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, &frame, sizeof(expected));
+
+    Ble_AdvancedThreatPacket_t decoded;
+    TEST_ASSERT_TRUE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &decoded));
+    TEST_ASSERT_EQUAL_UINT8(BLE_PROTOCOL_VERSION, decoded.protocol_version);
+    TEST_ASSERT_EQUAL_UINT16(1200U, decoded.nearest_dist_mm);
+    TEST_ASSERT_EQUAL_HEX16(0x0C96U, decoded.ttc_20ms);
+    TEST_ASSERT_EQUAL_UINT16(0x1234U, decoded.session_id);
+    TEST_ASSERT_EQUAL_UINT8(6U, decoded.rolling_fall_seq);
+    TEST_ASSERT_TRUE(decoded.peer_ack_valid);
+    TEST_ASSERT_EQUAL_UINT16(0x5678U, decoded.peer_ack_session_id);
+    TEST_ASSERT_EQUAL_UINT8(4U, decoded.peer_ack_event_seq);
+    TEST_ASSERT_TRUE(decoded.session_rollover);
+}
+
 void test_CoalescedWrapKeepsEpochSequenceAndRolloverInOneSnapshot(void)
 {
     uint16_t previous_epoch = BleComm_GetSessionId();
@@ -307,6 +347,7 @@ int main(void)
     RUN_TEST(test_AdvertisingParserAcceptsOnlyCompleteVersionedFrame);
     RUN_TEST(test_CompactEpochOrderingRejectsRetiredAndBackwardEvents);
     RUN_TEST(test_CompactReceiptDecoderRejectsReservedAndUnscopedAcknowledgements);
+    RUN_TEST(test_CaneGeometryUsesExistingSlotAndPreservesSafetyReceipt);
     RUN_TEST(test_CoalescedWrapKeepsEpochSequenceAndRolloverInOneSnapshot);
     return UNITY_END();
 }

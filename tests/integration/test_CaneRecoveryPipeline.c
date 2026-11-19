@@ -1,11 +1,12 @@
 #include "unity.h"
 #include "app/CaneMode/CaneMode.h"
-#include "app/FallDetection/FallDetection.h"
+#include "app/FallDetection/CaneMotion.h"
 #include "app/AlertManager/AlertManager.h"
 #include "drivers/TouchSensor/TouchSensor.h"
 #include "services/ImuSupervisor/ImuSupervisor.h"
 #include "services/BleComm/BleComm.h"
 #include "hal/Hal_I2c.h"
+#include <math.h>
 #include <string.h>
 
 /* Real policy, debounce, fall algorithm, supervisor, audio and packet codec;
@@ -14,6 +15,8 @@
 static const Mpu9250_Config_t s_cfg = { .dev_addr = 0x68U };
 static CaneMode_t s_mode;
 static CaneMode_Output_t s_out;
+static CaneMotion_t s_motion;
+static CaneMotion_AlarmPolicy_t s_alarm_policy;
 static ImuSupervisor_t s_imu;
 static Alert_Output_t s_audio;
 static Ble_AdvancedThreatPacket_t s_decoded;
@@ -74,16 +77,11 @@ static void Cycle(void)
     Grip_State_t grip;
     (void)TouchSensor_Update(NULL, s_touch, s_now, &grip);
     ImuSupervisor_Step(&s_imu, s_out.imu_sleep_requested, s_now);
-    bool fall = false;
-    if (s_imu.sample_valid && s_out.fall_detection_enabled)
-    {
-        fall = FallDetection_Step(&s_imu.sample, s_now);
-    }
-    else if (!s_imu.sample_valid)
-    {
-        FallDetection_Reset();
-    }
-    if (fall) { ++s_incidents; }
+    const Imu_Sample_t * const sample =
+        (s_imu.sample_valid && s_out.fall_detection_enabled) ? &s_imu.sample : NULL;
+    CaneMotion_Result_t motion = CaneMotion_Step(&s_motion, sample, grip, s_alarm_policy);
+    bool fall = (motion.event == CANE_MOTION_EVENT_DROP) || (motion.event == CANE_MOTION_EVENT_FALL);
+    if (fall) { s_incidents = BleComm_NextFallSequence(s_incidents); }
     CaneMode_Input_t input = {
         .grip = grip,
         .imu_ready = (s_imu.state == IMU_SUPERVISOR_RUNNING),
@@ -92,12 +90,18 @@ static void Cycle(void)
         .sample_valid = s_imu.sample_valid,
         .sample = s_imu.sample,
         .local_fall = fall,
-        .fall_pending = (FallDetection_GetState() != FALL_STATE_IDLE)
+        .fall_pending = motion.pending
     };
     CaneMode_Step(&s_mode, &input, s_now, &s_out);
-    if (s_out.reset_fall_detection) { FallDetection_Reset(); }
-    AlertManager_SetFallState(s_out.fall_latched, s_out.alarm_paused, s_now);
-    AlertManager_Arbitrate(ALERT_NONE, 0U, s_now, &s_audio);
+    if (s_out.reset_fall_detection) { s_motion = (CaneMotion_t){0}; }
+    Alert_SyncInput_t alert = {
+        .local_fall_latched = s_out.fall_latched,
+        .local_alarm_paused = s_out.alarm_paused,
+        .cane_link_fresh = true,
+        .sensor_fault = (s_mode.power != CANE_POWER_STANDBY) &&
+                        ((s_out.status_flags & BLE_FLAG_SENSOR_FAULT) != 0U)
+    };
+    AlertManager_ArbitrateSynced(&alert, s_now, &s_audio);
     Ble_AdvancedThreatPacket_t packet = {
         .node_type = BLE_NODE_TYPE_CANE,
         .pair_id = BLE_DEFAULT_PAIR_ID,
@@ -147,7 +151,8 @@ void setUp(void)
     memset(&s_out, 0, sizeof(s_out));
     CaneMode_Init(&s_mode, s_now);
     TouchSensor_Init(NULL);
-    FallDetection_Init(&FallConfig_Cane);
+    s_motion = (CaneMotion_t){0};
+    s_alarm_policy = CANE_MOTION_ALARM_FULL;
     AlertManager_Init();
     BleComm_Init(&BleComm_Config_Cane);
     ImuSupervisor_Init(&s_imu, &s_cfg, 4U, 5U, s_now);
@@ -156,6 +161,70 @@ void setUp(void)
 }
 
 void tearDown(void) { }
+
+void test_LiftWithBriefLowGDoesNotLatchOrPublishFall(void)
+{
+    s_sensor.az = 3.0f;
+    Run(40U);
+    s_touch = false;
+    s_sensor.az = 0.1f;
+    Run(100U);
+    TEST_ASSERT_FALSE(s_out.fall_latched);
+    TEST_ASSERT_FALSE(s_audio.buzzer_active);
+
+    s_touch = true;
+    s_sensor.az = 1.0f;
+    Run(300U);
+    TEST_ASSERT_EQUAL(SYS_STATE_ACTIVE, s_out.state);
+    TEST_ASSERT_BITS_LOW(BLE_FLAG_FALL_ALERT, s_decoded.state_flags);
+    TEST_ASSERT_EQUAL_UINT8(0U, s_decoded.rolling_fall_seq);
+}
+
+void test_SlipOnlyIgnoresReleasedDropAndVerticalImpact(void)
+{
+    s_alarm_policy = CANE_MOTION_ALARM_SLIP_ONLY;
+    s_touch = false;
+    s_sensor = (Imu_Sample_t){0};
+    Run(200U);
+    TEST_ASSERT_FALSE(s_out.fall_latched);
+
+    s_sensor.az = 3.0f;
+    Run(10U);
+    s_sensor.az = 1.0f;
+    Run(500U);
+    TEST_ASSERT_FALSE(s_audio.buzzer_active);
+    TEST_ASSERT_BITS_LOW(BLE_FLAG_FALL_ALERT, s_decoded.state_flags);
+    TEST_ASSERT_EQUAL_UINT8(0U, s_decoded.rolling_fall_seq);
+}
+
+void test_SlipOnlyCollapseLatchesBuzzerAndBleFallAfterReleasedLowG(void)
+{
+    s_alarm_policy = CANE_MOTION_ALARM_SLIP_ONLY;
+    s_sensor = (Imu_Sample_t){ .ax = -0.9f, .az = 1.0f };
+    Run(80U);
+    TEST_ASSERT_FALSE(s_out.fall_latched);
+    TEST_ASSERT_BITS_LOW(BLE_FLAG_FALL_ALERT, s_decoded.state_flags);
+
+    s_touch = false;
+    s_sensor = (Imu_Sample_t){0};
+    Run(100U);
+    TEST_ASSERT_FALSE(s_out.fall_latched);
+    TEST_ASSERT_FALSE(s_audio.buzzer_active);
+
+    for (unsigned int degrees = 3U; degrees <= 90U; degrees += 3U)
+    {
+        const float radians = (float)degrees * 0.01745329252f;
+        s_sensor = (Imu_Sample_t){ .ax = -sinf(radians), .az = cosf(radians), .gy = 300.0f };
+        Cycle();
+    }
+    TEST_ASSERT_FALSE(s_out.fall_latched);
+    s_sensor = (Imu_Sample_t){ .ax = -1.0f };
+    Run(280U);
+    TEST_ASSERT_EQUAL(SYS_STATE_FALL_CONFIRMED, s_out.state);
+    TEST_ASSERT_TRUE(s_audio.buzzer_active);
+    TEST_ASSERT_BITS_HIGH(BLE_FLAG_FALL_ALERT, s_decoded.state_flags);
+    TEST_ASSERT_EQUAL_UINT8(1U, s_decoded.rolling_fall_seq);
+}
 
 void test_FullDrop_Pause_IntentionalPark_AndTouchWake(void)
 {
@@ -230,6 +299,9 @@ void test_RetainedAlarmAndGripAreProcessedDuringResetWait(void)
 int main(void)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_LiftWithBriefLowGDoesNotLatchOrPublishFall);
+    RUN_TEST(test_SlipOnlyIgnoresReleasedDropAndVerticalImpact);
+    RUN_TEST(test_SlipOnlyCollapseLatchesBuzzerAndBleFallAfterReleasedLowG);
     RUN_TEST(test_FullDrop_Pause_IntentionalPark_AndTouchWake);
     RUN_TEST(test_FailedPowerTransition_CannotClearIncident_AndRealarmKeepsItsSequence);
     RUN_TEST(test_RetainedAlarmAndGripAreProcessedDuringResetWait);

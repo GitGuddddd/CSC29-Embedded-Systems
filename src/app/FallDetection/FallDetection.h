@@ -28,12 +28,10 @@ typedef struct
     uint32_t settle_ms;
     uint32_t still_ms;
     uint32_t pending_ms;    /* 0 = report the fall straight from CHECK_STILL */
-    bool allow_direct_impact;
 } Fall_Config_t;
 
-/* Global Link-time configurations */
+/* Link-time head-fall configuration. */
 extern const Fall_Config_t FallConfig_Head;
-extern const Fall_Config_t FallConfig_Cane;
 
 void FallDetection_Init(const Fall_Config_t * const p_cfg);
 void FallDetection_Reset(void);

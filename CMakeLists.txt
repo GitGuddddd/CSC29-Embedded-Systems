@@ -86,8 +86,7 @@ if (BUILD_FOR_PICO_TARGET)
     set(CANE_SOURCES
         src/app/Cane_Main.c
         src/app/CaneMode/CaneMode.c
-        src/app/FallDetection/FallDetection.c
-        src/app/FallDetection/FallDetection_Lcfg.c
+        src/app/FallDetection/CaneMotion.c
         src/app/GroundProjection/GroundProjection.c
         src/app/GroundProjection/GroundBeam.c
         src/app/AlertManager/AlertManager.c
@@ -297,6 +296,13 @@ add_executable(test_FallDetection
 target_link_libraries(test_FallDetection PRIVATE unity m)
 add_test(NAME Unit_FallDetection COMMAND test_FallDetection)
 
+add_executable(test_CaneMotion
+    tests/unit/test_CaneMotion.c
+    src/app/FallDetection/CaneMotion.c
+)
+target_link_libraries(test_CaneMotion PRIVATE unity m)
+add_test(NAME Unit_CaneMotion COMMAND test_CaneMotion)
+
 # 2. GroundProjection Unit Test
 add_executable(test_GroundProjection
     tests/unit/test_GroundProjection.c
@@ -377,8 +383,7 @@ add_test(NAME Unit_Ld2450_Parser COMMAND test_Ld2450_Parser)
 add_executable(test_CaneRecoveryPipeline
     tests/integration/test_CaneRecoveryPipeline.c
     src/app/CaneMode/CaneMode.c
-    src/app/FallDetection/FallDetection.c
-    src/app/FallDetection/FallDetection_Lcfg.c
+    src/app/FallDetection/CaneMotion.c
     src/app/AlertManager/AlertManager.c
     src/drivers/TouchSensor/TouchSensor.c
     src/services/ImuSupervisor/ImuSupervisor.c

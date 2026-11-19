@@ -188,6 +188,75 @@ class SystemPacketTest {
         return requireNotNull(SystemPacket.parse(bytes, 123L))
     }
 
+    private fun v2Frame(field: Int, distanceInTwoMm: Int = 500, cane: Boolean = true): ByteArray =
+        byteArrayOf(
+            0xA1.toByte(), (if (cane) 0xB5 else 0x35).toByte(),
+            (if (cane) SystemPacket.FLAG_CANE_HELD else 0).toByte(),
+            distanceInTwoMm.toByte(), (((distanceInTwoMm shr 8) shl 4) or (field and 0x0F)).toByte(),
+            (field shr 4).toByte(), 0xE2.toByte(), 1, 0x10, 0, 0, 0,
+        )
+
+    @Test fun `cane geometry preserves raw range and exposes angle and projected distance`() {
+        // Shared firmware vector. Geometry word 0xC96 = marker, projection available, 150 steps.
+        val report = requireNotNull(SystemPacket.parse(byteArrayOf(
+            0xA1.toByte(), 0xB6.toByte(), 0x11, 0x58, 0x26, 0xC9.toByte(),
+            0xE2.toByte(), 0x34, 0x12, 0x78, 0x56, 0x34,
+        )))
+        assertEquals(1200, report.radarDistMm)
+        assertEquals(300, report.caneBeamAngleTenthsDeg)
+        assertEquals(1039, report.caneVerticalDistanceMm)
+        assertEquals(-1, report.ttcMs)
+        assertEquals(0x1234L, report.sessionId)
+        assertTrue(report.peerAckValid)
+        assertEquals(0x5678L, report.peerAckSessionId)
+        assertEquals(4L, report.peerAckEventId)
+
+        val contact = requireNotNull(SystemPacket.parse(v2Frame(0xC96, distanceInTwoMm = 5)))
+        assertEquals(10, contact.radarDistMm)
+        assertEquals(26, contact.caneVerticalDistanceMm) // Firmware clamps projected raw ranges at 30 mm.
+    }
+
+    @Test fun `cane angle remains available when projection is out of angle or lacks a range`() {
+        val outOfAngle = requireNotNull(SystemPacket.parse(v2Frame(0x8F0)))
+        assertEquals(1000, outOfAngle.radarDistMm)
+        assertEquals(480, outOfAngle.caneBeamAngleTenthsDeg)
+        assertNull(outOfAngle.caneVerticalDistanceMm)
+
+        val noRange = requireNotNull(SystemPacket.parse(v2Frame(0xC96, distanceInTwoMm = 0xFFF)))
+        assertEquals(-1, noRange.radarDistMm)
+        assertEquals(300, noRange.caneBeamAngleTenthsDeg)
+        assertNull(noRange.caneVerticalDistanceMm)
+    }
+
+    @Test fun `unknown or out-of-range cane geometry does not change ordinary telemetry`() {
+        val sentinel = requireNotNull(SystemPacket.parse(v2Frame(0xFFF)))
+        val invalidAngle = requireNotNull(SystemPacket.parse(v2Frame(0xB85))) // 901 angle steps.
+        val unmarked = requireNotNull(SystemPacket.parse(v2Frame(0x096)))
+        for (report in listOf(sentinel, invalidAngle, unmarked)) {
+            assertEquals(1000, report.radarDistMm)
+            assertNull(report.caneBeamAngleTenthsDeg)
+            assertNull(report.caneVerticalDistanceMm)
+            assertEquals(TelemetryStatus.MONITORING, report.status)
+        }
+    }
+
+    @Test fun `the cane geometry slot leaves glasses and legacy compact TTC decoding intact`() {
+        val glasses = requireNotNull(SystemPacket.parse(v2Frame(0xC96, cane = false)))
+        val legacy = requireNotNull(SystemPacket.parse(v2Frame(0xC96).copyOf(6)))
+        for (report in listOf(glasses, legacy)) {
+            assertEquals(64440, report.ttcMs)
+            assertNull(report.caneBeamAngleTenthsDeg)
+            assertNull(report.caneVerticalDistanceMm)
+        }
+    }
+
+    @Test fun `a geometry change is observable on the same heartbeat sequence`() {
+        val original = requireNotNull(SystemPacket.parse(v2Frame(0xC96), 100L))
+        val changed = requireNotNull(SystemPacket.parse(v2Frame(0xC97), 110L))
+        assertTrue(changed.isFreshAfter(original))
+        assertFalse(changed.copy(receivedAt = 120L).isFreshAfter(changed))
+    }
+
     @Test fun `firmware paused packet retains incident and acknowledgement metadata`() {
         val packet = compact(0x19) // FALL + PAUSED + HELD
         assertTrue(packet.hasLatchedFall)

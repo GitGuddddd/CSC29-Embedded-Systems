@@ -710,16 +710,19 @@ private fun NodeCard(node: NodeTelemetry, monitoring: MonitoringState) {
             )
             Text(presentation.detail, color = Color.White, style = MaterialTheme.typography.bodyMedium)
             node.packet?.let { packet ->
-                val range = when {
+                val rangeUnavailable = when {
                     !node.isFresh -> "Live range unavailable"
                     packet.isStandby -> "Range inactive · sensor sleeping"
                     packet.isSensorFault -> "Range unavailable · sensing fault"
                     packet.hasGripTelemetry && !packet.isCaneHeld -> "Ground sensing inactive · grip released"
-                    packet.radarDistMm < 0 && node.type == NodeType.CANE -> "No valid ground range"
-                    packet.radarDistMm < 0 -> "No target"
-                    else -> "${packet.radarDistMm} mm"
+                    else -> null
                 }
-                Text(range, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                if (node.type == NodeType.CANE && rangeUnavailable == null) {
+                    CaneGroundReadings(packet)
+                } else {
+                    val range = rangeUnavailable ?: if (packet.hasDistance) "${packet.radarDistMm} mm" else "No target"
+                    Text(range, color = Color.White, style = MaterialTheme.typography.titleMedium)
+                }
                 if (node.type == NodeType.GLASSES && node.isFresh && !packet.isStandby && !packet.isSensorFault) {
                     Text(
                         if (packet.ttcMs < 0) "TTC: not reported" else "TTC: ${packet.ttcMs} ms",
@@ -797,6 +800,42 @@ private fun NodeCard(node: NodeTelemetry, monitoring: MonitoringState) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CaneGroundReadings(packet: SystemPacket) {
+    Row(
+        Modifier.fillMaxWidth().testTag("cane_ground_readings"),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        CaneGroundReading(
+            label = "Raw distance",
+            value = packet.radarDistMm.takeIf { it >= 0 }?.let { "$it mm" },
+            modifier = Modifier.weight(1f),
+        )
+        CaneGroundReading(
+            label = "Vertical distance",
+            value = packet.caneVerticalDistanceMm?.let { "$it mm" },
+            modifier = Modifier.weight(1f),
+        )
+        CaneGroundReading(
+            label = "Beam angle",
+            value = packet.caneBeamAngleTenthsDeg?.let { "${it / 10}.${it % 10}°" },
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun CaneGroundReading(label: String, value: String?, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelSmall)
+        Text(
+            value ?: "Unavailable",
+            color = Color.White,
+            style = if (value == null) MaterialTheme.typography.bodySmall else MaterialTheme.typography.titleMedium,
+        )
     }
 }
 

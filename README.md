@@ -30,9 +30,25 @@ Uses **FreeRTOS SMP with task affinity** across the RP2040's dual ARM Cortex-M0+
 
 Serial alignment lasts until reboot. To use a measured alignment at boot, put the printed values in `CANE_TOF_DOWN_ACCEL_X`, `CANE_TOF_DOWN_ACCEL_Y` and `CANE_TOF_DOWN_ACCEL_Z`, then rebuild the cane firmware. [Cane board configuration](config/Cane_Board.h)
 
-### 2. Dual-Stage Fall Detection Engine
-- **Physics Pipeline**: Monitors 3-axis accelerometer/gyroscope magnitude for free-fall ($|a| < 0.35g$ for cane, $< 0.5g$ for head) followed by impact ($|a| > 2.5g$ within 800–1000 ms) and post-impact stillness/tilt verification.
-- **Release Watch**: Releasing the touch sensor enters silent `UNGRIPPED_WATCH`. Upright, still and released for 3 continuous seconds permits IMU standby; elapsed release time alone never disarms a pending fall.
+### 2. Fall and slip detection
+
+- The current cane build uses the lateral-slip-only bench trial. A filtered lateral acceleration of at least 0.55 g for 30 ms logs a possible `SLIP`. A slip that leaves the cane at least 40° from its starting attitude and still for 250 ms raises the cane's fall alarm. Vertical motion and straight drops are excluded from this trial. Smooth sliding at constant speed can be invisible to an IMU.
+- The cane establishes world up from three consistent quiet accelerometer samples and tracks it with the gyro during motion. A three-sample median filters signed vertical and horizontal acceleration. Vertical readings remain available for diagnostics during the trial.
+- Set `FEATURE_CANE_SLIP_ONLY_TRIAL` to `0U` in `config/Feature_Cfg.h` and rebuild to restore the full cane policy. That policy adds downward motion with rotation as slip evidence and uses sustained low g and landing impact to detect drops. The drop path requires extra evidence after a recent lift.
+- The glasses use their own `FallDetection` state machine for free fall, impact and post-impact verification.
+
+The cane perception task owns the motion state machine and steps it with each fresh IMU sample. The lateral-slip-only build uses these transitions.
+
+| Current state | Event and guard | Action | Next state |
+|---|---|---|---|
+| `IDLE` | Valid world-up estimate and lateral acceleration of at least 0.55 g | Capture the starting attitude and start the slip timer | `SLIP_START` |
+| `SLIP_START` | Lateral acceleration stays at or above the threshold for 30 ms | Emit `SLIP` and start the confirmation window | `SLIP_TRACK` |
+| `SLIP_START` | Lateral evidence ends before qualification | Clear the candidate | `IDLE` |
+| `SLIP_TRACK` | The cane tilts about 40° or more from the starting attitude and stays still for 250 ms within the confirmation window | Emit `FALL` to the cane mode manager, which latches the alarm | `IDLE` |
+| `SLIP_TRACK` | The 1.5 s confirmation window expires | Clear the candidate | `IDLE` |
+| Any state | Missing or invalid IMU sample, or sample gap greater than 25 ms | Reset the motion evidence and world-up estimate | `IDLE` |
+
+Send `f` over the cane's USB serial port to toggle the 20 Hz `[MOTION]` stream. Events and state changes also log with the stream off. `vert_g` and `horiz_g` show filtered acceleration. `vert_raw_g` and `horiz_raw_g` show the corresponding raw projections. Positive vertical acceleration points up, and `up_valid=0` means the direction estimate is unavailable. Compare normal lifts, slips in several directions, and controlled drops on a padded bench before relying on the prototype thresholds.
 
 ### 3. Asymmetric Local Emergency Protocol
 - **Acoustic Protection**: The Smart Glasses never play the cane's emergency siren near the wearer's ears. If the cane does not return an application receipt within 750 ms, or disappears after receipt, the glasses use a sparse 100 ms / 2 s cue at 10% PWM duty. Final enclosure SPL still requires bench validation; PWM duty is not a certification claim.

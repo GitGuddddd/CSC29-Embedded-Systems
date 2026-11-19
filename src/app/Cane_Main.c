@@ -22,7 +22,7 @@
 #include "services/Diagnostics/Diagnostics.h"
 #include "services/Watchdog/Watchdog.h"
 #include "services/Watchdog/Watchdog_Cfg.h"
-#include "app/FallDetection/FallDetection.h"
+#include "app/FallDetection/CaneMotion.h"
 #include "app/GroundProjection/GroundBeam.h"
 #include "app/GroundProjection/GroundProjection.h"
 #include "app/GroundProjection/GroundProjection_Cfg.h"
@@ -32,6 +32,7 @@
 
 #ifdef PICO_ON_DEVICE
 #include "pico/stdlib.h"
+#include "pico/stdio_usb.h"
 #include "pico/multicore.h"
 #include "pico/cyw43_arch.h"
 #include "FreeRTOS.h"
@@ -56,15 +57,6 @@ static Sys_State_t s_sys_mode = SYS_STATE_INIT;
 #define CANE_BEAM_ALIGN_SAMPLES   (50U)
 #define CANE_BEAM_ALIGN_TIMEOUT_MS (5000U)
 #define CANE_GROUND_LOG_SETTLE_MS (300U)
-
-/* Any free fall while the grip is released is a dropped cane: alarm at once, without
- * waiting for impact/stillness/tilt. Tracked independently of the FallDetection state
- * machine so a prior bump (SETTLING/CHECK_STILL) cannot hide it. 0.5 g / 30 ms is three
- * consecutive 100 Hz samples (~4 mm of fall) and rejects a single glitched sample.
- * A held cane still uses the full fall pipeline.
- */
-#define CANE_RELEASED_FREEFALL_G_SQ (0.25f)   /* (0.5 g)^2 */
-#define CANE_RELEASED_FREEFALL_MS   (30U)
 
 static uint32_t GetCurrentTimeMs(void)
 {
@@ -283,9 +275,8 @@ static bool Ground_UpdateBeamCapture(BeamCapture_t * const p_capture, GroundBeam
 
 static void Log_GroundSample(Gp_State_t state, bool state_changed, uint16_t raw_mm,
                              uint16_t vertical_mm, GroundBeam_Status_t beam_status,
-                             float beam_cosine)
+                             float beam_angle_deg)
 {
-    const float radians_to_degrees = 180.0f / 3.14159265f;
     char raw[16] = "N/A";
     char vertical[16] = "N/A";
     char beam[20] = "pose unavailable";
@@ -297,15 +288,68 @@ static void Log_GroundSample(Gp_State_t state, bool state_changed, uint16_t raw_
     {
         (void)snprintf(vertical, sizeof(vertical), "%u mm", (unsigned int)vertical_mm);
     }
-    if (isfinite(beam_cosine))
+    if (isfinite(beam_angle_deg))
     {
-        (void)snprintf(beam, sizeof(beam), "%.1f deg", (double)(acosf(beam_cosine) * radians_to_degrees));
+        (void)snprintf(beam, sizeof(beam), "%.1f deg", (double)beam_angle_deg);
     }
     const char * const beam_text = (beam_status == GROUND_BEAM_UNALIGNED) ? "unaligned" : beam;
     printf("[CLIFF] %s%s (Vertical Distance: %s, Beam from vertical: %s, Raw Distance: %s)\n",
            state_changed ? "State -> " : "Sample ", GroundProjection_GetStateName(state),
            vertical, beam_text, raw);
 }
+
+/* The safety task queues snapshots without waiting for USB or formatting. */
+#define CANE_MOTION_LOG_PERIOD_MS (50U)
+#define CANE_MOTION_LOG_DEPTH (16U)
+
+typedef struct
+{
+    uint32_t now_ms;
+    Grip_State_t grip;
+    bool enabled;
+    bool sample_valid;
+    float ax;
+    float ay;
+    float az;
+    CaneMotion_Result_t motion;
+} Motion_Log_t;
+
+static StaticQueue_t s_motion_log_queue;
+static uint8_t s_motion_log_buffer[CANE_MOTION_LOG_DEPTH * sizeof(Motion_Log_t)];
+static QueueHandle_t s_motion_log;
+
+static void Drain_Motion_Log(void)
+{
+    static const char * const event_names[] = {"-", "LIFT", "SLIP", "DROP", "FALL"};
+    static const char * const state_names[] = {
+        "IDLE", "LOW_G", "WAIT_IMPACT", "SLIP_START", "SLIP_TRACK", "CHECK_TILT"
+    };
+    Motion_Log_t entry;
+    if ((xQueueReceive(s_motion_log, &entry, 0U) != pdPASS) || !stdio_usb_connected())
+    {
+        return;
+    }
+    const CaneMotion_Result_t * const p_motion = &entry.motion;
+    bool measured = entry.enabled && entry.sample_valid;
+    const char * const grip = (entry.grip == GRIP_STATE_HELD) ? "held" :
+                              ((entry.grip == GRIP_STATE_RELEASED) ? "released" : "unknown");
+    printf("[MOTION] t=%lu ms event=%s state=%s grip=%s enabled=%u imu=%u up_valid=%u "
+           "accel_g=(%.2f,%.2f,%.2f) norm_g=%.2f vert_g=%+.2f vert_raw_g=%+.2f "
+           "horiz_g=%.2f horiz_raw_g=%.2f gyro_dps=%.1f\n",
+           (unsigned long)entry.now_ms, event_names[p_motion->event], state_names[p_motion->state],
+           grip, (unsigned int)entry.enabled, (unsigned int)entry.sample_valid,
+           (unsigned int)p_motion->up_valid, (double)entry.ax, (double)entry.ay, (double)entry.az,
+           measured ? (double)p_motion->accel_g : NAN,
+           p_motion->up_valid ? (double)p_motion->vertical_g : NAN,
+           p_motion->up_valid ? (double)p_motion->vertical_raw_g : NAN,
+           p_motion->up_valid ? (double)p_motion->horizontal_g : NAN,
+           p_motion->up_valid ? (double)p_motion->horizontal_raw_g : NAN,
+           measured ? (double)p_motion->rotation_dps : NAN);
+}
+
+static Diagnostics_Config_t s_cane_diagnostics = { .drain_log = Drain_Motion_Log };
+static const CaneMotion_AlarmPolicy_t s_motion_policy = FEATURE_CANE_SLIP_ONLY_TRIAL ?
+    CANE_MOTION_ALARM_SLIP_ONLY : CANE_MOTION_ALARM_FULL;
 
 /*
  * =========================================================================
@@ -358,11 +402,16 @@ static void vTask_SafetyPerception(void *pvParameters)
     uint32_t last_tof_reinit_ms = last_tof_alive_ms;
     uint32_t last_telemetry_ms = 0U;
     uint32_t last_cmd_ms = 0U;
-    bool freefall_active = false;
-    uint32_t freefall_start_ms = 0U;
+    CaneMotion_t motion = {0};
+    CaneMotion_State_t prev_motion_state = CANE_MOTION_IDLE;
+    bool prev_up_valid = false;
+    bool log_motion_samples = false;
+    uint32_t last_motion_log_ms = start_ms;
 
     Grip_State_t prev_grip = GRIP_STATE_RELEASED;
     uint16_t last_dist_mm = 0xFFFFU;
+    uint16_t last_ground_geometry = BLE_TTC_NO_THREAT;
+    uint32_t last_ground_sample_ms = start_ms;
     Gp_State_t previous_ground_state = GP_STATE_DISARMED;
     Gp_State_t logged_ground_state = GP_STATE_DISARMED;
     uint32_t ground_state_since_ms = start_ms;
@@ -474,50 +523,33 @@ static void vTask_SafetyPerception(void *pvParameters)
             /* A raw or previously projected distance baseline cannot be reused. */
             GroundProjection_Init(&s_ground_detector, now_ms);
             Haptic_Request(HAPTIC_SRC_GROUND, ALERT_NONE);
+            last_ground_geometry = BLE_TTC_NO_THREAT;
         }
-        bool local_fall = false;
-        if (imu.sample_valid && mode_out.fall_detection_enabled)
+        const Imu_Sample_t * const p_motion_sample =
+            (imu.sample_valid && mode_out.fall_detection_enabled) ? &imu.sample : NULL;
+        CaneMotion_Result_t motion_result = CaneMotion_Step(&motion, p_motion_sample,
+                                                           current_grip, s_motion_policy);
+        bool local_fall = (motion_result.event == CANE_MOTION_EVENT_DROP) ||
+                          (motion_result.event == CANE_MOTION_EVENT_FALL);
+        if ((motion_result.event != CANE_MOTION_EVENT_NONE) ||
+            (motion_result.state != prev_motion_state) || (motion_result.up_valid != prev_up_valid) ||
+            (log_motion_samples && ((now_ms - last_motion_log_ms) >= CANE_MOTION_LOG_PERIOD_MS)))
         {
-            local_fall = FallDetection_Step(&imu.sample, now_ms);
-
-            /* Free fall may begin during the 20 ms touch debounce, so time it
-             * regardless of grip and fire once the release is committed.
-             */
-            const Imu_Sample_t * const p_s = &imu.sample;
-            float a_sq = (p_s->ax * p_s->ax) + (p_s->ay * p_s->ay) + (p_s->az * p_s->az);
-            if (a_sq < CANE_RELEASED_FREEFALL_G_SQ)
-            {
-                if (!freefall_active)
-                {
-                    freefall_active = true;
-                    freefall_start_ms = now_ms;
-                }
-            }
-            else
-            {
-                freefall_active = false;
-            }
-            if (!local_fall && freefall_active && (current_grip == GRIP_STATE_RELEASED) &&
-                ((uint32_t)(now_ms - freefall_start_ms) >= CANE_RELEASED_FREEFALL_MS))
-            {
-                printf("[FALL] Released cane in free fall for %u ms -> alarm\n",
-                       (unsigned int)(now_ms - freefall_start_ms));
-                local_fall = true;
-            }
+            const Motion_Log_t entry = {
+                .now_ms = now_ms,
+                .grip = current_grip,
+                .enabled = mode_out.fall_detection_enabled,
+                .sample_valid = imu.sample_valid,
+                .ax = imu.sample_valid ? imu.sample.ax : NAN,
+                .ay = imu.sample_valid ? imu.sample.ay : NAN,
+                .az = imu.sample_valid ? imu.sample.az : NAN,
+                .motion = motion_result
+            };
+            (void)xQueueSend(s_motion_log, &entry, 0U);
+            last_motion_log_ms = now_ms;
         }
-        else
-        {
-            freefall_active = false;
-            if (!imu.sample_valid)
-            {
-                FallDetection_Reset();
-            }
-        }
-        if (local_fall)
-        {
-            freefall_active = false;
-            FallDetection_Reset();
-        }
+        prev_motion_state = motion_result.state;
+        prev_up_valid = motion_result.up_valid;
         if (local_fall)
         {
             cane_fall_is_local = true;
@@ -541,6 +573,8 @@ static void vTask_SafetyPerception(void *pvParameters)
         {
             previous_ground_state = GP_STATE_DISARMED;
             logged_ground_state = GP_STATE_DISARMED;
+            last_dist_mm = UINT16_MAX;
+            last_ground_geometry = BLE_TTC_NO_THREAT;
         }
 
         /* Track rotation at the IMU rate, including cycles with no ToF read. */
@@ -573,7 +607,6 @@ static void vTask_SafetyPerception(void *pvParameters)
                     printf("[TOF] Close object cleared (Distance: %u mm)\n", dist_mm);
                     cane_status.tof_obstructed = 0U;
                 }
-                last_dist_mm = dist_mm;
                 ground_range_mm = dist_mm;
                 quality = GP_RANGE_VALID;
             }
@@ -588,14 +621,12 @@ static void vTask_SafetyPerception(void *pvParameters)
                     cane_status.tof_obstructed = 1U;
                     printf("[TOF] Object very close (%u mm) -> obstacle\n", dist_mm);
                 }
-                last_dist_mm = dist_mm;
                 ground_range_mm = GP_MIN_RANGE_MM;
                 quality = GP_RANGE_VALID;
             }
             else if (read_ok && dist_mm == 0xFFFFU)
             {
                 cane_status.tof_obstructed = 0U;
-                last_dist_mm = 0xFFFFU;
                 quality = GP_RANGE_NO_RETURN;
             }
             else
@@ -631,6 +662,19 @@ static void vTask_SafetyPerception(void *pvParameters)
                 ground_range_mm = vertical_mm;
             }
 
+            const float radians_to_degrees = 180.0f / 3.14159265f;
+            float beam_angle_deg = isfinite(beam_cosine) ? acosf(beam_cosine) * radians_to_degrees : NAN;
+            /* Keep range and beam geometry from the same poll. The phone uses
+             * the projection-valid bit to mirror the firmware's pose gate. */
+            last_ground_sample_ms = range_ms;
+            last_dist_mm = read_ok ? dist_mm : UINT16_MAX;
+            last_ground_geometry = BLE_TTC_NO_THREAT;
+            if (!beam_capture.active && isfinite(beam_angle_deg))
+            {
+                uint16_t steps = (uint16_t)lroundf(beam_angle_deg * 5.0f); /* 0.2 degrees per step */
+                last_ground_geometry = BleComm_PackCaneGeometry(steps, vertical_mm != UINT16_MAX);
+            }
+
             const Imu_Sample_t * p_cal_imu = NULL;
             if ((quality == GP_RANGE_VALID) && s_ground_detector.is_calibrating && (p_range_imu != NULL))
             {
@@ -646,7 +690,7 @@ static void vTask_SafetyPerception(void *pvParameters)
             /* ToF Recovery Supervisor */
             if (((now_ms - last_tof_alive_ms) >= CANE_TOF_RECOVERY_MS) &&
                 ((now_ms - last_tof_reinit_ms) >= CANE_TOF_RECOVERY_MS) &&
-                (FallDetection_GetState() == FALL_STATE_IDLE))
+                !motion_result.pending)
             {
                 last_tof_reinit_ms = now_ms;
                 (void)Tof_Reinit();
@@ -668,7 +712,7 @@ static void vTask_SafetyPerception(void *pvParameters)
             if (log_ground_samples || report_state_change)
             {
                 Log_GroundSample(gstate, report_state_change, read_ok ? dist_mm : UINT16_MAX,
-                                 vertical_mm, beam_status, beam_cosine);
+                                 vertical_mm, beam_status, beam_angle_deg);
                 logged_ground_state = gstate;
             }
 
@@ -706,7 +750,7 @@ static void vTask_SafetyPerception(void *pvParameters)
             .sample = imu.sample,
             .local_fall = local_fall,
             .peer_fall = remote_fall,
-            .fall_pending = (FallDetection_GetState() != FALL_STATE_IDLE),
+            .fall_pending = motion_result.pending,
             .ground_hazard = (s_ground_detector.state == GP_STATE_STEP_DOWN) ||
                              (s_ground_detector.state == GP_STATE_STEP_UP),
             .technical_fault = ground_fault
@@ -720,7 +764,7 @@ static void vTask_SafetyPerception(void *pvParameters)
                                   (imu.state == IMU_SUPERVISOR_ASLEEP)) ? 1U : 0U;
         if (mode_out.reset_fall_detection)
         {
-            FallDetection_Reset();
+            motion = (CaneMotion_t){0};
         }
         bool ground_was_armed = s_ground_detector.is_armed;
         Ground_SetArmed(mode_out.ground_enabled, now_ms);
@@ -837,6 +881,13 @@ static void vTask_SafetyPerception(void *pvParameters)
                 log_ground_samples = !log_ground_samples;
                 printf("[GROUND] Per-sample logging %s.\n", log_ground_samples ? "on" : "off");
             }
+            else if ((ch == (int)'f') || (ch == (int)'F'))
+            {
+                log_motion_samples = !log_motion_samples;
+                printf("[MOTION] 20 Hz sample logging %s. Cane alarm policy: %s.\n",
+                       log_motion_samples ? "on" : "off",
+                       (s_motion_policy == CANE_MOTION_ALARM_SLIP_ONLY) ? "lateral slip only" : "full");
+            }
             else if ((ch == (int)'b') || (ch == (int)'B'))
             {
                 bool new_fault = Buzzer_IsHealthy();
@@ -865,6 +916,8 @@ static void vTask_SafetyPerception(void *pvParameters)
             (peer_ack_event_seq != last_sent_peer_ack_event_seq) ||
             ((now_ms - last_telemetry_ms) >= telemetry_period_ms))
         {
+            bool ground_sample_fresh = mode_out.ground_enabled &&
+                                       ((now_ms - last_ground_sample_ms) < GP_STALE_TIMEOUT_MS);
             Ble_AdvancedThreatPacket_t cane_pkt = {
                 .preamble = 0xAAU,
                 .device_id = 0x01U,
@@ -874,9 +927,10 @@ static void vTask_SafetyPerception(void *pvParameters)
                 .rolling_fall_seq = (uint8_t)cane_status.fall_seq,
                 .seq_num = (uint16_t)cane_status.tx_seq,
                 .state_flags = flags,
-                .nearest_dist_mm = mode_out.ground_enabled ? last_dist_mm : 0xFFFFU,
+                .nearest_dist_mm = ground_sample_fresh ? last_dist_mm : UINT16_MAX,
                 .closing_speed_cms = 0,
-                .ttc_20ms = BLE_TTC_NO_THREAT,
+                .ttc_20ms = (ground_sample_fresh && !beam_capture.active) ?
+                           last_ground_geometry : BLE_TTC_NO_THREAT,
                 .peer_ack_valid = peer_ack_valid,
                 .peer_ack_session_id = peer_ack_session_id,
                 .peer_ack_event_seq = peer_ack_event_seq & BLE_FALL_SEQ_MASK
@@ -965,7 +1019,6 @@ int main(void)
         s_is_l1x = Vl53l1x_Init(&Vl53l1x_Config_Cane);
     }
 
-    FallDetection_Init(&FallConfig_Cane);
     AlertManager_Init();
 
     uint32_t boot_ms = GetCurrentTimeMs();
@@ -976,6 +1029,11 @@ int main(void)
     printf("\n==================================================\n");
     printf("  EchoGuard Smart Cane FreeRTOS Dual-Core System  \n");
     printf("==================================================\n");
+    printf("[MOTION] Send f over USB serial to toggle direction/acceleration samples.\n");
+
+    s_motion_log = xQueueCreateStatic(CANE_MOTION_LOG_DEPTH, sizeof(Motion_Log_t),
+                                      s_motion_log_buffer, &s_motion_log_queue);
+    configASSERT(s_motion_log != NULL);
 
     /* Create FreeRTOS Tasks with Explicit Core Affinity */
     TaskHandle_t xSafetyHandle = NULL;
@@ -998,7 +1056,8 @@ int main(void)
     configASSERT(created == pdPASS);
     vTaskCoreAffinitySet(xRadioHandle, (1U << 1));
 
-    created = xTaskCreate(Diagnostics_Task, "Diagnostics", 768U, NULL, 1U, &xDiagnosticsHandle);
+    created = xTaskCreate(Diagnostics_Task, "Diagnostics", 768U, &s_cane_diagnostics, 1U,
+                          &xDiagnosticsHandle);
     configASSERT(created == pdPASS);
     vTaskCoreAffinitySet(xDiagnosticsHandle, (1U << 0));
 

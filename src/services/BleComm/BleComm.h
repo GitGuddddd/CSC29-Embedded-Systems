@@ -44,6 +44,9 @@ bool BleComm_TrackPeerFall(BleComm_PeerFall_t * const p_tracker,
                           const Ble_AdvancedThreatPacket_t * const p_packet);
 
 void BleComm_Init(const BleComm_Config_t * const p_cfg);
+/* Cane v2 geometry occupies the unused TTC field. Angles use 0.2-degree steps
+ * from 0 to 900. A larger value encodes unavailable geometry. */
+uint16_t BleComm_PackCaneGeometry(uint16_t angle_steps, bool projection_valid);
 void BleComm_Encode(const Ble_AdvancedThreatPacket_t * const p_in, Ble_RawPacket_t * const p_out);
 bool BleComm_Decode(const Ble_RawPacket_t * const p_in, uint8_t expected_pair_id, Ble_AdvancedThreatPacket_t * const p_out);
 void BleComm_EncodeFrame(const Ble_AdvancedThreatPacket_t * const p_in,

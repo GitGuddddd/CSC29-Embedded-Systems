@@ -1,5 +1,8 @@
 package com.cliftonzg.echoguard.core.ble.model
 
+import kotlin.math.cos
+import kotlin.math.roundToInt
+
 enum class ThreatLevel {
     CRITICAL,
     WARNING,
@@ -55,6 +58,8 @@ data class SystemPacket(
     val peerAckEventId: Long = 0L,
     // Monotonic capture time: ScanResult.timestampNanos / 1_000_000, not wall-clock time.
     val receivedAt: Long = 0L,
+    val caneVerticalDistanceMm: Int? = null,
+    val caneBeamAngleTenthsDeg: Int? = null,
 ) {
     val isFallAlert: Boolean get() = (stateFlags and FLAG_FALL_ALERT) != 0
     val isAlarmPaused: Boolean get() = (stateFlags and FLAG_ALARM_PAUSED) != 0
@@ -189,7 +194,9 @@ data class SystemPacket(
             rollingFallSeq != previous.rollingFallSeq || sessionId != previous.sessionId ||
             eventId != previous.eventId || peerAckValid != previous.peerAckValid ||
             peerAckSessionId != previous.peerAckSessionId || peerAckEventId != previous.peerAckEventId ||
-            radarDistMm != previous.radarDistMm || ttcMs != previous.ttcMs
+            radarDistMm != previous.radarDistMm || ttcMs != previous.ttcMs ||
+            caneVerticalDistanceMm != previous.caneVerticalDistanceMm ||
+            caneBeamAngleTenthsDeg != previous.caneBeamAngleTenthsDeg
         if (delta == 0) return statusChanged
         return delta <= 4 || receivedAt - previous.receivedAt >= SEQUENCE_REBASE_MS
     }
@@ -213,6 +220,13 @@ data class SystemPacket(
         const val SAFETY_RESERVED_MASK = 0xC0
         const val LEGACY_PROTOCOL_VERSION = 1
         const val LEGACY_SAFETY_EXTENSION_MARKER = 0xE1
+
+        private const val COMPACT_NO_READING = 0x0FFF
+        private const val CANE_GEOMETRY_MARKER = 0x800
+        private const val CANE_PROJECTION_AVAILABLE = 0x400
+        private const val CANE_ANGLE_STEPS_MASK = 0x3FF
+        private const val CANE_ANGLE_MAX_STEPS = 900
+        private const val CANE_MIN_PROJECTION_RANGE_MM = 30
 
         private fun readU16Le(data: ByteArray, offset: Int): Long =
             (data[offset].toLong() and 0xFFL) or ((data[offset + 1].toLong() and 0xFFL) shl 8)
@@ -291,18 +305,33 @@ data class SystemPacket(
 
                     // Decode 12-bit distance (2mm steps, 0-8190mm, 0xFFF=no target)
                     val distRaw = distLow or (((distHighTtcLow shr 4) and 0x0F) shl 8)
-                    val nearestDistMm = if (distRaw >= 0x0FFF) -1 else distRaw * 2
+                    val nearestDistMm = if (distRaw == COMPACT_NO_READING) -1 else distRaw * 2
 
-                    // Decode 12-bit TTC (20ms steps, 0-81900ms, 0xFFF=no threat)
+                    // V2 cane frames use this 12-bit slot for optional ground geometry.
                     val ttcRaw = (distHighTtcLow and 0x0F) or (ttcHigh shl 4)
-                    val ttcMsVal = if (ttcRaw >= 0x0FFF) -1 else ttcRaw * 20
-
                     val deviceId = if (nodeType == 1) 0x01 else 0x02
 
                     val compactReceipt = data.size == 12
                     val oldExtension = data.size == 24
                     if (compactReceipt && (data[6].toInt() and 0xFF) != SAFETY_EXTENSION_MARKER) return null
                     if (oldExtension && (data[6].toInt() and 0xFF) != LEGACY_SAFETY_EXTENSION_MARKER) return null
+                    val caneGeometrySlot = compactReceipt && nodeType == 1
+                    val ttcMsVal = if (caneGeometrySlot || ttcRaw == COMPACT_NO_READING) -1 else ttcRaw * 20
+                    val angleSteps = (ttcRaw and CANE_ANGLE_STEPS_MASK).takeIf {
+                        caneGeometrySlot && (ttcRaw and CANE_GEOMETRY_MARKER) != 0 &&
+                            it <= CANE_ANGLE_MAX_STEPS
+                    }
+                    val angleTenths = angleSteps?.times(2)
+                    // Reconstruct the projection with the same minimum range as the cane.
+                    // Firmware supplies the availability flag after its pose and range checks.
+                    val verticalMm = if (angleTenths != null && angleTenths < 900 && nearestDistMm >= 0 &&
+                        (ttcRaw and CANE_PROJECTION_AVAILABLE) != 0
+                    ) {
+                        val range = nearestDistMm.coerceAtLeast(CANE_MIN_PROJECTION_RANGE_MM)
+                        (range * cos(Math.toRadians(angleTenths / 10.0))).roundToInt()
+                    } else {
+                        null
+                    }
                     val protocolVersion = when {
                         compactReceipt -> PROTOCOL_VERSION
                         oldExtension -> LEGACY_PROTOCOL_VERSION
@@ -352,6 +381,8 @@ data class SystemPacket(
                         peerAckSessionId = peerAckSessionId,
                         peerAckEventId = peerAckEventId,
                         receivedAt = timestamp,
+                        caneVerticalDistanceMm = verticalMm,
+                        caneBeamAngleTenthsDeg = angleTenths,
                     )
                     packet.takeIf { it.isValid() }
                 }

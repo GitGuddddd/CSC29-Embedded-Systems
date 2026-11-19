@@ -72,6 +72,20 @@ _Static_assert(sizeof(Ble_RawFrame_t) == 12U, "Compact receipt frame changed");
 _Static_assert((7U + sizeof(Ble_RawFrame_t)) <= BLECOMM_CFG_ADV_MAX_BYTES,
                "Extended manufacturer frame exceeds legacy advertising capacity");
 
+uint16_t BleComm_PackCaneGeometry(uint16_t angle_steps, bool projection_valid)
+{
+    if (angle_steps > 900U)
+    {
+        return BLE_TTC_NO_THREAT;
+    }
+
+    /* Bit 11 identifies cane geometry, bit 10 marks a usable projection,
+     * and bits 9:0 carry the angle. The threshold above keeps 0xFFF reserved. */
+    const uint16_t geometry_marker = 0x0800U;
+    const uint16_t projection_flag = projection_valid ? 0x0400U : 0U;
+    return (uint16_t)(geometry_marker | projection_flag | angle_steps);
+}
+
 void BleComm_Encode(const Ble_AdvancedThreatPacket_t * const p_in, Ble_RawPacket_t * const p_out)
 {
     if ((p_in == NULL) || (p_out == NULL))
@@ -107,7 +121,7 @@ void BleComm_Encode(const Ble_AdvancedThreatPacket_t * const p_in, Ble_RawPacket
         }
     }
 
-    /* Already in the exact wire unit: no division, multiplication or narrowing. */
+    /* The slot carries glasses TTC ticks or already-packed cane v2 geometry. */
     uint16_t ttc_raw = p_in->ttc_20ms;
 
     /* Pack 12-bit Distance and 12-bit TTC across Bytes 3, 4, 5 */

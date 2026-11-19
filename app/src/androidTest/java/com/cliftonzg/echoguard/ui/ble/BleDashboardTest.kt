@@ -29,7 +29,7 @@ class BleDashboardTest {
     @get:Rule val compose = createComposeRule()
 
     private fun render(caneFlags: Int, glassesFlags: Int = 0, fontScale: Float = 1f,
-                       phoneFalls: Long? = null, historyGaps: Boolean = false) {
+                       phoneFalls: Long? = null, historyGaps: Boolean = false, canePacket: SystemPacket? = null) {
         val device = DiscoveredBleDevice("EchoGuard Smart Cane", "AA:00:00:00:00:01", -48, true,
             nodeType = NodeType.CANE, pairId = 1)
         fun decode(cane: Boolean, flags: Int) = requireNotNull(SystemPacket.parse(byteArrayOf(
@@ -39,7 +39,7 @@ class BleDashboardTest {
             0, 0, 0,
         )))
         val state = MonitoringState(device, true, listOf(
-            NodeTelemetry(NodeType.CANE, device.address, decode(true, caneFlags), LinkState.ACTIVE,
+            NodeTelemetry(NodeType.CANE, device.address, canePacket ?: decode(true, caneFlags), LinkState.ACTIVE,
                 phoneFallCount = phoneFalls, phoneHistoryHasGaps = historyGaps),
             NodeTelemetry(NodeType.GLASSES, "AA:00:00:00:00:02", decode(false, glassesFlags), LinkState.ACTIVE),
         ))
@@ -98,5 +98,20 @@ class BleDashboardTest {
             .assertTextEquals("Heartbeat #3 · Fall sequence 5 (0–15)")
         compose.onNodeWithTag("node_CANE_fall_history").performScrollTo()
             .assertTextEquals("Phone-recorded falls: 20 · incomplete history")
+    }
+
+    @Test fun caneShowsRawRangeNextToVerticalRangeAndBeamAngle() {
+        val packet = requireNotNull(SystemPacket.parse(byteArrayOf(
+            0xA1.toByte(), 0xB5.toByte(), 0x10, 0xF4.toByte(), 0x16, 0xC9.toByte(),
+            0xE2.toByte(), 1, 0x10, 0, 0, 0,
+        )))
+        render(0x10, fontScale = 1.4f, canePacket = packet)
+        compose.onNodeWithTag("cane_ground_readings").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Raw distance").assertIsDisplayed()
+        compose.onNodeWithText("Vertical distance").assertIsDisplayed()
+        compose.onNodeWithText("Beam angle").assertIsDisplayed()
+        compose.onNodeWithText("1000 mm").assertIsDisplayed()
+        compose.onNodeWithText("866 mm").assertIsDisplayed()
+        compose.onNodeWithText("30.0°").assertIsDisplayed()
     }
 }

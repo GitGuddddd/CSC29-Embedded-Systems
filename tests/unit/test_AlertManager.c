@@ -162,7 +162,7 @@ void test_AlertManager_Synced_DefaultPlaysOnlyOnCane(void)
     AlertManager_ArbitrateSynced(&in_cane_obs, 1000U, &out_cane);
     TEST_ASSERT_FALSE(out_cane.buzzer_active);
 
-    /* 2. Glasses-initiated head-fall plays on Glasses only */
+    /* 2. Glasses-initiated head fall plays on the Cane, not the Glasses */
     AlertManager_Init();
     Alert_SyncInput_t in_glasses_fall = {
         .is_glasses_node = true,
@@ -172,9 +172,10 @@ void test_AlertManager_Synced_DefaultPlaysOnlyOnCane(void)
         .local_fall_latched = true
     };
     AlertManager_ArbitrateSynced(&in_glasses_fall, 2000U, &out_glasses);
-    TEST_ASSERT_TRUE(out_glasses.buzzer_active);
-    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out_glasses.active_alert);
+    TEST_ASSERT_FALSE(out_glasses.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_NONE, out_glasses.active_alert);
 
+    AlertManager_Init();
     Alert_SyncInput_t in_cane_peer_fall = {
         .is_glasses_node = false,
         .cane_link_fresh = true,
@@ -183,7 +184,8 @@ void test_AlertManager_Synced_DefaultPlaysOnlyOnCane(void)
         .peer_fall_active = true
     };
     AlertManager_ArbitrateSynced(&in_cane_peer_fall, 2000U, &out_cane);
-    TEST_ASSERT_FALSE(out_cane.buzzer_active);
+    TEST_ASSERT_TRUE(out_cane.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out_cane.active_alert);
 
     /* 3. Cane-initiated fall plays on Cane only */
     AlertManager_Init();
@@ -206,6 +208,34 @@ void test_AlertManager_Synced_DefaultPlaysOnlyOnCane(void)
     };
     AlertManager_ArbitrateSynced(&in_glasses_peer_fall, 3000U, &out_glasses);
     TEST_ASSERT_FALSE(out_glasses.buzzer_active);
+}
+
+void test_AlertManager_Synced_GlassesHeadFallFallbackCueWithoutReceipt(void)
+{
+    Alert_Output_t out;
+    Alert_SyncInput_t in = {
+        .is_glasses_node = true,
+        .cane_link_fresh = false,
+        .local_fall_latched = true,
+        .delivery_fallback = true,
+        .obstacle_active = true,
+        .obstacle_dist_mm = 800U
+    };
+
+    /* No cane receipt: the sparse delivery cue, not the siren, and it
+     * takes priority over obstacle beeps while the fall is latched.
+     */
+    AlertManager_ArbitrateSynced(&in, 1000U, &out);
+    TEST_ASSERT_EQUAL(ALERT_FALL_DELIVERY_FAULT, out.active_alert);
+    TEST_ASSERT_TRUE(out.buzzer_active);
+    TEST_ASSERT_EQUAL_UINT16(ALERT_DELIVERY_FREQ_HZ, out.generated_freq_hz);
+
+    /* Receipt confirmed: glasses go quiet, obstacle beeps stay suppressed. */
+    in.delivery_fallback = false;
+    in.cane_link_fresh = true;
+    AlertManager_ArbitrateSynced(&in, 1100U, &out);
+    TEST_ASSERT_FALSE(out.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_NONE, out.active_alert);
 }
 
 void test_AlertManager_Synced_CaneBuzzerFaultFailoverToGlasses(void)
@@ -424,8 +454,9 @@ void test_AlertManager_CalibrationCueYieldsToSafetyAlerts(void)
     cane.peer_fall_active = true;
     AlertManager_PlayCalibrationCue(ALERT_CAL_DONE, 40U);
     AlertManager_ArbitrateSynced(&cane, 40U, &out);
-    TEST_ASSERT_FALSE(out.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out.active_alert);
 
+    AlertManager_Init();
     cane.peer_fall_active = false;
     cane.cane_buzzer_fault = true;
     AlertManager_PlayCalibrationCue(ALERT_CAL_FAILED, 50U);
@@ -748,6 +779,7 @@ int main(void)
     RUN_TEST(test_AlertManager_TechnicalFaultHasTwoPulses);
     RUN_TEST(test_AlertManager_DeliveryFallbackIsSparseAndLowDuty);
     RUN_TEST(test_AlertManager_Synced_DefaultPlaysOnlyOnCane);
+    RUN_TEST(test_AlertManager_Synced_GlassesHeadFallFallbackCueWithoutReceipt);
     RUN_TEST(test_AlertManager_Synced_CaneBuzzerFaultFailoverToGlasses);
     RUN_TEST(test_AlertManager_Synced_FaultRoutingPerNode_AndBothOnCaneOnly);
     RUN_TEST(test_AlertManager_CalibrationCuesAreDistinctOneShots);

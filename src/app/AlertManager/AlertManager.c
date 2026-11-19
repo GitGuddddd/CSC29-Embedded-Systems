@@ -443,8 +443,11 @@ void AlertManager_ArbitrateSynced(const Alert_SyncInput_t * const p_in,
 
     if (!p_in->is_glasses_node)
     {
-        /* Cane node: plays only cane-detected falls and cane faults */
-        AlertManager_SetFallState(p_in->local_fall_latched,
+        /* Cane node: plays every latched fall (its own and the head fall
+         * received from the glasses) and its own sensor faults.
+         */
+        AlertManager_SetFallState(p_in->local_fall_latched ||
+                                  p_in->peer_fall_active,
                                   p_in->local_alarm_paused, now_ms);
         Alert_Type_t req = ALERT_NONE;
         if (p_in->sensor_fault)
@@ -489,19 +492,34 @@ void AlertManager_ArbitrateSynced(const Alert_SyncInput_t * const p_in,
         }
         else
         {
-            /* Normal / Link-independent: Glasses plays Glasses-detected head fall and
-             * radar obstacle on its own buzzer, and its own sensor fault unless Cane also has one.
+            /* Normal: the cane plays the head-fall siren. The glasses play only
+             * the sparse delivery cue if the cane has not confirmed the fall
+             * (no receipt in time, or the cane link went stale).
              */
-            AlertManager_SetFallState(p_in->local_fall_latched,
-                                      p_in->local_alarm_paused, now_ms);
+            AlertManager_SetFallState(false, false, now_ms);
             Alert_Type_t req = ALERT_NONE;
-            if (p_in->obstacle_active)
+            if (p_in->local_fall_latched)
+            {
+                if (p_in->delivery_fallback)
+                {
+                    req = ALERT_FALL_DELIVERY_FAULT;
+                }
+                else
+                {
+                    /* Cane confirmed the fall: glasses stay quiet. */
+                }
+            }
+            else if (p_in->obstacle_active)
             {
                 req = ALERT_OBSTACLE_PROXIMITY;
             }
             else if (p_in->sensor_fault && !p_in->peer_sensor_fault)
             {
                 req = ALERT_SENSOR_FAULT;
+            }
+            else
+            {
+                /* Nothing to play. */
             }
             AlertManager_Arbitrate(req, p_in->obstacle_dist_mm, now_ms, p_out);
         }

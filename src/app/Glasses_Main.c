@@ -113,6 +113,10 @@ static void vTask_GlassesPerception(void *pvParameters)
     }
     bool previous_delivery_fallback = false;
     Threat_Result_t current_threat = {0};
+    bool radar_debug = false;          /* toggled by 'd' on the USB serial console */
+    uint32_t radar_debug_last_ms = 0U;
+    int16_t radar_dbg_x[3] = { 0, 0, 0 };   /* last frame, for the d debug line */
+    uint8_t radar_dbg_valid = 0U;
     uint32_t last_valid_radar_frame_ms = 0U;
 
     Grip_State_t cane_grip_telemetry = GRIP_STATE_UNKNOWN;
@@ -256,6 +260,15 @@ static void vTask_GlassesPerception(void *pvParameters)
             if (Ld2450_ProcessStream(targets, &target_count, now_ms))
             {
                 last_valid_radar_frame_ms = now_ms;
+                radar_dbg_valid = 0U;
+                for (uint8_t k = 0U; (k < 3U) && (k < target_count); k++)
+                {
+                    radar_dbg_x[k] = targets[k].x_mm;
+                    if (targets[k].is_valid)
+                    {
+                        radar_dbg_valid |= (uint8_t)(1U << k);
+                    }
+                }
                 ThreatAssessment_ProcessTargetsAt(targets, target_count, cane_grip_telemetry, now_ms, &current_threat);
             }
             if (Ld2450_HasRxFault() && ((uint32_t)(now_ms - last_radar_retry_ms) >= 1000U))
@@ -308,6 +321,11 @@ static void vTask_GlassesPerception(void *pvParameters)
                 SafetyDelivery_Clear(&fall_delivery);
                 IncidentRetention_Store(false, BleComm_GetSessionId(), head_fall.sequence);
             }
+            else if ((ch == (int)'d') || (ch == (int)'D'))
+            {
+                radar_debug = !radar_debug;
+                printf("[RADAR DEBUG] %s\n", radar_debug ? "ON (10 Hz)" : "OFF");
+            }
             else if ((ch == (int)'s') || (ch == (int)'S'))
             {
                 printf("[STATUS] up=%u mode=%u ready=%u adv=%u scan=%u imu_f=%u radar_to=%u cane_seen=%u tx_seq=%u\n",
@@ -320,6 +338,19 @@ static void vTask_GlassesPerception(void *pvParameters)
         }
 
         bool radar_timeout = ((now_ms - last_valid_radar_frame_ms) >= 500U) || Ld2450_HasRxFault();
+        if (radar_debug && ((now_ms - radar_debug_last_ms) >= 100U))
+        {
+            radar_debug_last_ms = now_ms;
+            /* ttc is in 20 ms ticks; 4095 = none. cue: bit0 STOP, bits1-2 side (0 centre, 1 left, 2 right). */
+            /* ln: blocked lanes (bit0 centre, bit1 left, bit2 right); v: valid target slots; x: raw radar x per slot (mm). */
+            printf("[RADAR] t=%u dist=%u spd=%d ttc=%u thr=%u cue=%u to=%u grip=%u ln=%u v=%u x=%d,%d,%d\n",
+                   (unsigned)now_ms, (unsigned)current_threat.nearest_distance_mm,
+                   (int)current_threat.closing_speed_cms, (unsigned)current_threat.ttc_20ms,
+                   (unsigned)current_threat.is_threat_active, (unsigned)current_threat.open_direction_cue,
+                   (unsigned)radar_timeout, (unsigned)cane_grip_telemetry,
+                   (unsigned)ThreatAssessment_GetBlockedMask(), (unsigned)radar_dbg_valid,
+                   (int)radar_dbg_x[0], (int)radar_dbg_x[1], (int)radar_dbg_x[2]);
+        }
         bool standby = (imu.state == IMU_SUPERVISOR_ASLEEP) && sleep_requested;
         bool obstacle = !standby && (cane_grip_telemetry != GRIP_STATE_RELEASED) &&
                         current_threat.is_threat_active && !radar_timeout;
@@ -361,6 +392,7 @@ static void vTask_GlassesPerception(void *pvParameters)
             .cane_buzzer_fault = cane_buzzer_fault,
             .obstacle_active = obstacle,
             .obstacle_dist_mm = current_threat.nearest_distance_mm,
+            .obstacle_cue = (uint8_t)current_threat.open_direction_cue,
             .sensor_fault = !standby && (imu.fault || radar_timeout),
             .peer_sensor_fault = !standby && cane_sensor_fault
         };

@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "app/AlertManager/AlertManager.h"
 #include "app/AlertManager/AlertManager_Cfg.h"
+#include "app/ThreatAssessment/ThreatAssessment.h" /* header only: cue constants */
 
 void setUp(void)
 {
@@ -13,14 +14,14 @@ void tearDown(void)
 
 void test_AlertManager_PitchMapping(void)
 {
-    /* 2000mm -> 1500Hz */
-    TEST_ASSERT_EQUAL_UINT16(1500U, AlertManager_MapDistanceToPitch(2000U));
+    /* Far end of the alert zone -> 1500Hz */
+    TEST_ASSERT_EQUAL_UINT16(1500U, AlertManager_MapDistanceToPitch(ALERT_OBSTACLE_MAX_DIST_MM));
 
     /* 300mm -> 3500Hz */
     TEST_ASSERT_EQUAL_UINT16(3500U, AlertManager_MapDistanceToPitch(300U));
 
-    /* 1150mm (midpoint) -> 2500Hz */
-    TEST_ASSERT_EQUAL_UINT16(2500U, AlertManager_MapDistanceToPitch(1150U));
+    /* Midpoint of 300..3000 mm -> 2500Hz */
+    TEST_ASSERT_EQUAL_UINT16(2500U, AlertManager_MapDistanceToPitch(1650U));
 }
 
 void test_AlertManager_FallPreemptsObstacle(void)
@@ -432,6 +433,322 @@ void test_AlertManager_CalibrationCueYieldsToSafetyAlerts(void)
     TEST_ASSERT_FALSE(out.buzzer_active);
 }
 
+/* ---- FR9 obstacle direction-cue beep pattern (ported from putra-branch) ---- */
+
+/* Count rising edges of buzzer_active over [0, span_ms) sampled every 10 ms. */
+static uint32_t Count_Beeps(uint8_t cue, uint16_t dist_mm, uint32_t span_ms, uint32_t * p_on_ms)
+{
+    uint32_t beeps = 0U;
+    uint32_t on_ms = 0U;
+    bool prev = false;
+    Alert_Output_t out;
+
+    AlertManager_Init();
+    AlertManager_SetObstacleCue(cue);
+    for (uint32_t t = 0U; t < span_ms; t += 10U)
+    {
+        AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, dist_mm, t, &out);
+        if (out.buzzer_active)
+        {
+            on_ms += 10U;
+            if (!prev)
+            {
+                beeps++;
+            }
+        }
+        prev = out.buzzer_active;
+    }
+    if (p_on_ms != NULL)
+    {
+        *p_on_ms = on_ms;
+    }
+    return beeps;
+}
+
+void test_AlertManager_CueBitsMatchThreatAssessment(void)
+{
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, ALERT_CUE_STOP);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_SIDE_SHIFT, ALERT_CUE_SIDE_SHIFT);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_LANE_CENTER, ALERT_CUE_SIDE_CENTER);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_LANE_LEFT, ALERT_CUE_SIDE_LEFT);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_LANE_RIGHT, ALERT_CUE_SIDE_RIGHT);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_SIDE_ALL_BLOCKED, ALERT_CUE_SIDE_ALL_BLOCKED);
+}
+
+void test_AlertManager_ObstacleCenterCueIsOneBeep(void)
+{
+    uint32_t on_ms = 0U;
+    /* 1000 mm: pause 150 + (1000-300)*300/1700 ~ 326 ms; cycle = 300 + 326 ms. */
+    TEST_ASSERT_EQUAL_UINT32(4U, Count_Beeps(0U, 1000U, 2000U, &on_ms));
+    TEST_ASSERT_EQUAL_UINT32(4U * ALERT_OBSTACLE_PULSE_MS, on_ms);
+}
+
+void test_AlertManager_ObstacleLeftIsTwoBeepsRightIsThree(void)
+{
+    const uint8_t left = (uint8_t)(ALERT_CUE_SIDE_LEFT << ALERT_CUE_SIDE_SHIFT);
+    const uint8_t right = (uint8_t)(ALERT_CUE_SIDE_RIGHT << ALERT_CUE_SIDE_SHIFT);
+    uint32_t on_ms = 0U;
+
+    /* At the far end of the zone the cycle is burst + 450 ms pause: LEFT 600+450, RIGHT 900+450. */
+    TEST_ASSERT_EQUAL_UINT32(2U, Count_Beeps(left, ALERT_OBSTACLE_MAX_DIST_MM, 1000U, &on_ms));
+    TEST_ASSERT_EQUAL_UINT32(300U, on_ms);
+    TEST_ASSERT_EQUAL_UINT32(3U, Count_Beeps(right, ALERT_OBSTACLE_MAX_DIST_MM, 1300U, &on_ms));
+    TEST_ASSERT_EQUAL_UINT32(450U, on_ms);
+}
+
+void test_AlertManager_AllBlockedIsFastFourBeepBurst(void)
+{
+    uint32_t on_ms = 0U;
+    const uint8_t blocked = (uint8_t)(ALERT_CUE_SIDE_ALL_BLOCKED << ALERT_CUE_SIDE_SHIFT);
+    /* 2000 mm: burst = 4 x (110 on + 90 off) = 800 ms, then a 450 ms pause. */
+    TEST_ASSERT_EQUAL_UINT32(4U, Count_Beeps(blocked, 2000U, 1000U, &on_ms));
+    TEST_ASSERT_EQUAL_UINT32(4U * ALERT_OBSTACLE_BLOCKED_PULSE_MS, on_ms);
+}
+
+void test_AlertManager_ObstaclePauseShrinksWithDistance(void)
+{
+    const uint8_t left = (uint8_t)(ALERT_CUE_SIDE_LEFT << ALERT_CUE_SIDE_SHIFT);
+    /* Beeps in a fixed 4 s window: more repeats = shorter pause. */
+    uint32_t far_beeps = Count_Beeps(left, 2000U, 4000U, NULL);   /* cycle 1050 ms */
+    uint32_t near_beeps = Count_Beeps(left, 300U, 4000U, NULL);   /* cycle 750 ms */
+    TEST_ASSERT_TRUE(near_beeps > far_beeps);
+}
+
+static Alert_Output_t Obstacle_Step(uint8_t cue, uint16_t dist_mm, uint32_t t_ms);
+
+void test_AlertManager_StopIsContinuousAtMaxPitchAtAnyDistance(void)
+{
+    const uint16_t dists[] = {2000U, 1000U, 300U};
+    for (uint32_t k = 0U; k < 3U; k++)
+    {
+        uint32_t on_ms = 0U;
+        AlertManager_Init();
+        Alert_Output_t out = {0};
+        AlertManager_SetObstacleCue(ALERT_CUE_STOP);
+        for (uint32_t t = 0U; t < 1000U; t += 10U)
+        {
+            AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, dists[k], t, &out);
+            on_ms += out.buzzer_active ? 10U : 0U;
+        }
+        TEST_ASSERT_EQUAL_UINT32(1000U, on_ms);
+        TEST_ASSERT_EQUAL_UINT16(ALERT_BUZZER_MAX_FREQ_HZ, out.generated_freq_hz);
+        TEST_ASSERT_EQUAL_UINT8(ALERT_STANDARD_DUTY_PERCENT, out.generated_duty_percent);
+    }
+}
+
+void test_AlertManager_StopContinuousThenFastPulsesAndKeepsPitch(void)
+{
+    uint32_t on_early = 0U;
+    uint32_t off_late = 0U;
+    Alert_Output_t out = {0};
+    AlertManager_Init();
+    AlertManager_SetObstacleCue(ALERT_CUE_STOP);
+    for (uint32_t t = 0U; t < 4000U; t += 10U)
+    {
+        AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, 800U, t, &out);
+        if (t < ALERT_STOP_CONTINUOUS_MAX_MS)
+        {
+            on_early += out.buzzer_active ? 10U : 0U;
+        }
+        else
+        {
+            off_late += out.buzzer_active ? 0U : 10U;
+        }
+        TEST_ASSERT_EQUAL_UINT16(ALERT_BUZZER_MAX_FREQ_HZ, out.generated_freq_hz);
+    }
+    TEST_ASSERT_EQUAL_UINT32(ALERT_STOP_CONTINUOUS_MAX_MS, on_early);  /* continuous at first */
+    TEST_ASSERT_TRUE(off_late > 0U);                                   /* then fast pulses */
+}
+
+void test_AlertManager_NoFreeLaneStretchesItsPauseWhenItKeepsPlaying(void)
+{
+    const uint8_t blocked = (uint8_t)(ALERT_CUE_SIDE_ALL_BLOCKED << ALERT_CUE_SIDE_SHIFT);
+    uint32_t first = 0U;
+    uint32_t later = 0U;
+    bool prev = false;
+
+    AlertManager_Init();
+    for (uint32_t t = 0U; t < 10000U; t += 10U)
+    {
+        const bool on = Obstacle_Step(blocked, 1000U, t).buzzer_active;
+        if (on && !prev)
+        {
+            if (t < ALERT_OBSTACLE_BLOCKED_REPEAT_MS) { first++; } else { later++; }
+        }
+        prev = on;
+    }
+    /* 5 s window each: fewer bursts once the pause has been stretched. */
+    TEST_ASSERT_TRUE(later < first);
+}
+
+void test_AlertManager_StopLeavesAfterDwellNotInstantly(void)
+{
+    /* STOP for 1 s, then the requested cue becomes centre (1-beep burst). */
+    Alert_Output_t out = {0};
+    for (uint32_t t = 0U; t < 1000U; t += 10U)
+    {
+        out = Obstacle_Step(ALERT_CUE_STOP, 1200U, t);
+    }
+    for (uint32_t t = 1000U; t < 1000U + ALERT_OBSTACLE_CUE_DWELL_MS - 10U; t += 10U)
+    {
+        out = Obstacle_Step(0U, 1200U, t);
+        TEST_ASSERT_TRUE(out.buzzer_active);                             /* still STOP */
+        TEST_ASSERT_EQUAL_UINT16(ALERT_BUZZER_MAX_FREQ_HZ, out.generated_freq_hz);
+    }
+    uint32_t silent = 0U;
+    for (uint32_t t = 1000U + ALERT_OBSTACLE_CUE_DWELL_MS; t < 3000U; t += 10U)
+    {
+        silent += Obstacle_Step(0U, 1200U, t).buzzer_active ? 0U : 1U;
+    }
+    TEST_ASSERT_TRUE(silent > 0U); /* then the 1-beep pattern has gaps */
+}
+
+void test_AlertManager_ObstacleLoudnessStaysAtEarSafeDuty(void)
+{
+    Alert_Output_t out;
+    AlertManager_SetObstacleCue((uint8_t)(ALERT_CUE_STOP | (ALERT_CUE_SIDE_RIGHT << ALERT_CUE_SIDE_SHIFT)));
+    AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, 400U, 0U, &out);
+    TEST_ASSERT_EQUAL_UINT8(ALERT_STANDARD_DUTY_PERCENT, out.generated_duty_percent);
+}
+
+void test_AlertManager_Synced_GlassesPassesObstacleCueToPattern(void)
+{
+    Alert_Output_t out;
+    Alert_SyncInput_t in = {
+        .is_glasses_node = true,
+        .obstacle_active = true,
+        .obstacle_dist_mm = 1000U,
+        .obstacle_cue = (uint8_t)(ALERT_CUE_SIDE_LEFT << ALERT_CUE_SIDE_SHIFT)
+    };
+    AlertManager_ArbitrateSynced(&in, 0U, &out);
+    TEST_ASSERT_TRUE(out.buzzer_active);          /* beep 1 on */
+    AlertManager_ArbitrateSynced(&in, 200U, &out);
+    TEST_ASSERT_FALSE(out.buzzer_active);         /* gap */
+    AlertManager_ArbitrateSynced(&in, 310U, &out);
+    TEST_ASSERT_TRUE(out.buzzer_active);          /* beep 2 on */
+}
+
+/* ---- Steadiness while walking: cue dwell, distance smoothing, latched pause ---- */
+
+#define CUE_LEFT   ((uint8_t)(ALERT_CUE_SIDE_LEFT << ALERT_CUE_SIDE_SHIFT))
+#define CUE_RIGHT  ((uint8_t)(ALERT_CUE_SIDE_RIGHT << ALERT_CUE_SIDE_SHIFT))
+
+static Alert_Output_t Obstacle_Step(uint8_t cue, uint16_t dist_mm, uint32_t t_ms)
+{
+    Alert_Output_t out;
+    AlertManager_SetObstacleCue(cue);
+    AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, dist_mm, t_ms, &out);
+    return out;
+}
+
+/* Run the obstacle renderer for 3 s and return the on/off sample per 10 ms. */
+static void Record_Pattern(bool * p_on, uint32_t n, uint8_t (*cue_at)(uint32_t t_ms))
+{
+    AlertManager_Init();
+    for (uint32_t i = 0U; i < n; i++)
+    {
+        p_on[i] = Obstacle_Step(cue_at(i * 10U), 1200U, i * 10U).buzzer_active;
+    }
+}
+
+static uint8_t Cue_Right(uint32_t t) { (void)t; return CUE_RIGHT; }
+static uint8_t Cue_RightWithLeftBlip(uint32_t t) { return ((t >= 300U) && (t < 500U)) ? CUE_LEFT : CUE_RIGHT; }
+static uint8_t Cue_RightThenLeft(uint32_t t) { return (t >= 300U) ? CUE_LEFT : CUE_RIGHT; }
+
+void test_AlertManager_CueFlickerShorterThanDwellKeepsPattern(void)
+{
+    static bool ref[300];
+    static bool blip[300];
+    Record_Pattern(ref, 300U, Cue_Right);
+    Record_Pattern(blip, 300U, Cue_RightWithLeftBlip);
+    for (uint32_t i = 0U; i < 300U; i++)
+    {
+        TEST_ASSERT_EQUAL_INT(ref[i], blip[i]); /* a 200 ms flicker changes nothing */
+    }
+}
+
+void test_AlertManager_CueChangeAppliesAfterDwell(void)
+{
+    static bool ref[300];
+    static bool changed[300];
+    Record_Pattern(ref, 300U, Cue_Right);
+    Record_Pattern(changed, 300U, Cue_RightThenLeft);
+
+    const uint32_t apply_idx = (300U + ALERT_OBSTACLE_CUE_DWELL_MS) / 10U;
+    for (uint32_t i = 0U; i < apply_idx; i++)
+    {
+        TEST_ASSERT_EQUAL_INT(ref[i], changed[i]); /* unchanged during the dwell */
+    }
+    uint32_t diffs = 0U;
+    for (uint32_t i = apply_idx; i < 300U; i++)
+    {
+        diffs += (ref[i] != changed[i]) ? 1U : 0U;
+    }
+    TEST_ASSERT_TRUE(diffs > 0U); /* then the 2-beep pattern replaces the 3-beep one */
+}
+
+void test_AlertManager_StopRisingAppliesImmediatelyAndRestartsCycle(void)
+{
+    /* LEFT at 2000 mm: burst 0-600 ms, pause until 1050 ms. At 700 ms it is silent. */
+    TEST_ASSERT_TRUE(Obstacle_Step(CUE_LEFT, 2000U, 0U).buzzer_active);
+    for (uint32_t t = 10U; t < 700U; t += 10U)
+    {
+        (void)Obstacle_Step(CUE_LEFT, 2000U, t);
+    }
+    TEST_ASSERT_FALSE(Obstacle_Step(CUE_LEFT, 2000U, 700U).buzzer_active);
+    /* STOP appears: it plays at once (continuous), without waiting for the hold time. */
+    TEST_ASSERT_TRUE(Obstacle_Step(ALERT_CUE_STOP, 2000U, 710U).buzzer_active);
+    TEST_ASSERT_TRUE(Obstacle_Step(ALERT_CUE_STOP, 2000U, 800U).buzzer_active);
+}
+
+void test_AlertManager_PitchFollowsDistanceThroughLowPass(void)
+{
+    Alert_Output_t out = Obstacle_Step(0U, 2000U, 0U);
+    TEST_ASSERT_EQUAL_UINT16(AlertManager_MapDistanceToPitch(2000U), out.generated_freq_hz);
+
+    out = Obstacle_Step(0U, 300U, 10U); /* distance jumps to the nearest limit */
+    TEST_ASSERT_TRUE(out.generated_freq_hz < AlertManager_MapDistanceToPitch(300U)); /* not instant */
+    TEST_ASSERT_TRUE(out.generated_freq_hz > AlertManager_MapDistanceToPitch(2000U));
+
+    uint16_t prev = out.generated_freq_hz;
+    for (uint32_t t = 20U; t < 2000U; t += 10U)
+    {
+        out = Obstacle_Step(0U, 300U, t);
+        TEST_ASSERT_TRUE(out.generated_freq_hz >= prev); /* monotonic, no overshoot */
+        prev = out.generated_freq_hz;
+    }
+    TEST_ASSERT_UINT16_WITHIN(40U, AlertManager_MapDistanceToPitch(300U), out.generated_freq_hz);
+}
+
+void test_AlertManager_BeepsNeverTruncatedWhileDistanceSweeps(void)
+{
+    /* Distance sweeps 2000 -> 300 mm in 4 s with a LEFT cue: every beep must stay a full 150 ms. */
+    uint32_t run_ms = 0U;
+    uint32_t beeps = 0U;
+    bool prev = false;
+
+    for (uint32_t t = 0U; t <= 4000U; t += 10U)
+    {
+        const uint16_t d = (uint16_t)(2000U - ((1700U * t) / 4000U));
+        const bool on = Obstacle_Step(CUE_LEFT, d, t).buzzer_active;
+        if (on)
+        {
+            run_ms += 10U;
+        }
+        else if (prev)
+        {
+            TEST_ASSERT_EQUAL_UINT32(ALERT_OBSTACLE_PULSE_MS, run_ms);
+            run_ms = 0U;
+        }
+        if (on && !prev)
+        {
+            beeps++;
+        }
+        prev = on;
+    }
+    TEST_ASSERT_TRUE(beeps >= 6U);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -446,5 +763,21 @@ int main(void)
     RUN_TEST(test_AlertManager_Synced_FaultRoutingPerNode_AndBothOnCaneOnly);
     RUN_TEST(test_AlertManager_CalibrationCuesAreDistinctOneShots);
     RUN_TEST(test_AlertManager_CalibrationCueYieldsToSafetyAlerts);
+    RUN_TEST(test_AlertManager_CueBitsMatchThreatAssessment);
+    RUN_TEST(test_AlertManager_ObstacleCenterCueIsOneBeep);
+    RUN_TEST(test_AlertManager_ObstacleLeftIsTwoBeepsRightIsThree);
+    RUN_TEST(test_AlertManager_AllBlockedIsFastFourBeepBurst);
+    RUN_TEST(test_AlertManager_ObstaclePauseShrinksWithDistance);
+    RUN_TEST(test_AlertManager_StopIsContinuousAtMaxPitchAtAnyDistance);
+    RUN_TEST(test_AlertManager_StopContinuousThenFastPulsesAndKeepsPitch);
+    RUN_TEST(test_AlertManager_NoFreeLaneStretchesItsPauseWhenItKeepsPlaying);
+    RUN_TEST(test_AlertManager_StopLeavesAfterDwellNotInstantly);
+    RUN_TEST(test_AlertManager_ObstacleLoudnessStaysAtEarSafeDuty);
+    RUN_TEST(test_AlertManager_Synced_GlassesPassesObstacleCueToPattern);
+    RUN_TEST(test_AlertManager_CueFlickerShorterThanDwellKeepsPattern);
+    RUN_TEST(test_AlertManager_CueChangeAppliesAfterDwell);
+    RUN_TEST(test_AlertManager_StopRisingAppliesImmediatelyAndRestartsCycle);
+    RUN_TEST(test_AlertManager_PitchFollowsDistanceThroughLowPass);
+    RUN_TEST(test_AlertManager_BeepsNeverTruncatedWhileDistanceSweeps);
     return UNITY_END();
 }

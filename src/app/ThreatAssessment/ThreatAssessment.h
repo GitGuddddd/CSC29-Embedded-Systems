@@ -19,6 +19,8 @@ typedef enum
 
 #define THREAT_CUE_STOP        (0x01U)
 #define THREAT_CUE_SIDE_SHIFT  (1U)
+/* Side field value 3: no confirmed-free side lane (both blocked, or only just cleared). 0/1/2 are the Threat_Lane_t values. */
+#define THREAT_CUE_SIDE_ALL_BLOCKED (3U)
 
 typedef struct
 {
@@ -28,6 +30,9 @@ typedef struct
     uint16_t is_threat_active : 1;
     uint16_t open_direction_cue : 3;
 } Threat_Result_t;
+
+/* Debug: bit n set = lane n (THREAT_LANE_CENTER/LEFT/RIGHT) is currently blocked. */
+uint8_t ThreatAssessment_GetBlockedMask(void);
 
 void ThreatAssessment_Init(void);
 void ThreatAssessment_ProcessTargets(const Radar_Target_t * const p_targets,

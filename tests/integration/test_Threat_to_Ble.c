@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "app/ThreatAssessment/ThreatAssessment.h"
+#include "app/ThreatAssessment/ThreatAssessment_Cfg.h"
 #include "services/BleComm/BleComm.h"
 #include "mock_BleRadio.h"
 #include "app/AlertManager/AlertManager.h"
@@ -11,6 +12,9 @@
 #include "drivers/Buzzer/Buzzer.c"
 #include "services/SafetyDelivery/SafetyDelivery.c"
 #include "app/AlertManager/AlertManager.c"
+
+/* Speeds below are written as "approaching" magnitudes; the sign follows the radar convention. */
+#define APPROACHING(v) ((int16_t)(THREAT_NEGATIVE_SPEED_IS_APPROACHING ? -(v) : (v)))
 
 void setUp(void)
 {
@@ -42,7 +46,7 @@ static Ble_AdvancedThreatPacket_t RoundTrip(const Threat_Result_t * const p_thre
 
 void test_TtcPipelineQuantizesOnceWithoutChangingWireFormat(void)
 {
-    Radar_Target_t target = {.distance_mm = 1150U, .speed_cms = 20, .is_valid = true};
+    Radar_Target_t target = {.distance_mm = 1150U, .speed_cms = APPROACHING(20), .is_valid = true};
     Threat_Result_t result;
     ThreatAssessment_ProcessTargets(&target, 1U, GRIP_STATE_HELD, &result);
     Ble_AdvancedThreatPacket_t decoded = RoundTrip(&result);
@@ -53,7 +57,7 @@ void test_TtcPipelineQuantizesOnceWithoutChangingWireFormat(void)
 
 void test_MaximumValidTtcDoesNotWrapIntoAnUrgentSmallValue(void)
 {
-    Radar_Target_t target = {.distance_mm = 4094U, .speed_cms = 5, .is_valid = true};
+    Radar_Target_t target = {.distance_mm = 4094U, .speed_cms = APPROACHING(5), .is_valid = true};
     Threat_Result_t result;
     ThreatAssessment_ProcessTargets(&target, 1U, GRIP_STATE_HELD, &result);
     Ble_AdvancedThreatPacket_t decoded = RoundTrip(&result);
@@ -70,7 +74,7 @@ void test_MaximumValidTtcDoesNotWrapIntoAnUrgentSmallValue(void)
 
 void test_LongTtcIsUnavailableButObstacleFlagRemainsActive(void)
 {
-    Radar_Target_t target = {.distance_mm = 2000U, .speed_cms = 1, .is_valid = true};
+    Radar_Target_t target = {.distance_mm = 2000U, .speed_cms = APPROACHING(1), .is_valid = true};
     Threat_Result_t result;
     ThreatAssessment_ProcessTargets(&target, 1U, GRIP_STATE_HELD, &result);
     Ble_AdvancedThreatPacket_t decoded = RoundTrip(&result);

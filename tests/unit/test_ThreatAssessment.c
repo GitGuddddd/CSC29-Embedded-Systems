@@ -2,6 +2,11 @@
 #include "app/ThreatAssessment/ThreatAssessment.h"
 #include "app/ThreatAssessment/ThreatAssessment_Cfg.h"
 
+/* Approaching speed in the radar's own sign convention (see ThreatAssessment_Cfg.h). */
+/* x in the user's frame: negative = left, whatever way the radar is mounted. */
+#define USER_X(v) ((int16_t)(THREAT_MIRROR_X ? -(v) : (v)))
+#define APPROACHING(v) ((int16_t)(THREAT_NEGATIVE_SPEED_IS_APPROACHING ? -(v) : (v)))
+
 void setUp(void)
 {
     ThreatAssessment_Init();
@@ -11,44 +16,65 @@ void tearDown(void)
 {
 }
 
-void test_ThreatAssessment_IgnoresDepartingTargets(void)
+void test_ThreatAssessment_DepartingTargetStillOccupiesLane(void)
 {
+    /* putra-branch OPEN-22: nothing is excluded for moving away. */
     Radar_Target_t targets[1] = {0};
     targets[0].is_valid = true;
     targets[0].distance_mm = 1500U;
-    targets[0].speed_cms = -20; /* Departing fast (-20 < -10) */
+    targets[0].speed_cms = APPROACHING(-20); /* departing at 20 cm/s */
 
     Threat_Result_t res;
     ThreatAssessment_ProcessTargets(targets, 1U, GRIP_STATE_HELD, &res);
 
-    TEST_ASSERT_FALSE(res.is_threat_active);
+    TEST_ASSERT_TRUE(res.is_threat_active);
+    TEST_ASSERT_EQUAL_UINT16(1500U, res.nearest_distance_mm);
+    TEST_ASSERT_EQUAL_UINT16(BLE_TTC_NO_THREAT, res.ttc_20ms); /* not closing -> no TTC */
+}
+
+void test_ThreatAssessment_SpeedSignConvention_PositiveIsApproaching(void)
+{
+    Threat_Result_t res;
+    Radar_Target_t target = { .distance_mm = 1600U, .speed_cms = APPROACHING(16), .x_mm = 0, .is_valid = true };
+
+    ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 0U, &res);
+    TEST_ASSERT_TRUE(res.is_threat_active);
+    TEST_ASSERT_EQUAL_INT16(16, res.closing_speed_cms);
+    TEST_ASSERT_EQUAL_UINT16(500U, res.ttc_20ms); /* 1600 * 5 / 16 */
+
+    /* The opposite sign is a departing reading: no TTC, but the lane stays blocked. */
+    ThreatAssessment_Init();
+    target.speed_cms = APPROACHING(-16);
+    ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 0U, &res);
+    TEST_ASSERT_TRUE(res.is_threat_active);
+    TEST_ASSERT_EQUAL_UINT16(BLE_TTC_NO_THREAT, res.ttc_20ms);
 }
 
 void test_ThreatAssessment_Hysteresis_EnterAndClear(void)
 {
     Radar_Target_t targets[1] = {0};
     targets[0].is_valid = true;
-    targets[0].speed_cms = 15; /* Approaching */
+    targets[0].speed_cms = APPROACHING(15);
 
     Threat_Result_t res;
 
-    /* 1. At 2050mm (Outside enter threshold of 2000mm) -> Inactive */
-    targets[0].distance_mm = 2050U;
+    /* 1. Just outside the enter threshold -> Inactive */
+    targets[0].distance_mm = (uint16_t)(THREAT_ALERT_ENTER_DIST_MM + 50U);
     ThreatAssessment_ProcessTargets(targets, 1U, GRIP_STATE_HELD, &res);
     TEST_ASSERT_FALSE(res.is_threat_active);
 
-    /* 2. Moves closer: 1950mm (< 2000mm) -> Active */
-    targets[0].distance_mm = 1950U;
+    /* 2. Moves closer: at the enter threshold -> Active */
+    targets[0].distance_mm = THREAT_ALERT_ENTER_DIST_MM;
     ThreatAssessment_ProcessTargets(targets, 1U, GRIP_STATE_HELD, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
 
-    /* 3. Moves back to 2050mm (In hysteresis zone: > 2000mm but <= 2100mm) -> Remains Active! */
-    targets[0].distance_mm = 2050U;
+    /* 3. Back inside the hysteresis band (> enter, <= clear) -> Remains Active */
+    targets[0].distance_mm = (uint16_t)(THREAT_ALERT_ENTER_DIST_MM + 50U);
     ThreatAssessment_ProcessTargets(targets, 1U, GRIP_STATE_HELD, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
 
-    /* 4. Moves past clear threshold: 2150mm (> 2100mm) -> Inactive */
-    targets[0].distance_mm = 2150U;
+    /* 4. Past the clear threshold -> Inactive */
+    targets[0].distance_mm = (uint16_t)(THREAT_ALERT_CLEAR_DIST_MM + 50U);
     ThreatAssessment_ProcessTargets(targets, 1U, GRIP_STATE_HELD, &res);
     TEST_ASSERT_FALSE(res.is_threat_active);
 }
@@ -58,7 +84,7 @@ void test_ThreatAssessment_FR6_GripGating(void)
     Radar_Target_t targets[1] = {0};
     targets[0].is_valid = true;
     targets[0].distance_mm = 1200U;
-    targets[0].speed_cms = 10;
+    targets[0].speed_cms = APPROACHING(10);
 
     Threat_Result_t res;
 
@@ -75,22 +101,42 @@ void test_ThreatAssessment_FR6_GripGating(void)
     TEST_ASSERT_TRUE(res.is_threat_active);
 }
 
+void test_ThreatAssessment_ReleasedKeepsLaneOccupancyCurrent(void)
+{
+    /* putra-branch FR6: a confirmed release silences the alert, but the lanes
+     * keep scanning, so regripping inside the hysteresis band resumes at once. */
+    Radar_Target_t target = { .distance_mm = 2900U, .speed_cms = 0, .x_mm = 0, .is_valid = true };
+    Threat_Result_t res;
+
+    ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 0U, &res);
+    TEST_ASSERT_TRUE(res.is_threat_active);
+
+    target.distance_mm = (uint16_t)(THREAT_ALERT_ENTER_DIST_MM + 50U); /* between the enter and clear distances */
+    ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_RELEASED, 20U, &res);
+    TEST_ASSERT_FALSE(res.is_threat_active);
+    TEST_ASSERT_EQUAL_UINT16(UINT16_MAX, res.nearest_distance_mm);
+
+    ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 40U, &res);
+    TEST_ASSERT_TRUE(res.is_threat_active);
+    TEST_ASSERT_EQUAL_UINT16((uint16_t)(THREAT_ALERT_ENTER_DIST_MM + 50U), res.nearest_distance_mm);
+}
+
 void test_ThreatAssessment_TtcIsBoundedInWireUnits(void)
 {
-    Radar_Target_t target = {.is_valid = true, .distance_mm = 2000U, .speed_cms = 1};
+    Radar_Target_t target = {.is_valid = true, .distance_mm = 2000U, .speed_cms = APPROACHING(1)};
     Threat_Result_t result;
     ThreatAssessment_ProcessTargets(&target, 1U, GRIP_STATE_HELD, &result);
     TEST_ASSERT_TRUE(result.is_threat_active); /* Unavailable TTC does not suppress the obstacle. */
     TEST_ASSERT_EQUAL_UINT16(BLE_TTC_NO_THREAT, result.ttc_20ms);
 
     target.distance_mm = 4094U;
-    target.speed_cms = 5;
+    target.speed_cms = APPROACHING(5);
     ThreatAssessment_ProcessTargets(&target, 1U, GRIP_STATE_HELD, &result);
     TEST_ASSERT_EQUAL_UINT16(BLE_TTC_MAX_TICKS, result.ttc_20ms);
     TEST_ASSERT_EQUAL_UINT32(81880U, (uint32_t)result.ttc_20ms * BLE_TTC_STEP_MS);
 
     target.distance_mm = 819U;
-    target.speed_cms = 1;
+    target.speed_cms = APPROACHING(1);
     ThreatAssessment_ProcessTargets(&target, 1U, GRIP_STATE_HELD, &result);
     TEST_ASSERT_EQUAL_UINT16(BLE_TTC_NO_THREAT, result.ttc_20ms); /* 4095 is reserved. */
 }
@@ -103,7 +149,7 @@ void test_ThreatAssessment_TtcMatchesWideArithmeticAcrossBoundaryInputs(void)
     {
         for (uint32_t s = 0U; s < sizeof(speeds) / sizeof(speeds[0]); ++s)
         {
-            Radar_Target_t target = {.is_valid = true, .distance_mm = distances[d], .speed_cms = speeds[s]};
+            Radar_Target_t target = {.is_valid = true, .distance_mm = distances[d], .speed_cms = APPROACHING(speeds[s])};
             Threat_Result_t result;
             ThreatAssessment_ProcessTargets(&target, 1U, GRIP_STATE_HELD, &result);
             uint16_t expected = BLE_TTC_NO_THREAT;
@@ -125,7 +171,7 @@ void test_ThreatAssessment_ClearUsesUnavailableSentinels(void)
     TEST_ASSERT_FALSE(result.is_threat_active);
     TEST_ASSERT_EQUAL_UINT16(UINT16_MAX, result.nearest_distance_mm);
     TEST_ASSERT_EQUAL_UINT16(BLE_TTC_NO_THREAT, result.ttc_20ms);
-    Radar_Target_t target = {.is_valid = true, .distance_mm = 1500U, .speed_cms = 10};
+    Radar_Target_t target = {.is_valid = true, .distance_mm = 2000U, .speed_cms = APPROACHING(10)};
     ThreatAssessment_ProcessTargets(&target, 1U, GRIP_STATE_RELEASED, &result);
     TEST_ASSERT_FALSE(result.is_threat_active);
     TEST_ASSERT_EQUAL_UINT16(BLE_TTC_NO_THREAT, result.ttc_20ms);
@@ -137,8 +183,8 @@ void test_ThreatAssessment_ThreeLaneOccupancy_CorridorAndSideHysteresis(void)
 
     /* 1. Corridor gate: targets outside +/- 1500 mm lateral X are ignored. */
     Radar_Target_t outside[2] = {
-        { .distance_mm = 1000U, .speed_cms = 20, .x_mm = -1501, .is_valid = true },
-        { .distance_mm = 1000U, .speed_cms = 20, .x_mm =  1501, .is_valid = true }
+        { .distance_mm = 1000U, .speed_cms = APPROACHING(20), .x_mm = USER_X(-1501), .is_valid = true },
+        { .distance_mm = 1000U, .speed_cms = APPROACHING(20), .x_mm =  1501, .is_valid = true }
     };
     ThreatAssessment_ProcessTargetsAt(outside, 2U, GRIP_STATE_HELD, 0U, &res);
     TEST_ASSERT_FALSE(res.is_threat_active);
@@ -147,8 +193,8 @@ void test_ThreatAssessment_ThreeLaneOccupancy_CorridorAndSideHysteresis(void)
 
     /* 2. Target enters LEFT lane (x = -426 < -425), while CENTER is clear. */
     Radar_Target_t targets[2] = {
-        { .distance_mm = 1500U, .speed_cms = 10, .x_mm = -426, .is_valid = true },
-        { .distance_mm = 1600U, .speed_cms = 10, .x_mm =    0, .is_valid = true }
+        { .distance_mm = 2000U, .speed_cms = APPROACHING(10), .x_mm = USER_X(-426), .is_valid = true },
+        { .distance_mm = 2100U, .speed_cms = APPROACHING(10), .x_mm =    0, .is_valid = true }
     };
     ThreatAssessment_ProcessTargetsAt(targets, 2U, GRIP_STATE_HELD, 20U, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
@@ -156,22 +202,29 @@ void test_ThreatAssessment_ThreeLaneOccupancy_CorridorAndSideHysteresis(void)
     TEST_ASSERT_EQUAL_UINT8((uint8_t)(THREAT_LANE_RIGHT << THREAT_CUE_SIDE_SHIFT),
                             res.open_direction_cue);
 
-    /* 3. Slot 0 drifts inward to x = -400 (between -425 and -350 hysteresis band).
+    /* 3. Slot 0 drifts inward to x = -400 (inside the hysteresis band below the deadzone).
      *    Side hysteresis keeps slot 0 in LEFT; both LEFT and CENTER remain blocked.
      */
-    targets[0].x_mm = -400;
+    targets[0].x_mm = USER_X(-400);
     ThreatAssessment_ProcessTargetsAt(targets, 2U, GRIP_STATE_HELD, 40U, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
     TEST_ASSERT_EQUAL_UINT8((uint8_t)(THREAT_LANE_RIGHT << THREAT_CUE_SIDE_SHIFT),
                             res.open_direction_cue);
 
-    /* 4. Slot 0 crosses inner release boundary x = -349 (> -350) -> moves to CENTER.
-     *    After 200 ms hold expires on LEFT, only CENTER is blocked -> cue defaults LEFT.
+    /* 4. Slot 0 crosses the inner release boundary -> moves to CENTER.
+     *    After the lane hold expires on LEFT, only CENTER is blocked. LEFT has only
+     *    just cleared, so the confirmed-free RIGHT lane is offered first ...
      */
-    targets[0].x_mm = -349;
+    targets[0].x_mm = USER_X(-(THREAT_SIDE_DEADZONE_MM - THREAT_SIDE_HYSTERESIS_MM - 1));
     ThreatAssessment_ProcessTargetsAt(targets, 2U, GRIP_STATE_HELD, 60U, &res);
-    ThreatAssessment_ProcessTargetsAt(targets, 2U, GRIP_STATE_HELD, 260U, &res);
+    const uint32_t left_cleared_ms = 60U + THREAT_LANE_HOLD_MS;
+    ThreatAssessment_ProcessTargetsAt(targets, 2U, GRIP_STATE_HELD, left_cleared_ms, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)(THREAT_LANE_RIGHT << THREAT_CUE_SIDE_SHIFT),
+                            res.open_direction_cue);
+    /* ... and once LEFT has stayed clear long enough, the cue defaults to LEFT. */
+    ThreatAssessment_ProcessTargetsAt(targets, 2U, GRIP_STATE_HELD,
+                                      left_cleared_ms + THREAT_FREE_LANE_CLEAR_MS, &res);
     TEST_ASSERT_EQUAL_UINT8((uint8_t)(THREAT_LANE_LEFT << THREAT_CUE_SIDE_SHIFT),
                             res.open_direction_cue);
 }
@@ -179,51 +232,52 @@ void test_ThreatAssessment_ThreeLaneOccupancy_CorridorAndSideHysteresis(void)
 void test_ThreatAssessment_LaneHoldBridgesBriefDropout(void)
 {
     Threat_Result_t res;
-    Radar_Target_t target = { .distance_mm = 1500U, .speed_cms = 20, .x_mm = 0, .is_valid = true };
+    Radar_Target_t target = { .distance_mm = 2000U, .speed_cms = APPROACHING(20), .x_mm = 0, .is_valid = true };
 
     /* Frame 1: target inside enter threshold -> lane blocked */
     ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 0U, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
-    TEST_ASSERT_EQUAL_UINT16(1500U, res.nearest_distance_mm);
+    TEST_ASSERT_EQUAL_UINT16(2000U, res.nearest_distance_mm);
 
     /* Frame 2 at t=50 ms: target vanishes -> hold starts, lane stays blocked */
     ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, 50U, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
-    TEST_ASSERT_EQUAL_UINT16(1500U, res.nearest_distance_mm);
+    TEST_ASSERT_EQUAL_UINT16(2000U, res.nearest_distance_mm);
     TEST_ASSERT_EQUAL_UINT16(BLE_TTC_NO_THREAT, res.ttc_20ms);
 
-    /* Frame 3 at t=249 ms (199 ms elapsed): still held */
-    ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, 249U, &res);
+    /* Frame 3 one ms before the hold expires: still held */
+    ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, 50U + THREAT_LANE_HOLD_MS - 1U, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
-    TEST_ASSERT_EQUAL_UINT16(1500U, res.nearest_distance_mm);
+    TEST_ASSERT_EQUAL_UINT16(2000U, res.nearest_distance_mm);
 
-    /* Frame 4 at t=250 ms (200 ms elapsed): hold expires, lane clears */
-    ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, 250U, &res);
+    /* Frame 4: hold expires, lane clears */
+    const uint32_t hold_end_ms = 50U + THREAT_LANE_HOLD_MS;
+    ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, hold_end_ms, &res);
     TEST_ASSERT_FALSE(res.is_threat_active);
     TEST_ASSERT_EQUAL_UINT16(UINT16_MAX, res.nearest_distance_mm);
     TEST_ASSERT_EQUAL_UINT16(BLE_TTC_NO_THREAT, res.ttc_20ms);
 
     /* Reappearance within hold cancels pending clear and restarts timer */
-    ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 300U, &res);
+    ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, hold_end_ms + 50U, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
-    ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, 350U, &res);
+    ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, hold_end_ms + 100U, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
-    target.distance_mm = 1600U;
+    target.distance_mm = 2100U;
     ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 400U, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
-    TEST_ASSERT_EQUAL_UINT16(1600U, res.nearest_distance_mm);
+    TEST_ASSERT_EQUAL_UINT16(2100U, res.nearest_distance_mm);
     ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, 550U, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
-    ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, 749U, &res);
+    ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, 550U + THREAT_LANE_HOLD_MS - 1U, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
-    ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, 750U, &res);
+    ThreatAssessment_ProcessTargetsAt(NULL, 0U, GRIP_STATE_HELD, 550U + THREAT_LANE_HOLD_MS, &res);
     TEST_ASSERT_FALSE(res.is_threat_active);
 }
 
 void test_ThreatAssessment_TtcHoldSmoothsBriefSpeedDropout(void)
 {
     Threat_Result_t res;
-    Radar_Target_t target = { .distance_mm = 1500U, .speed_cms = 20, .x_mm = 0, .is_valid = true };
+    Radar_Target_t target = { .distance_mm = 1500U, .speed_cms = APPROACHING(20), .x_mm = 0, .is_valid = true };
 
     /* Live closing speed 20 cm/s -> TTC = 1500 * 5 / 20 = 375 ticks */
     ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 0U, &res);
@@ -252,7 +306,7 @@ void test_ThreatAssessment_TtcHoldSmoothsBriefSpeedDropout(void)
 
     /* Full occupancy gap clears held speed so reappearance with speed=0 does not reuse it */
     target.distance_mm = 1500U;
-    target.speed_cms = 20;
+    target.speed_cms = APPROACHING(20);
     ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 300U, &res);
     TEST_ASSERT_EQUAL_UINT16(375U, res.ttc_20ms);
 
@@ -264,6 +318,22 @@ void test_ThreatAssessment_TtcHoldSmoothsBriefSpeedDropout(void)
     ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 400U, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
     TEST_ASSERT_EQUAL_UINT16(BLE_TTC_NO_THREAT, res.ttc_20ms);
+}
+
+void test_ThreatAssessment_TtcHoldTreatsDepartingReadingAsDropout(void)
+{
+    Threat_Result_t res;
+    Radar_Target_t target = { .distance_mm = 1500U, .speed_cms = APPROACHING(20), .x_mm = 0, .is_valid = true };
+
+    ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 0U, &res);
+    TEST_ASSERT_EQUAL_UINT16(375U, res.ttc_20ms);
+
+    /* One frame reads as departing (wrong sign) mid-approach: held speed is reused. */
+    target.distance_mm = 1400U;
+    target.speed_cms = APPROACHING(-5);
+    ThreatAssessment_ProcessTargetsAt(&target, 1U, GRIP_STATE_HELD, 90U, &res);
+    TEST_ASSERT_TRUE(res.is_threat_active);
+    TEST_ASSERT_EQUAL_UINT16(350U, res.ttc_20ms);
 }
 
 void test_ThreatAssessment_OpenDirectionCueTruthTable(void)
@@ -285,16 +355,16 @@ void test_ThreatAssessment_OpenDirectionCueTruthTable(void)
         { false, true,  false, true,  (uint8_t)(THREAT_LANE_LEFT  << THREAT_CUE_SIDE_SHIFT) },
         { false, true,  true,  true,  (uint8_t)(THREAT_LANE_LEFT  << THREAT_CUE_SIDE_SHIFT) },
         { true,  true,  false, true,  (uint8_t)(THREAT_LANE_RIGHT << THREAT_CUE_SIDE_SHIFT) },
-        { true,  true,  true,  true,  THREAT_CUE_STOP }
+        { true,  true,  true,  true,  (uint8_t)(THREAT_CUE_SIDE_ALL_BLOCKED << THREAT_CUE_SIDE_SHIFT) } /* all blocked, far: no STOP */
     };
 
     for (uint8_t r = 0U; r < 8U; r++)
     {
         ThreatAssessment_Init();
         Radar_Target_t targets[3] = {
-            { .distance_mm = rows[r].left   ? 1500U : 2500U, .speed_cms = 0, .x_mm = -600, .is_valid = true },
-            { .distance_mm = rows[r].center ? 1500U : 2500U, .speed_cms = 0, .x_mm =    0, .is_valid = true },
-            { .distance_mm = rows[r].right  ? 1500U : 2500U, .speed_cms = 0, .x_mm =  600, .is_valid = true }
+            { .distance_mm = rows[r].left   ? 2000U : 3500U, .speed_cms = 0, .x_mm = USER_X(-600), .is_valid = true },
+            { .distance_mm = rows[r].center ? 2000U : 3500U, .speed_cms = 0, .x_mm =    0, .is_valid = true },
+            { .distance_mm = rows[r].right  ? 2000U : 3500U, .speed_cms = 0, .x_mm = USER_X(600), .is_valid = true }
         };
         Threat_Result_t res;
         ThreatAssessment_ProcessTargetsAt(targets, 3U, GRIP_STATE_HELD, 0U, &res);
@@ -303,18 +373,143 @@ void test_ThreatAssessment_OpenDirectionCueTruthTable(void)
     }
 }
 
+static uint8_t Run_Cue(const Radar_Target_t * p_targets, uint8_t n, uint32_t t_ms)
+{
+    Threat_Result_t res;
+    ThreatAssessment_ProcessTargetsAt(p_targets, n, GRIP_STATE_HELD, t_ms, &res);
+    return (uint8_t)res.open_direction_cue;
+}
+
+void test_ThreatAssessment_StopWhenCenterLaneBlockedAndTooClose(void)
+{
+    ThreatAssessment_Init();
+    Radar_Target_t t = { .distance_mm = 2000U, .speed_cms = 0, .x_mm = 0, .is_valid = true };
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);      /* 1500 mm: not yet */
+    t.distance_mm = THREAT_STOP_ENTER_DIST_MM;
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 100U) & THREAT_CUE_STOP);
+    t.distance_mm = (uint16_t)(THREAT_STOP_ENTER_DIST_MM + 50U);             /* inside hysteresis band */
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 200U) & THREAT_CUE_STOP);
+    t.distance_mm = (uint16_t)(THREAT_STOP_CLEAR_DIST_MM + 50U);
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 300U) & THREAT_CUE_STOP);
+}
+
+void test_ThreatAssessment_NoStopForSideObstacleOnlyEvenWhenClose(void)
+{
+    ThreatAssessment_Init();
+    Radar_Target_t t = { .distance_mm = 400U, .speed_cms = 0, .x_mm = USER_X(-600), .is_valid = true };
+    const uint8_t cue = Run_Cue(&t, 1U, 0U);
+    TEST_ASSERT_EQUAL_UINT8(0U, cue); /* centre free: plain centre pattern, no STOP */
+}
+
+void test_ThreatAssessment_StopWhenAllLanesBlockedFollowsCentreDistance(void)
+{
+    ThreatAssessment_Init();
+    Radar_Target_t t[3] = {
+        { .distance_mm = 450U,  .speed_cms = 0, .x_mm = USER_X(-600), .is_valid = true }, /* left, very close */
+        { .distance_mm = 2000U, .speed_cms = 0, .x_mm =    0, .is_valid = true }, /* centre, far */
+        { .distance_mm = 2000U, .speed_cms = 0, .x_mm = USER_X(600), .is_valid = true }
+    };
+    /* All blocked, but the user's own lane is not close: no STOP. */
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(t, 3U, 0U) & THREAT_CUE_STOP);
+    t[1].distance_mm = 900U; /* the centre obstacle is now about to be hit */
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(t, 3U, 100U) & THREAT_CUE_STOP);
+}
+
+void test_ThreatAssessment_JustClearedLaneIsNotOfferedAsFree(void)
+{
+    ThreatAssessment_Init();
+    Radar_Target_t t[3] = {
+        { .distance_mm = 2000U, .speed_cms = 0, .x_mm = USER_X(-600), .is_valid = true }, /* left */
+        { .distance_mm = 2000U, .speed_cms = 0, .x_mm =    0, .is_valid = true }, /* centre */
+        { .distance_mm = 2000U, .speed_cms = 0, .x_mm = USER_X(600), .is_valid = true }  /* right */
+    };
+    const uint8_t no_free = (uint8_t)(THREAT_CUE_SIDE_ALL_BLOCKED << THREAT_CUE_SIDE_SHIFT);
+    const uint8_t left_free = (uint8_t)(THREAT_LANE_LEFT << THREAT_CUE_SIDE_SHIFT);
+
+    TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, 0U));
+    /* The left target leaves; the lane hold then keeps it blocked for a moment. */
+    t[0].is_valid = false;
+    (void)Run_Cue(t, 3U, 100U);
+    const uint32_t cleared_ms = 100U + THREAT_LANE_HOLD_MS;
+    TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, cleared_ms - 1U));
+    TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, cleared_ms));   /* just cleared: not trusted */
+    TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, cleared_ms + THREAT_FREE_LANE_CLEAR_MS - 1U));
+    TEST_ASSERT_EQUAL_UINT8(left_free, Run_Cue(t, 3U, cleared_ms + THREAT_FREE_LANE_CLEAR_MS)); /* clear long enough */
+}
+
+void test_ThreatAssessment_NeverBlockedLaneIsFreeImmediately(void)
+{
+    ThreatAssessment_Init();
+    Radar_Target_t t = { .distance_mm = 2000U, .speed_cms = 0, .x_mm = 0, .is_valid = true };
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)(THREAT_LANE_LEFT << THREAT_CUE_SIDE_SHIFT), Run_Cue(&t, 1U, 0U));
+}
+
+void test_ThreatAssessment_CueStaysSteadyWhenCentrePointDropsOutBriefly(void)
+{
+    /* Regression for the bench log: a slow/still person's centre point drops out for
+     * 0.3-0.4 s at a time while a side point stays. The cue must not toggle. */
+    ThreatAssessment_Init();
+    Radar_Target_t t[2] = {
+        { .distance_mm = 2300U, .speed_cms = 0, .x_mm = 0, .is_valid = true },
+        { .distance_mm = 2400U, .speed_cms = 0, .x_mm = USER_X(700), .is_valid = true }
+    };
+    Threat_Result_t res;
+    uint16_t first_cue = 0xFFFFU;
+    for (uint32_t now = 0U; now <= 4000U; now += 20U)
+    {
+        const uint32_t phase = now % 1000U;
+        t[0].is_valid = (phase >= 400U); /* centre point missing 400 ms of every second */
+        ThreatAssessment_ProcessTargetsAt(t, 2U, GRIP_STATE_HELD, now, &res);
+        if (now == 400U)
+        {
+            first_cue = res.open_direction_cue; /* the centre point has just appeared */
+        }
+        if (now >= 400U)
+        {
+            TEST_ASSERT_EQUAL_UINT16(first_cue, res.open_direction_cue);
+        }
+    }
+}
+
+void test_ThreatAssessment_SideEdgeJitterDoesNotToggleLanes(void)
+{
+    ThreatAssessment_Init();
+    Radar_Target_t t = { .distance_mm = 2300U, .speed_cms = 0, .x_mm = USER_X(-(THREAT_SIDE_DEADZONE_MM + 10)), .is_valid = true };
+    Threat_Result_t res;
+    ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, 0U, &res); /* settles in LEFT */
+    const uint16_t settled = res.open_direction_cue;
+    for (uint32_t i = 1U; i < 60U; i++)
+    {
+        /* x wobbles +/-100 mm around the deadzone edge, still inside the hysteresis band */
+        const int16_t wobble = (int16_t)(((i % 2U) == 0U) ? 100 : -100);
+        t.x_mm = USER_X(-(THREAT_SIDE_DEADZONE_MM + 10) + wobble);
+        ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, i * 20U, &res);
+        TEST_ASSERT_EQUAL_UINT16(settled, res.open_direction_cue);
+    }
+}
+
 int main(void)
 {
     UNITY_BEGIN();
-    RUN_TEST(test_ThreatAssessment_IgnoresDepartingTargets);
+    RUN_TEST(test_ThreatAssessment_DepartingTargetStillOccupiesLane);
+    RUN_TEST(test_ThreatAssessment_SpeedSignConvention_PositiveIsApproaching);
     RUN_TEST(test_ThreatAssessment_Hysteresis_EnterAndClear);
     RUN_TEST(test_ThreatAssessment_FR6_GripGating);
+    RUN_TEST(test_ThreatAssessment_ReleasedKeepsLaneOccupancyCurrent);
     RUN_TEST(test_ThreatAssessment_TtcIsBoundedInWireUnits);
     RUN_TEST(test_ThreatAssessment_TtcMatchesWideArithmeticAcrossBoundaryInputs);
     RUN_TEST(test_ThreatAssessment_ClearUsesUnavailableSentinels);
     RUN_TEST(test_ThreatAssessment_ThreeLaneOccupancy_CorridorAndSideHysteresis);
     RUN_TEST(test_ThreatAssessment_LaneHoldBridgesBriefDropout);
     RUN_TEST(test_ThreatAssessment_TtcHoldSmoothsBriefSpeedDropout);
+    RUN_TEST(test_ThreatAssessment_TtcHoldTreatsDepartingReadingAsDropout);
     RUN_TEST(test_ThreatAssessment_OpenDirectionCueTruthTable);
+    RUN_TEST(test_ThreatAssessment_StopWhenCenterLaneBlockedAndTooClose);
+    RUN_TEST(test_ThreatAssessment_NoStopForSideObstacleOnlyEvenWhenClose);
+    RUN_TEST(test_ThreatAssessment_StopWhenAllLanesBlockedFollowsCentreDistance);
+    RUN_TEST(test_ThreatAssessment_JustClearedLaneIsNotOfferedAsFree);
+    RUN_TEST(test_ThreatAssessment_NeverBlockedLaneIsFreeImmediately);
+    RUN_TEST(test_ThreatAssessment_CueStaysSteadyWhenCentrePointDropsOutBriefly);
+    RUN_TEST(test_ThreatAssessment_SideEdgeJitterDoesNotToggleLanes);
     return UNITY_END();
 }

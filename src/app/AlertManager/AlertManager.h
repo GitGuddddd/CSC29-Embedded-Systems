@@ -23,6 +23,8 @@ typedef struct
 void AlertManager_Init(void);
 uint16_t AlertManager_MapDistanceToPitch(uint16_t distance_mm);
 void AlertManager_AcknowledgeReset(void);
+/* FR9 obstacle direction cue (ALERT_CUE_* bits); 0 = CENTER, no STOP. Used by ALERT_OBSTACLE_PROXIMITY. */
+void AlertManager_SetObstacleCue(uint8_t cue);
 /* Synchronize the mode manager's incident and audio state without conflating pause/reset. */
 void AlertManager_SetFallState(bool latched, bool paused, uint32_t now_ms);
 /* Play a one-shot CAL_STARTED, CAL_DONE, or CAL_FAILED cue on the cane.
@@ -47,6 +49,7 @@ typedef struct
     uint16_t obstacle_dist_mm;
     bool sensor_fault;
     bool peer_sensor_fault;
+    uint8_t obstacle_cue;
 } Alert_SyncInput_t;
 
 void AlertManager_ArbitrateSynced(const Alert_SyncInput_t * const p_in,

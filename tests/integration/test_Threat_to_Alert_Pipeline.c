@@ -16,16 +16,16 @@ void tearDown(void)
 void test_Integration_ThreatToAlertPipeline(void)
 {
     /* Simulate radar target entering obstacle zone */
-    Radar_Target_t targets[1];
+    Radar_Target_t targets[1] = {0};
     targets[0].is_valid = true;
-    targets[0].distance_mm = 1150U; /* Middle distance */
+    targets[0].distance_mm = 1650U; /* Middle distance */
     targets[0].speed_cms = 20;
 
     Threat_Result_t threat;
     ThreatAssessment_ProcessTargets(targets, 1U, GRIP_STATE_HELD, &threat);
 
     TEST_ASSERT_TRUE(threat.is_threat_active);
-    TEST_ASSERT_EQUAL_UINT16(1150U, threat.nearest_distance_mm);
+    TEST_ASSERT_EQUAL_UINT16(1650U, threat.nearest_distance_mm);
 
     /* Feed threat into AlertManager */
     Alert_Output_t alert_out;

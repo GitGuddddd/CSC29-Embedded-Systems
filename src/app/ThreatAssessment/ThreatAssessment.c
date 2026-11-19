@@ -12,15 +12,18 @@
  * Compliance: Barr-C:2018
  */
 
+/* Per-lane state. Widest members first and the two flags as 1-bit fields so the
+ * struct has no padding holes (28 -> 20 bytes per lane). Only the radar task calls
+ * ThreatAssessment_*, so the shared flag byte is never written from two contexts. */
 typedef struct
 {
-    bool blocked;
-    uint16_t last_dist_mm;
     uint32_t hold_pending_ms;
-    int16_t held_closing_cms;
     uint32_t speed_hold_pending_ms;
-    bool ever_blocked;
     uint32_t cleared_at_ms;
+    uint16_t last_dist_mm;
+    int16_t held_closing_cms;
+    uint8_t blocked : 1;
+    uint8_t ever_blocked : 1;
 } Threat_LaneState_t;
 
 static Threat_LaneState_t s_lanes[THREAT_LANE_COUNT];
@@ -28,6 +31,7 @@ static Threat_Lane_t s_target_last_side[3];
 static uint32_t s_synthetic_ms = 0U;
 static bool s_stop_latched = false;
 
+_Static_assert(sizeof(Threat_LaneState_t) == 20U, "Lane state must stay free of padding holes");
 _Static_assert(sizeof(Threat_Result_t) == 6U, "Compact threat result must remain six bytes");
 
 static void Clear_Result(Threat_Result_t * const p_result)
@@ -43,12 +47,12 @@ static void Clear_Result(Threat_Result_t * const p_result)
 
 static void Reset_Lane(Threat_LaneState_t * const p_lane)
 {
-    p_lane->blocked = false;
+    p_lane->blocked = 0U;
     p_lane->last_dist_mm = 0U;
     p_lane->hold_pending_ms = UINT32_MAX;
     p_lane->held_closing_cms = 0;
     p_lane->speed_hold_pending_ms = UINT32_MAX;
-    p_lane->ever_blocked = false;
+    p_lane->ever_blocked = 0U;
     p_lane->cleared_at_ms = 0U;
 }
 
@@ -122,7 +126,7 @@ static void Update_LaneOccupancy(Threat_LaneState_t * const p_lane,
 
     if (present && (nearest_mm <= THREAT_ALERT_ENTER_DIST_MM))
     {
-        p_lane->blocked = true;
+        p_lane->blocked = 1U;
         p_lane->last_dist_mm = nearest_mm;
         p_lane->hold_pending_ms = UINT32_MAX;
     }
@@ -143,7 +147,7 @@ static void Update_LaneOccupancy(Threat_LaneState_t * const p_lane,
 
         if ((uint32_t)(now_ms - p_lane->hold_pending_ms) >= THREAT_LANE_HOLD_MS)
         {
-            p_lane->blocked = false;
+            p_lane->blocked = 0U;
             p_lane->hold_pending_ms = UINT32_MAX;
         }
     }
@@ -154,7 +158,7 @@ static void Update_LaneOccupancy(Threat_LaneState_t * const p_lane,
 
     if (p_lane->blocked)
     {
-        p_lane->ever_blocked = true;
+        p_lane->ever_blocked = 1U;
     }
     else if (was_blocked)
     {

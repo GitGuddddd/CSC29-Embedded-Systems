@@ -16,12 +16,25 @@ static uint32_t s_request_start_ms = 0U;
 static Alert_Type_t s_calibration_cue = ALERT_NONE;
 static uint32_t s_calibration_start_ms = 0U;
 static uint8_t s_obstacle_cue = 0U;
-static bool s_obs_valid = false; /* obstacle render state (below) must restart */
+/* Obstacle renderer flags packed into one byte (data-representation change).
+ * Only the main-loop alert arbitration touches them (AlertManager_Init runs before the
+ * scheduler starts), so the non-atomic read-modify-write of a shared byte is safe. */
+typedef struct
+{
+    uint8_t valid : 1;        /* obstacle render state below must restart when 0 */
+    uint8_t track_valid : 1;  /* side pattern start time is valid */
+    uint8_t stop_prev : 1;    /* STOP was active on the previous call */
+    uint8_t pattern_side : 2; /* cue side 0..3 of the running pattern */
+} Obstacle_Flags_t;
+
+_Static_assert(sizeof(Obstacle_Flags_t) == 1U, "Obstacle flags must pack into one byte");
+
+static Obstacle_Flags_t s_obs_flags = { 0U, 0U, 0U, 0U };
 
 void AlertManager_Init(void)
 {
     s_obstacle_cue = 0U;
-    s_obs_valid = false;
+    s_obs_flags.valid = 0U;
     s_fall_alarm_latched = false;
     s_fall_alarm_muted = false;
     s_fall_start_time_ms = 0U;
@@ -130,10 +143,7 @@ static uint32_t s_obs_last_ms = 0U;
 static uint32_t s_obs_dist_q = 0U;
 static uint32_t s_obs_cycle_start_ms = 0U;
 static uint32_t s_obs_cycle_pause_ms = 0U;
-static bool s_obs_track_valid = false;
-static uint32_t s_obs_pattern_side = 0U;
 static uint32_t s_obs_pattern_since_ms = 0U;
-static bool s_obs_stop_prev = false;
 static uint32_t s_obs_stop_since_ms = 0U;
 
 static uint32_t Obstacle_SmoothedDistMm(void)
@@ -173,19 +183,19 @@ static uint32_t Obstacle_Side(void)
 static void Obstacle_TrackPattern(uint32_t now_ms)
 {
     const uint32_t side = Obstacle_Side();
-    if (!s_obs_track_valid || (side != s_obs_pattern_side))
+    if ((s_obs_flags.track_valid == 0U) || (side != (uint32_t)s_obs_flags.pattern_side))
     {
-        s_obs_track_valid = true;
-        s_obs_pattern_side = side;
+        s_obs_flags.track_valid = 1U;
+        s_obs_flags.pattern_side = (uint8_t)side;
         s_obs_pattern_since_ms = now_ms;
     }
 
     const bool stop = Obstacle_StopActive();
-    if (stop && !s_obs_stop_prev)
+    if (stop && (s_obs_flags.stop_prev == 0U))
     {
         s_obs_stop_since_ms = now_ms;
     }
-    s_obs_stop_prev = stop;
+    s_obs_flags.stop_prev = stop ? 1U : 0U;
 }
 
 /* Pause for the next burst: distance based, stretched if "no free lane" keeps repeating. */
@@ -210,17 +220,17 @@ static void Obstacle_StartCycle(uint32_t now_ms)
 
 static void Obstacle_Update(uint32_t now_ms, uint16_t distance_mm)
 {
-    if (!s_obs_valid)
+    if (s_obs_flags.valid == 0U)
     {
         /* Start of an obstacle alert: apply the cue and distance immediately. */
-        s_obs_valid = true;
+        s_obs_flags.valid = 1U;
         s_obs_cue = s_obstacle_cue;
         s_obs_pending_cue = s_obstacle_cue;
         s_obs_pending_since_ms = now_ms;
         s_obs_last_ms = now_ms;
         s_obs_dist_q = ((uint32_t)distance_mm) << OBS_DIST_Q;
-        s_obs_track_valid = false;
-        s_obs_stop_prev = false;
+        s_obs_flags.track_valid = 0U;
+        s_obs_flags.stop_prev = 0U;
         Obstacle_TrackPattern(now_ms);
         Obstacle_StartCycle(now_ms);
         return;
@@ -343,7 +353,7 @@ void AlertManager_Arbitrate(Alert_Type_t requested_alert,
     {
         s_previous_request = requested_alert;
         s_request_start_ms = now_ms;
-        s_obs_valid = false;
+        s_obs_flags.valid = 0U;
     }
 
     if (requested_alert == ALERT_FALL_ALARM)

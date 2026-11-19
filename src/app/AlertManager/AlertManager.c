@@ -23,13 +23,12 @@ typedef struct
 {
     uint8_t valid : 1;        /* obstacle render state below must restart when 0 */
     uint8_t track_valid : 1;  /* side pattern start time is valid */
-    uint8_t stop_prev : 1;    /* STOP was active on the previous call */
     uint8_t pattern_side : 2; /* cue side 0..3 of the running pattern */
 } Obstacle_Flags_t;
 
 _Static_assert(sizeof(Obstacle_Flags_t) == 1U, "Obstacle flags must pack into one byte");
 
-static Obstacle_Flags_t s_obs_flags = { 0U, 0U, 0U, 0U };
+static Obstacle_Flags_t s_obs_flags = { 0U, 0U, 0U };
 
 void AlertManager_Init(void)
 {
@@ -126,7 +125,7 @@ static bool Fall_PulseOn(uint32_t elapsed_ms)
  *  - LEFT / RIGHT: a burst of 2 / 3 beeps (150 ms on, 150 ms off), then a pause
  *    that shrinks linearly from 450 ms at 3000 mm to 150 ms at 300 mm.
  *  - NO FREE LANE: 4 short beeps; the pause stretches if it keeps playing (crowds).
- *  - STOP (about to collide): continuous tone at the top pitch for 2 s, then fast pulses.
+ *  - STOP (about to collide): continuous tone at the top pitch for as long as STOP lasts.
  * While walking, the cue and the distance change constantly, so:
  *  - the rendered cue only follows the requested cue after it has been stable
  *    for ALERT_OBSTACLE_CUE_DWELL_MS (a rising STOP applies at once);
@@ -144,7 +143,6 @@ static uint32_t s_obs_dist_q = 0U;
 static uint32_t s_obs_cycle_start_ms = 0U;
 static uint32_t s_obs_cycle_pause_ms = 0U;
 static uint32_t s_obs_pattern_since_ms = 0U;
-static uint32_t s_obs_stop_since_ms = 0U;
 
 static uint32_t Obstacle_SmoothedDistMm(void)
 {
@@ -189,13 +187,6 @@ static void Obstacle_TrackPattern(uint32_t now_ms)
         s_obs_flags.pattern_side = (uint8_t)side;
         s_obs_pattern_since_ms = now_ms;
     }
-
-    const bool stop = Obstacle_StopActive();
-    if (stop && (s_obs_flags.stop_prev == 0U))
-    {
-        s_obs_stop_since_ms = now_ms;
-    }
-    s_obs_flags.stop_prev = stop ? 1U : 0U;
 }
 
 /* Pause for the next burst: distance based, stretched if "no free lane" keeps repeating. */
@@ -230,7 +221,6 @@ static void Obstacle_Update(uint32_t now_ms, uint16_t distance_mm)
         s_obs_last_ms = now_ms;
         s_obs_dist_q = ((uint32_t)distance_mm) << OBS_DIST_Q;
         s_obs_flags.track_valid = 0U;
-        s_obs_flags.stop_prev = 0U;
         Obstacle_TrackPattern(now_ms);
         Obstacle_StartCycle(now_ms);
         return;
@@ -272,14 +262,8 @@ static bool Obstacle_BeepOn(uint32_t now_ms)
 {
     if (Obstacle_StopActive())
     {
-        /* STOP: continuous tone, then fast pulses if it keeps going. */
-        const uint32_t stop_ms = (uint32_t)(now_ms - s_obs_stop_since_ms);
-        if (stop_ms < ALERT_STOP_CONTINUOUS_MAX_MS)
-        {
-            return true;
-        }
-        return (((stop_ms - ALERT_STOP_CONTINUOUS_MAX_MS) %
-                 (ALERT_STOP_FAST_PULSE_MS + ALERT_STOP_FAST_GAP_MS)) < ALERT_STOP_FAST_PULSE_MS);
+        /* STOP: continuous tone for as long as STOP lasts. */
+        return true;
     }
 
     const uint32_t side = Obstacle_Side();

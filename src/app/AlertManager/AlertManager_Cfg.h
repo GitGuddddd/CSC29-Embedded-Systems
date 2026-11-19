@@ -50,11 +50,6 @@
 #define ALERT_OBSTACLE_BLOCKED_REPEAT_MS     (5000U)
 #define ALERT_OBSTACLE_BLOCKED_LONG_PAUSE_MS (1500U)
 
-/* STOP tone: continuous for this long, then fast pulses until STOP ends, so a long
- * continuous tone does not mask the street for more than a moment. */
-#define ALERT_STOP_CONTINUOUS_MAX_MS     (2000U)
-#define ALERT_STOP_FAST_PULSE_MS         (100U)
-#define ALERT_STOP_FAST_GAP_MS           (100U)
 #define ALERT_OBSTACLE_CENTER_BEEPS    (1U)
 #define ALERT_OBSTACLE_LEFT_BEEPS      (2U)
 #define ALERT_OBSTACLE_RIGHT_BEEPS     (3U)

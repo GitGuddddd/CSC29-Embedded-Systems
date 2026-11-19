@@ -536,28 +536,17 @@ void test_AlertManager_StopIsContinuousAtMaxPitchAtAnyDistance(void)
     }
 }
 
-void test_AlertManager_StopContinuousThenFastPulsesAndKeepsPitch(void)
+void test_AlertManager_StopStaysContinuousAndKeepsPitch(void)
 {
-    uint32_t on_early = 0U;
-    uint32_t off_late = 0U;
     Alert_Output_t out = {0};
     AlertManager_Init();
     AlertManager_SetObstacleCue(ALERT_CUE_STOP);
-    for (uint32_t t = 0U; t < 4000U; t += 10U)
+    for (uint32_t t = 0U; t < 8000U; t += 10U)
     {
         AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, 800U, t, &out);
-        if (t < ALERT_STOP_CONTINUOUS_MAX_MS)
-        {
-            on_early += out.buzzer_active ? 10U : 0U;
-        }
-        else
-        {
-            off_late += out.buzzer_active ? 0U : 10U;
-        }
+        TEST_ASSERT_TRUE(out.buzzer_active);   /* never pulses, however long STOP lasts */
         TEST_ASSERT_EQUAL_UINT16(ALERT_BUZZER_MAX_FREQ_HZ, out.generated_freq_hz);
     }
-    TEST_ASSERT_EQUAL_UINT32(ALERT_STOP_CONTINUOUS_MAX_MS, on_early);  /* continuous at first */
-    TEST_ASSERT_TRUE(off_late > 0U);                                   /* then fast pulses */
 }
 
 void test_AlertManager_NoFreeLaneStretchesItsPauseWhenItKeepsPlaying(void)
@@ -769,7 +758,7 @@ int main(void)
     RUN_TEST(test_AlertManager_AllBlockedIsFastFourBeepBurst);
     RUN_TEST(test_AlertManager_ObstaclePauseShrinksWithDistance);
     RUN_TEST(test_AlertManager_StopIsContinuousAtMaxPitchAtAnyDistance);
-    RUN_TEST(test_AlertManager_StopContinuousThenFastPulsesAndKeepsPitch);
+    RUN_TEST(test_AlertManager_StopStaysContinuousAndKeepsPitch);
     RUN_TEST(test_AlertManager_NoFreeLaneStretchesItsPauseWhenItKeepsPlaying);
     RUN_TEST(test_AlertManager_StopLeavesAfterDwellNotInstantly);
     RUN_TEST(test_AlertManager_ObstacleLoudnessStaysAtEarSafeDuty);

@@ -75,4 +75,22 @@
 /* Held closing speed (TTC) across a dropout; unrelated to the lane hold above. */
 #define THREAT_SPEED_HOLD_MS         (200U)
 
+/*
+ * Crossing filter. A person walking across the user's path at normal pace spends
+ * under a second in each lane, so a plain minimum-time-in-lane would need to be too
+ * long. Instead, a target farther than THREAT_STOP_CLEAR_DIST_MM whose smoothed sideways
+ * speed is at least THREAT_CROSSING_MIN_MMPS and more than THREAT_CROSSING_RATIO times
+ * its forward speed is not counted. Inside the STOP zone every target counts, and so does
+ * a target whose sideways speed is not known yet (the filter needs it to have been tracked
+ * for two frames, for example while approaching from outside the corridor). Set THREAT_CROSSING_FILTER to 0 to disable. Needs walking-test tuning.
+ */
+#define THREAT_CROSSING_FILTER       (1)
+#define THREAT_CROSSING_MIN_MMPS     (500)
+#define THREAT_CROSSING_RATIO        (2)
+#define THREAT_CROSSING_SMOOTH_MS    (200)
+#define THREAT_CROSSING_MAX_GAP_MS   (300U)
+/* Sideways/forward speed samples are clamped to this (16 m/s, far above walking) so the
+ * 16-bit state and 32-bit products cannot overflow on a corrupt or jumping frame. */
+#define THREAT_CROSSING_SPEED_CLAMP_MMPS (16000)
+
 #endif /* THREATASSESSMENT_CFG_H */

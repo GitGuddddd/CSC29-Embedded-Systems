@@ -27,6 +27,20 @@ typedef struct
 } Threat_LaneState_t;
 
 static Threat_LaneState_t s_lanes[THREAT_LANE_COUNT];
+/* Per radar slot: last lateral position and smoothed sideways speed (crossing filter). */
+typedef struct
+{
+    uint32_t prev_ms;
+    int16_t vx_mmps; /* clamped to +/-THREAT_CROSSING_SPEED_CLAMP_MMPS */
+    int16_t vy_mmps;
+    int16_t prev_x_mm;
+    uint16_t prev_y_mm;
+    uint8_t has_prev : 1;
+} Threat_Track_t;
+
+_Static_assert(sizeof(Threat_Track_t) == 16U, "Crossing tracker must stay at 16 bytes per slot");
+
+static Threat_Track_t s_tracks[3];
 static Threat_Lane_t s_target_last_side[3];
 static uint32_t s_synthetic_ms = 0U;
 static bool s_stop_latched = false;
@@ -65,6 +79,7 @@ static void Reset_AllState(void)
     for (uint8_t i = 0U; i < 3U; i++)
     {
         s_target_last_side[i] = THREAT_LANE_CENTER;
+        s_tracks[i] = (Threat_Track_t){ 0U, 0, 0, 0, 0U, 0U };
     }
     s_stop_latched = false;
 }
@@ -76,6 +91,98 @@ static int16_t Lateral_Mm(int16_t x_mm)
     return (x_mm == INT16_MIN) ? INT16_MAX : (int16_t)(-x_mm);
 #else
     return x_mm;
+#endif
+}
+
+/* Forward distance from range and sideways offset: sqrt(d^2 - x^2). Unsigned 32-bit
+ * arithmetic, so even d = 65535 cannot overflow; a corrupt x larger than d gives 0. */
+static uint16_t Forward_Mm(uint16_t distance_mm, int16_t x_mm)
+{
+    const uint32_t d = (uint32_t)distance_mm;
+    const uint32_t ax = (x_mm < 0) ? ((uint32_t)(-(int32_t)x_mm)) : (uint32_t)x_mm;
+    const uint32_t d_sq = d * d;
+    const uint32_t x_sq = ax * ax;
+    if (x_sq >= d_sq)
+    {
+        return 0U;
+    }
+    const uint32_t sq = d_sq - x_sq;
+    uint32_t r = d; /* never below the root, so Newton converges down and r stays >= 1 */
+    for (uint8_t i = 0U; i < 16U; i++)
+    {
+        r = (r + (sq / r)) / 2U;
+    }
+    return (uint16_t)r;
+}
+
+/* Smooth one speed sample into a 16-bit state. The sample is clamped first (far above any
+ * walking speed), so the 32-bit products below cannot overflow however the radar jumps. */
+static int16_t Smooth_Speed(int16_t state, int32_t sample_mmps, int32_t dt_ms)
+{
+    int32_t s = sample_mmps;
+    if (s > THREAT_CROSSING_SPEED_CLAMP_MMPS)
+    {
+        s = THREAT_CROSSING_SPEED_CLAMP_MMPS;
+    }
+    else if (s < -THREAT_CROSSING_SPEED_CLAMP_MMPS)
+    {
+        s = -THREAT_CROSSING_SPEED_CLAMP_MMPS;
+    }
+    else
+    {
+        /* in range */
+    }
+    return (int16_t)((int32_t)state + (((s - (int32_t)state) * dt_ms) / (THREAT_CROSSING_SMOOTH_MS + dt_ms)));
+}
+
+/* Update the slot's sideways-speed estimate; true if the target should not be counted
+ * because it is only crossing the user's path beyond the STOP zone. */
+static bool Track_IsCrossing(uint8_t slot,
+                             int16_t x_mm,
+                             uint16_t distance_mm,
+                             uint32_t now_ms)
+{
+    Threat_Track_t * const p_trk = &s_tracks[slot];
+    const uint16_t y_mm = Forward_Mm(distance_mm, x_mm);
+    bool known = false;
+
+    if ((p_trk->has_prev != 0U) &&
+        ((uint32_t)(now_ms - p_trk->prev_ms) <= THREAT_CROSSING_MAX_GAP_MS) &&
+        (now_ms != p_trk->prev_ms))
+    {
+        const int32_t dt_ms = (int32_t)(now_ms - p_trk->prev_ms);
+        const int32_t inst_x = (((int32_t)x_mm - (int32_t)p_trk->prev_x_mm) * 1000) / dt_ms;
+        const int32_t inst_y = (((int32_t)y_mm - (int32_t)p_trk->prev_y_mm) * 1000) / dt_ms;
+        p_trk->vx_mmps = Smooth_Speed(p_trk->vx_mmps, inst_x, dt_ms);
+        p_trk->vy_mmps = Smooth_Speed(p_trk->vy_mmps, inst_y, dt_ms);
+        known = true;
+    }
+    else
+    {
+        p_trk->vx_mmps = 0;
+        p_trk->vy_mmps = 0;
+    }
+    p_trk->prev_x_mm = x_mm;
+    p_trk->prev_y_mm = y_mm;
+    p_trk->prev_ms = now_ms;
+    p_trk->has_prev = 1U;
+
+#if (THREAT_CROSSING_FILTER != 0)
+    if (distance_mm <= THREAT_STOP_CLEAR_DIST_MM)
+    {
+        return false;
+    }
+    if (!known)
+    {
+        return false; /* no sideways speed yet: count it (safe default) */
+    }
+    const int32_t abs_vx = (p_trk->vx_mmps < 0) ? -(int32_t)p_trk->vx_mmps : (int32_t)p_trk->vx_mmps;
+    const int32_t abs_vy = (p_trk->vy_mmps < 0) ? -(int32_t)p_trk->vy_mmps : (int32_t)p_trk->vy_mmps;
+    return (abs_vx >= THREAT_CROSSING_MIN_MMPS) && (abs_vx > (THREAT_CROSSING_RATIO * abs_vy));
+#else
+    (void)distance_mm;
+    (void)known;
+    return false;
 #endif
 }
 
@@ -342,9 +449,13 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
             if (i < 3U)
             {
                 s_target_last_side[i] = THREAT_LANE_CENTER;
+                s_tracks[i].has_prev = 0U;
             }
             continue;
         }
+
+        const bool crossing = (i < 3U) &&
+            Track_IsCrossing(i, Lateral_Mm(p_t->x_mm), p_t->distance_mm, now_ms);
 
         /* Corridor gate: ignore targets outside +/- THREAT_CORRIDOR_HALF_MM */
         const int16_t x_mm = Lateral_Mm(p_t->x_mm);
@@ -356,6 +467,11 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
                 s_target_last_side[i] = THREAT_LANE_CENTER;
             }
             continue;
+        }
+
+        if (crossing)
+        {
+            continue; /* only crossing the path beyond the STOP zone */
         }
 
         const int16_t closing_cms = Closing_Cms(p_t->speed_cms);

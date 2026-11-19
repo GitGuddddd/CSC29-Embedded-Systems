@@ -488,6 +488,74 @@ void test_ThreatAssessment_SideEdgeJitterDoesNotToggleLanes(void)
     }
 }
 
+/* Walks a target along a straight line and reports whether any frame raised an alert. */
+static bool Walk_RaisesAlert(int32_t x0_mm, int32_t y0_mm, int32_t vx_mmps, int32_t vy_mmps, uint32_t duration_ms)
+{
+    ThreatAssessment_Init();
+    bool any = false;
+    for (uint32_t now = 0U; now <= duration_ms; now += 100U)
+    {
+        const int32_t x = x0_mm + ((vx_mmps * (int32_t)now) / 1000);
+        const int32_t y = y0_mm + ((vy_mmps * (int32_t)now) / 1000);
+        if (y <= 0)
+        {
+            break;
+        }
+        const int32_t sq = (x * x) + (y * y);
+        int32_t d = y + (x < 0 ? -x : x); /* start above the root, then Newton */
+        for (uint8_t i = 0U; i < 20U; i++)
+        {
+            d = (d + (sq / d)) / 2;
+        }
+        Radar_Target_t t = { .distance_mm = (uint16_t)d, .speed_cms = 0, .x_mm = USER_X((int16_t)x), .is_valid = true };
+        Threat_Result_t res;
+        ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
+        any = any || (res.is_threat_active != 0U);
+    }
+    return any;
+}
+
+void test_ThreatAssessment_PersonCrossingBeyondStopZoneIsIgnored(void)
+{
+    /* About 1.3 m/s sideways, 2 m ahead, coming from outside the corridor. */
+    TEST_ASSERT_FALSE(Walk_RaisesAlert(-2000, 2000, 1300, 0, 3500U));
+    TEST_ASSERT_FALSE(Walk_RaisesAlert(2000, 2800, -1300, 0, 3500U));
+}
+
+void test_ThreatAssessment_ApproachingTargetsStillAlert(void)
+{
+    TEST_ASSERT_TRUE(Walk_RaisesAlert(0, 3000, 0, -1000, 3000U));       /* straight at the user */
+    TEST_ASSERT_TRUE(Walk_RaisesAlert(-1200, 3000, 300, -1000, 3000U)); /* mostly forward, a little sideways */
+    TEST_ASSERT_TRUE(Walk_RaisesAlert(-1800, 2000, 400, 0, 6000U));     /* slow drift across: not a crossing */
+}
+
+void test_ThreatAssessment_CrossingInsideStopZoneStillCounts(void)
+{
+    TEST_ASSERT_TRUE(Walk_RaisesAlert(-2000, 1200, 1300, 0, 3500U));
+}
+
+void test_ThreatAssessment_CrossingTrackerSurvivesExtremeFrames(void)
+{
+    /* Corrupt or jumping frames: full-scale x, huge range, 1 ms and 300 ms steps. The
+     * result only has to stay well formed (no overflow, no crash); run under UBSan in CI. */
+    static const int16_t xs[] = { -32767, -1, 0, 1, 32767 };
+    static const uint16_t ds[] = { 1U, 300U, 1500U, 3000U, 46340U, 65535U };
+    static const uint32_t steps[] = { 1U, 20U, 100U, 300U, 301U };
+    uint32_t now = 0U;
+    uint32_t seed = 12345U;
+    ThreatAssessment_Init();
+    for (uint32_t n = 0U; n < 4000U; n++)
+    {
+        seed = (seed * 1664525U) + 1013904223U;
+        Radar_Target_t t = { .distance_mm = ds[(seed >> 8) % 6U], .speed_cms = (int16_t)(seed >> 16),
+                             .x_mm = xs[(seed >> 4) % 5U], .is_valid = true };
+        Threat_Result_t res;
+        now += steps[(seed >> 12) % 5U];
+        ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
+        TEST_ASSERT_TRUE(res.open_direction_cue <= 7U);
+    }
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -511,5 +579,9 @@ int main(void)
     RUN_TEST(test_ThreatAssessment_NeverBlockedLaneIsFreeImmediately);
     RUN_TEST(test_ThreatAssessment_CueStaysSteadyWhenCentrePointDropsOutBriefly);
     RUN_TEST(test_ThreatAssessment_SideEdgeJitterDoesNotToggleLanes);
+    RUN_TEST(test_ThreatAssessment_PersonCrossingBeyondStopZoneIsIgnored);
+    RUN_TEST(test_ThreatAssessment_ApproachingTargetsStillAlert);
+    RUN_TEST(test_ThreatAssessment_CrossingInsideStopZoneStillCounts);
+    RUN_TEST(test_ThreatAssessment_CrossingTrackerSurvivesExtremeFrames);
     return UNITY_END();
 }

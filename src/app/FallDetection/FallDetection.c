@@ -144,6 +144,12 @@ bool __not_in_flash_func(FallDetection_Step)(
                 s_state = FALL_STATE_FREEFALL;
                 s_t0_ms = now_ms;
             }
+            else if (s_active_cfg.allow_direct_impact &&
+                     (a_sq > s_active_cfg.impact_thresh_sq))
+            {
+                s_state = FALL_STATE_SETTLING;
+                s_t0_ms = now_ms;
+            }
             else
             {
                 /* No fall cue on this sample: stay in IDLE. */

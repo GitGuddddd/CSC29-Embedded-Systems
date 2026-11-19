@@ -66,6 +66,19 @@ typedef struct
     uint8_t reserved : 3;
 } Glasses_FallState_t; /* Private Core 0 record; history is accumulated by the phone. */
 
+/* Ends the head-fall incident on the glasses: used by GP20, the 'c' test key
+ * and an acknowledgement made on the cane.
+ */
+static void Clear_HeadFall(Glasses_FallState_t * const p_fall,
+                           SafetyDelivery_t * const p_delivery)
+{
+    p_fall->latched = 0U;
+    FallDetection_Reset();
+    AlertManager_AcknowledgeReset();
+    SafetyDelivery_Clear(p_delivery);
+    IncidentRetention_Store(false, BleComm_GetSessionId(), p_fall->sequence);
+}
+
 static void vTask_GlassesPerception(void *pvParameters)
 {
     (void)pvParameters;
@@ -152,6 +165,7 @@ static void vTask_GlassesPerception(void *pvParameters)
         /* Process incoming BLE packets from Cane Node */
         Ble_AdvancedThreatPacket_t rx_pkt;
         uint32_t received_ms;
+        bool cane_acknowledged = false;
         for (uint32_t i = 0U; i < BLECOMM_CFG_RX_QUEUE_SIZE; ++i)
         {
             if (!BleComm_PopReceivedPacket(&rx_pkt, &received_ms))
@@ -162,6 +176,16 @@ static void vTask_GlassesPerception(void *pvParameters)
                 ((uint32_t)(now_ms - received_ms) < WATCHDOG_CFG_DEADMAN_TIMEOUT_MS))
             {
                 SafetyDelivery_ObservePeer(&fall_delivery, &rx_pkt, received_ms);
+                /* The cane took this exact fall (receipt) and has since
+                 * cleared its alarm (touch pad or cane recovery).
+                 */
+                if ((head_fall.latched != 0U) &&
+                    SafetyDelivery_IsConfirmed(&fall_delivery) &&
+                    ((rx_pkt.state_flags &
+                      (BLE_FLAG_FALL_ALERT | BLE_FLAG_ALARM_PAUSED)) == 0U))
+                {
+                    cane_acknowledged = true;
+                }
                 last_cane_pkt_ms = received_ms;
                 cane_seen = true;
                 cane_standby = ((rx_pkt.state_flags & BLE_FLAG_STANDBY) != 0U);
@@ -183,6 +207,14 @@ static void vTask_GlassesPerception(void *pvParameters)
                     last_cane_flags = rx_pkt.state_flags;
                 }
             }
+        }
+
+        if (cane_acknowledged)
+        {
+            printf("[GLASSES] Head fall acknowledged on the cane; cleared.\n");
+            Clear_HeadFall(&head_fall, &fall_delivery);
+            sleep_requested = false;
+            last_movement_ms = now_ms;
         }
 
         if (!cane_seen || ((now_ms - last_cane_pkt_ms) >= WATCHDOG_CFG_DEADMAN_TIMEOUT_MS))
@@ -288,13 +320,9 @@ static void vTask_GlassesPerception(void *pvParameters)
             bool ack_pressed = !Hal_Gpio_Read(GLASSES_PIN_ACK_BTN);
             if (ack_pressed && !ack_was_pressed && !new_head_fall)
             {
-                head_fall.latched = 0U;
+                Clear_HeadFall(&head_fall, &fall_delivery);
                 sleep_requested = false;
                 last_movement_ms = now_ms;
-                FallDetection_Reset();
-                AlertManager_AcknowledgeReset();
-                SafetyDelivery_Clear(&fall_delivery);
-                IncidentRetention_Store(false, BleComm_GetSessionId(), head_fall.sequence);
             }
             ack_was_pressed = ack_pressed;
 
@@ -312,14 +340,10 @@ static void vTask_GlassesPerception(void *pvParameters)
             else if ((ch == (int)'c') || (ch == (int)'C'))
             {
                 printf("[TEST TRIGGER] Clearing Head Fall on Glasses\n");
+                Clear_HeadFall(&head_fall, &fall_delivery);
                 sleep_requested = false;
-                head_fall.latched = 0U;
                 last_movement_ms = now_ms;
-                FallDetection_Reset();
                 Hal_Gpio_Write(GLASSES_PIN_STATUS_LED, false);
-                AlertManager_AcknowledgeReset();
-                SafetyDelivery_Clear(&fall_delivery);
-                IncidentRetention_Store(false, BleComm_GetSessionId(), head_fall.sequence);
             }
             else if ((ch == (int)'d') || (ch == (int)'D'))
             {

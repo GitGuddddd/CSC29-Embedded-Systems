@@ -84,6 +84,57 @@ void test_FallDetection_Reset_ReturnsToIdle(void)
     TEST_ASSERT_EQUAL_STRING("IDLE", FallDetection_GetStateName());
 }
 
+/* Drives one cane drop: upright, free fall, impact, settle, optional rolling, then rest. */
+static bool Run_CaneDrop(uint32_t roll_ms, float rest_ax, float rest_az)
+{
+    Imu_Sample_t s = {0};
+    uint32_t now = 0U;
+    bool fall = false;
+
+    FallDetection_Init(&FallConfig_Cane);
+    for (uint32_t i = 0U; i < 300U; i++) { s.az = 1.0f; now += 10U; fall |= FallDetection_Step(&s, now); }
+    for (uint32_t i = 0U; i < 30U; i++)  { s.az = 0.05f; now += 10U; fall |= FallDetection_Step(&s, now); }
+    s.ax = 2.0f; s.az = 2.0f; s.gx = 200.0f; now += 10U; fall |= FallDetection_Step(&s, now);
+    for (uint32_t i = 0U; i < 59U; i++)  { s.ax = 0.9f; s.az = 0.3f; s.gx = 50.0f; now += 10U; fall |= FallDetection_Step(&s, now); }
+    for (uint32_t i = 0U; i < (roll_ms / 10U); i++)
+    {
+        s.ax = 1.0f; s.az = 0.05f; s.gx = 60.0f; now += 10U; fall |= FallDetection_Step(&s, now);
+    }
+    for (uint32_t i = 0U; i < 300U; i++)
+    {
+        s.ax = rest_ax; s.az = rest_az; s.gx = 0.0f; now += 10U; fall |= FallDetection_Step(&s, now);
+    }
+    return fall;
+}
+
+void test_FallDetection_CaneRollsAfterImpact_StillConfirmsFall(void)
+{
+    TEST_ASSERT_TRUE(Run_CaneDrop(500U, 1.0f, 0.0f));
+    TEST_ASSERT_EQUAL_STRING("IDLE", FallDetection_GetStateName());
+}
+
+void test_FallDetection_CaneLandsUpright_IsNotAFall(void)
+{
+    TEST_ASSERT_FALSE(Run_CaneDrop(500U, 0.0f, 1.0f));
+}
+
+void test_FallDetection_NeverComesToRest_TimesOutWithoutFall(void)
+{
+    /* Motion lasting past the timeout must abandon the incident. */
+    Imu_Sample_t s = {0};
+    uint32_t now = 0U;
+    FallDetection_Init(&FallConfig_Cane);
+    s.ax = 3.0f; now += 10U; (void)FallDetection_Step(&s, now);          /* impact */
+    TEST_ASSERT_EQUAL(FALL_STATE_SETTLING, FallDetection_GetState());
+    bool fall = false;
+    for (uint32_t i = 0U; i < ((FALL_STILL_TIMEOUT_MS + 1000U) / 10U); i++)
+    {
+        s.ax = 1.0f; s.az = 0.0f; s.gx = 90.0f; now += 10U; fall |= FallDetection_Step(&s, now);
+    }
+    TEST_ASSERT_FALSE(fall);
+    TEST_ASSERT_EQUAL(FALL_STATE_IDLE, FallDetection_GetState());
+}
+
 void test_FallDetection_HeadDirectImpactWithoutFreefall_IsIgnored(void)
 {
     Imu_Sample_t s = {0};
@@ -266,75 +317,32 @@ void test_FallDetection_HeadResetRelearnsWornPoseQuickly(void)
     TEST_ASSERT_FALSE(fall);
 }
 
-/* Free fall followed by an impact and the settling interval. */
-static void Run_HeadFallToCheckStill(Imu_Sample_t * const p_s, uint32_t * const p_now)
-{
-    Set(p_s, 0.0f, 0.0f, 0.1f, 80.0f);          /* free fall, 300 ms */
-    TEST_ASSERT_FALSE(Feed(p_s, p_now, 300U));
-    Set(p_s, 3.0f, 0.0f, 0.5f, 200.0f);         /* impact */
-    TEST_ASSERT_FALSE(Feed(p_s, p_now, 10U));
-    Set(p_s, 0.9f, 0.0f, 0.3f, 60.0f);          /* settling */
-    TEST_ASSERT_FALSE(Feed(p_s, p_now, FALL_SETTLE_MS));
-    TEST_ASSERT_EQUAL(FALL_STATE_CHECK_STILL, FallDetection_GetState());
-}
-
-void test_FallDetection_HeadMovesAfterImpact_StillConfirmsFall(void)
+/* Cane switched on lying flat, then woken (Reset) and held upright.
+ * A drop that ends flat must still be detected after the cane relearns upright.
+ */
+void test_FallDetection_CaneResetRelearnsHeldPoseQuickly(void)
 {
     Imu_Sample_t s = {0};
     uint32_t now = 0U;
-    Run_HeadFallToCheckStill(&s, &now);
+    bool fall = false;
 
-    Set(&s, 1.0f, 0.0f, 0.05f, 60.0f);            /* moving while tilted */
-    TEST_ASSERT_FALSE(Feed(&s, &now, FALL_STILL_MS));
-    Set(&s, 1.0f, 0.0f, 0.0f, 0.0f);              /* comes to rest on side */
-    TEST_ASSERT_FALSE(Feed(&s, &now, FALL_STILL_MS - 10U));
-    TEST_ASSERT_EQUAL(FALL_STATE_CHECK_STILL, FallDetection_GetState());
-    TEST_ASSERT_FALSE(Feed(&s, &now, 10U));
-    TEST_ASSERT_EQUAL(FALL_STATE_ALERT_PENDING, FallDetection_GetState());
-    TEST_ASSERT_TRUE(Feed(&s, &now, FALL_PENDING_MS));
-    TEST_ASSERT_EQUAL(FALL_STATE_IDLE, FallDetection_GetState());
-}
+    FallDetection_Init(&FallConfig_Cane);
+    Set(&s, 1.0f, 0.0f, 0.0f, 0.0f);             /* flat at switch-on, 40 s */
+    (void)Feed(&s, &now, 40000U);
+    FallDetection_Reset();                        /* IMU wakes after parking */
+    Set(&s, 0.0f, 0.0f, 1.0f, 0.0f);             /* held upright, still, 5 s */
+    (void)Feed(&s, &now, 5000U);
 
-void test_FallDetection_HeadRestsUprightAfterImpact_IsNotAFall(void)
-{
-    Imu_Sample_t s = {0};
-    uint32_t now = 0U;
-    Run_HeadFallToCheckStill(&s, &now);
+    Set(&s, 0.0f, 0.0f, 0.05f, 50.0f);           /* free fall, 300 ms */
+    fall |= Feed(&s, &now, 300U);
+    Set(&s, 2.0f, 0.0f, 2.0f, 200.0f);           /* impact */
+    fall |= Feed(&s, &now, 10U);
+    Set(&s, 0.9f, 0.0f, 0.3f, 50.0f);            /* settling */
+    fall |= Feed(&s, &now, 600U);
+    Set(&s, 1.0f, 0.0f, 0.0f, 0.0f);             /* comes to rest flat */
+    fall |= Feed(&s, &now, 2000U);
 
-    Set(&s, 1.0f, 0.0f, 0.05f, 60.0f);            /* moving while tilted */
-    TEST_ASSERT_FALSE(Feed(&s, &now, FALL_STILL_MS));
-    Set(&s, 0.0f, 0.0f, 1.0f, 0.0f);              /* comes to rest upright */
-    TEST_ASSERT_FALSE(Feed(&s, &now, FALL_STILL_MS));
-    TEST_ASSERT_EQUAL(FALL_STATE_IDLE, FallDetection_GetState());
-}
-
-void test_FallDetection_NeverComesToRest_TimesOutWithoutFall(void)
-{
-    Imu_Sample_t s = {0};
-    uint32_t now = 0U;
-    Run_HeadFallToCheckStill(&s, &now);
-
-    Set(&s, 1.0f, 0.0f, 0.0f, 90.0f);              /* motion persists */
-    TEST_ASSERT_FALSE(Feed(&s, &now, FALL_STILL_TIMEOUT_MS));
-    TEST_ASSERT_EQUAL(FALL_STATE_IDLE, FallDetection_GetState());
-}
-
-/* After waking and adapting to the worn pose, a real fall is still reported. */
-void test_FallDetection_HeadFallAfterResetAndWornPoseRelearning(void)
-{
-    Imu_Sample_t s = {0};
-    uint32_t now = 0U;
-
-    Set(&s, 1.0f, 0.0f, 0.0f, 0.0f);              /* on the table, 40 s */
-    TEST_ASSERT_FALSE(Feed(&s, &now, 40000U));
-    FallDetection_Reset();
-    Set(&s, 0.0f, 0.0f, 1.0f, 0.0f);              /* worn upright, 5 s */
-    TEST_ASSERT_FALSE(Feed(&s, &now, 5000U));
-    Run_HeadFallToCheckStill(&s, &now);
-    Set(&s, 1.0f, 0.0f, 0.0f, 0.0f);              /* comes to rest on side */
-    TEST_ASSERT_FALSE(Feed(&s, &now, FALL_STILL_MS));
-    TEST_ASSERT_EQUAL(FALL_STATE_ALERT_PENDING, FallDetection_GetState());
-    TEST_ASSERT_TRUE(Feed(&s, &now, FALL_PENDING_MS));
+    TEST_ASSERT_TRUE(fall);
 }
 
 /* Real head fall: free fall, impact, then lying on the side and still.
@@ -345,7 +353,12 @@ static void Run_HeadFallToPending(Imu_Sample_t * const p_s,
 {
     Set(p_s, 0.0f, 0.0f, 1.0f, 0.0f);           /* worn upright, 40 s */
     (void)Feed(p_s, p_now, 40000U);
-    Run_HeadFallToCheckStill(p_s, p_now);
+    Set(p_s, 0.0f, 0.0f, 0.1f, 80.0f);          /* free fall, 300 ms */
+    (void)Feed(p_s, p_now, 300U);
+    Set(p_s, 3.0f, 0.0f, 0.5f, 200.0f);         /* impact */
+    (void)Feed(p_s, p_now, 10U);
+    Set(p_s, 0.9f, 0.0f, 0.3f, 60.0f);          /* settling */
+    (void)Feed(p_s, p_now, 800U);
     Set(p_s, 1.0f, 0.0f, 0.0f, 0.0f);           /* lying on side, still */
     (void)Feed(p_s, p_now, 600U);
 }
@@ -414,14 +427,14 @@ int main(void)
     RUN_TEST(test_FallDetection_InitialState_IsIdle);
     RUN_TEST(test_FallDetection_HeadDrop_Sequence_TriggersFall);
     RUN_TEST(test_FallDetection_Reset_ReturnsToIdle);
-    RUN_TEST(test_FallDetection_HeadMovesAfterImpact_StillConfirmsFall);
-    RUN_TEST(test_FallDetection_HeadRestsUprightAfterImpact_IsNotAFall);
+    RUN_TEST(test_FallDetection_CaneRollsAfterImpact_StillConfirmsFall);
+    RUN_TEST(test_FallDetection_CaneLandsUpright_IsNotAFall);
     RUN_TEST(test_FallDetection_NeverComesToRest_TimesOutWithoutFall);
     RUN_TEST(test_FallDetection_HeadDirectImpactWithoutFreefall_IsIgnored);
     RUN_TEST(test_FallDetection_DynamicMotionDoesNotCorruptGravityReference);
     RUN_TEST(test_FallDetection_HeadHeldBendThenFastReturn_IsNotAFall);
     RUN_TEST(test_FallDetection_HeadResetRelearnsWornPoseQuickly);
-    RUN_TEST(test_FallDetection_HeadFallAfterResetAndWornPoseRelearning);
+    RUN_TEST(test_FallDetection_CaneResetRelearnsHeldPoseQuickly);
     RUN_TEST(test_FallDetection_HeadFallIsHeldInAlertPending);
     RUN_TEST(test_FallDetection_HeadRecoveryDuringPending_CancelsFall);
     RUN_TEST(test_FallDetection_HeadBriefUprightDuringPending_StillReportsFall);

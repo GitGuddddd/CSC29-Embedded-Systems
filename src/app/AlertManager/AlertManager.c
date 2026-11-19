@@ -13,6 +13,8 @@ static bool s_fall_alarm_muted = false;
 static uint32_t s_fall_start_time_ms = 0U;
 static Alert_Type_t s_previous_request = ALERT_NONE;
 static uint32_t s_request_start_ms = 0U;
+static Alert_Type_t s_calibration_cue = ALERT_NONE;
+static uint32_t s_calibration_start_ms = 0U;
 
 void AlertManager_Init(void)
 {
@@ -21,6 +23,8 @@ void AlertManager_Init(void)
     s_fall_start_time_ms = 0U;
     s_previous_request = ALERT_NONE;
     s_request_start_ms = 0U;
+    s_calibration_cue = ALERT_NONE;
+    s_calibration_start_ms = 0U;
 }
 
 void AlertManager_AcknowledgeReset(void)
@@ -38,6 +42,34 @@ void AlertManager_SetFallState(bool latched, bool paused, uint32_t now_ms)
     }
     s_fall_alarm_latched = latched;
     s_fall_alarm_muted = latched && paused;
+}
+
+void AlertManager_PlayCalibrationCue(Alert_Type_t cue, uint32_t now_ms)
+{
+    if ((cue == ALERT_CAL_STARTED) || (cue == ALERT_CAL_DONE) || (cue == ALERT_CAL_FAILED))
+    {
+        s_calibration_cue = cue;
+        s_calibration_start_ms = now_ms;
+    }
+}
+
+static void Render_CalibrationCue(uint32_t now_ms, Alert_Output_t * const p_out)
+{
+    if ((uint32_t)(now_ms - s_calibration_start_ms) >= ALERT_CALIBRATION_PULSE_MS)
+    {
+        s_calibration_cue = ALERT_NONE;
+    }
+
+    switch (s_calibration_cue)
+    {
+        case ALERT_CAL_STARTED: p_out->generated_freq_hz = ALERT_CAL_STARTED_FREQ_HZ; break;
+        case ALERT_CAL_DONE:    p_out->generated_freq_hz = ALERT_CAL_DONE_FREQ_HZ; break;
+        case ALERT_CAL_FAILED:  p_out->generated_freq_hz = ALERT_CAL_FAILED_FREQ_HZ; break;
+        default: return;
+    }
+    p_out->active_alert = s_calibration_cue;
+    p_out->buzzer_active = true;
+    p_out->generated_duty_percent = ALERT_STANDARD_DUTY_PERCENT;
 }
 
 static bool Fall_PulseOn(uint32_t elapsed_ms)
@@ -214,6 +246,14 @@ void AlertManager_ArbitrateSynced(const Alert_SyncInput_t * const p_in,
             req = ALERT_SENSOR_FAULT;
         }
         AlertManager_Arbitrate(req, 0U, now_ms, p_out);
+        if ((p_out->active_alert == ALERT_NONE) && !p_in->peer_fall_active && !p_in->cane_buzzer_fault)
+        {
+            Render_CalibrationCue(now_ms, p_out);
+        }
+        else
+        {
+            s_calibration_cue = ALERT_NONE;
+        }
         if (p_in->cane_buzzer_fault)
         {
             p_out->buzzer_active = false;

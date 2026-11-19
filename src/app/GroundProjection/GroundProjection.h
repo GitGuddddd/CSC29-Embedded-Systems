@@ -20,14 +20,16 @@ typedef enum
     GP_STATE_STEP_UP,
     GP_STATE_STEP_DOWN,
     GP_STATE_NO_GROUND,
-    GP_STATE_SENSOR_FAULT
+    GP_STATE_SENSOR_FAULT,
+    GP_STATE_POSE_UNAVAILABLE
 } Gp_State_t;
 
 typedef enum
 {
     GP_RANGE_VALID = 0U,
     GP_RANGE_NO_RETURN,
-    GP_RANGE_INVALID
+    GP_RANGE_INVALID,
+    GP_RANGE_POSE_UNAVAILABLE
 } Gp_Quality_t;
 
 /* How the last calibration ended; every outcome except DONE keeps the previous baseline */
@@ -45,10 +47,13 @@ typedef struct
     Gp_State_t state;
     Gp_State_t candidate;
     bool is_armed;
+    bool is_calibrating;
     bool is_calibrated;
+    bool is_tilt_calibrated;
 
     uint16_t baseline_mm;
     uint16_t filtered_mm;
+    float tilt_reference[3];
 
     uint16_t history[5];
     uint8_t history_count;
@@ -57,9 +62,12 @@ typedef struct
     uint8_t candidate_count;
 
     uint8_t cal_count;
+    uint8_t cal_tilt_count;
+    bool cal_tilt_saved;
     uint16_t cal_min;
     uint16_t cal_max;
     uint32_t cal_sum;
+    float cal_tilt_sum[3];
     uint32_t cal_start_ms;
     Gp_CalEvent_t cal_event;
 
@@ -76,6 +84,14 @@ void GroundProjection_StartCalibration(Gp_Detector_t * const p_d, uint32_t now_m
 void GroundProjection_CancelCalibration(Gp_Detector_t * const p_d, uint32_t now_ms);
 Gp_CalEvent_t GroundProjection_TakeCalEvent(Gp_Detector_t * const p_d);
 void GroundProjection_Feed(Gp_Detector_t * const p_d, Gp_Quality_t quality, uint16_t range_mm, uint32_t now_ms);
+/* During calibration, pair an accepted range with a stationary IMU sample when available. */
+void GroundProjection_FeedWithImu(Gp_Detector_t * const p_d, Gp_Quality_t quality,
+                                 uint16_t range_mm, uint32_t now_ms, const Imu_Sample_t * const p_imu);
+/* VALID carries the vertical projection of a validated range.
+ * POSE_UNAVAILABLE means the ToF responded, but the ground pose could not be used.
+ */
+void GroundProjection_FeedProjected(Gp_Detector_t * const p_d, Gp_Quality_t quality,
+                                    uint16_t vertical_mm, uint32_t now_ms, const Imu_Sample_t * const p_imu);
 void GroundProjection_Tick(Gp_Detector_t * const p_d, uint32_t now_ms);
 Alert_Type_t GroundProjection_GetHapticRequest(const Gp_Detector_t * const p_d);
 const char * GroundProjection_GetStateName(Gp_State_t state);

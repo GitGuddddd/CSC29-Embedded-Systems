@@ -23,4 +23,11 @@
 /* Maker Pi Pico on-board button: active-low (pressed = GND), internal pull-up */
 #define CANE_PIN_CAL_BTN          (20U)
 
+/* Stationary accelerometer readings with the mounted ToF beam pointing straight down.
+ * Measured with the cane's serial 'v' command. Re-measure if the mounting changes.
+ */
+#define CANE_TOF_DOWN_ACCEL_X     (0.09205f)
+#define CANE_TOF_DOWN_ACCEL_Y     (0.05728f)
+#define CANE_TOF_DOWN_ACCEL_Z     (-0.92109f)
+
 #endif /* CANE_BOARD_H */

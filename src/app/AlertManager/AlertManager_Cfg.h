@@ -24,6 +24,7 @@
 #define ALERT_OBSTACLE_PERIOD_MS       (500U)
 #define ALERT_DELIVERY_PULSE_MS         (100U)
 #define ALERT_DELIVERY_PERIOD_MS       (2000U)
+#define ALERT_CALIBRATION_PULSE_MS       (150U)
 
 /* Pitch mapping for obstacle proximity: 1500 Hz at 2000 mm down to 3500 Hz at 300 mm */
 #define ALERT_BUZZER_MIN_FREQ_HZ       (1500U)
@@ -35,6 +36,9 @@
 #define ALERT_FALL_FREQ_B_HZ           (4000U)
 #define ALERT_FAULT_FREQ_HZ            (1000U)
 #define ALERT_DELIVERY_FREQ_HZ         (1500U)
+#define ALERT_CAL_STARTED_FREQ_HZ      (1800U)
+#define ALERT_CAL_DONE_FREQ_HZ         (2600U)
+#define ALERT_CAL_FAILED_FREQ_HZ       (1200U)
 #define ALERT_STANDARD_DUTY_PERCENT      (12U)
 #define ALERT_DELIVERY_DUTY_PERCENT      (10U)
 

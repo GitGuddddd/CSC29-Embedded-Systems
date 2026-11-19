@@ -373,6 +373,65 @@ void test_AlertManager_Synced_FaultRoutingPerNode_AndBothOnCaneOnly(void)
     TEST_ASSERT_FALSE(out_glasses.buzzer_active);
 }
 
+void test_AlertManager_CalibrationCuesAreDistinctOneShots(void)
+{
+    const Alert_SyncInput_t cane = {0};
+    Alert_Output_t out;
+    uint32_t start = UINT32_MAX - 50U;
+
+    AlertManager_PlayCalibrationCue(ALERT_CAL_STARTED, start);
+    AlertManager_ArbitrateSynced(&cane, start + ALERT_CALIBRATION_PULSE_MS - 1U, &out);
+    TEST_ASSERT_TRUE(out.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_CAL_STARTED, out.active_alert);
+    TEST_ASSERT_EQUAL_UINT16(ALERT_CAL_STARTED_FREQ_HZ, out.generated_freq_hz);
+
+    AlertManager_ArbitrateSynced(&cane, start + ALERT_CALIBRATION_PULSE_MS, &out);
+    TEST_ASSERT_FALSE(out.buzzer_active);
+
+    AlertManager_PlayCalibrationCue(ALERT_CAL_DONE, 200U);
+    AlertManager_ArbitrateSynced(&cane, 200U, &out);
+    TEST_ASSERT_TRUE(out.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_CAL_DONE, out.active_alert);
+    TEST_ASSERT_EQUAL_UINT16(ALERT_CAL_DONE_FREQ_HZ, out.generated_freq_hz);
+
+    AlertManager_PlayCalibrationCue(ALERT_CAL_FAILED, 210U);
+    AlertManager_ArbitrateSynced(&cane, 210U, &out);
+    TEST_ASSERT_TRUE(out.buzzer_active);
+    TEST_ASSERT_EQUAL(ALERT_CAL_FAILED, out.active_alert);
+    TEST_ASSERT_EQUAL_UINT16(ALERT_CAL_FAILED_FREQ_HZ, out.generated_freq_hz);
+}
+
+void test_AlertManager_CalibrationCueYieldsToSafetyAlerts(void)
+{
+    Alert_SyncInput_t cane = { .sensor_fault = true };
+    Alert_Output_t out;
+
+    AlertManager_PlayCalibrationCue(ALERT_CAL_STARTED, 10U);
+    AlertManager_ArbitrateSynced(&cane, 10U, &out);
+    TEST_ASSERT_EQUAL(ALERT_SENSOR_FAULT, out.active_alert);
+
+    cane.sensor_fault = false;
+    AlertManager_ArbitrateSynced(&cane, 20U, &out);
+    TEST_ASSERT_FALSE(out.buzzer_active);
+
+    cane.local_fall_latched = true;
+    AlertManager_PlayCalibrationCue(ALERT_CAL_DONE, 30U);
+    AlertManager_ArbitrateSynced(&cane, 30U, &out);
+    TEST_ASSERT_EQUAL(ALERT_FALL_ALARM, out.active_alert);
+
+    cane.local_fall_latched = false;
+    cane.peer_fall_active = true;
+    AlertManager_PlayCalibrationCue(ALERT_CAL_DONE, 40U);
+    AlertManager_ArbitrateSynced(&cane, 40U, &out);
+    TEST_ASSERT_FALSE(out.buzzer_active);
+
+    cane.peer_fall_active = false;
+    cane.cane_buzzer_fault = true;
+    AlertManager_PlayCalibrationCue(ALERT_CAL_FAILED, 50U);
+    AlertManager_ArbitrateSynced(&cane, 50U, &out);
+    TEST_ASSERT_FALSE(out.buzzer_active);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -385,5 +444,7 @@ int main(void)
     RUN_TEST(test_AlertManager_Synced_DefaultPlaysOnlyOnCane);
     RUN_TEST(test_AlertManager_Synced_CaneBuzzerFaultFailoverToGlasses);
     RUN_TEST(test_AlertManager_Synced_FaultRoutingPerNode_AndBothOnCaneOnly);
+    RUN_TEST(test_AlertManager_CalibrationCuesAreDistinctOneShots);
+    RUN_TEST(test_AlertManager_CalibrationCueYieldsToSafetyAlerts);
     return UNITY_END();
 }

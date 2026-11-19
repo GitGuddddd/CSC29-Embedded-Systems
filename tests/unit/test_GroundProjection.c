@@ -103,6 +103,105 @@ void test_GroundProjection_NoGround_SustainedVoting(void)
 /* Real cadence: one ToF sample every 100 ms. Calibrate on 1000 mm, then refill the median window. */
 #define TOF_PERIOD_MS (100U)
 
+void test_GroundProjection_TiltCalibration_AveragesFinalRangeWindow(void)
+{
+    Gp_Detector_t d;
+    uint32_t now_ms = 0U;
+    GroundProjection_Init(&d, now_ms);
+    GroundProjection_SetArmed(&d, true, now_ms);
+    GroundProjection_StartCalibration(&d, now_ms);
+
+    const Imu_Sample_t old_pose = { .az = 1.0f };
+    for (uint32_t i = 0U; i < 5U; ++i)
+    {
+        GroundProjection_FeedWithImu(&d, GP_RANGE_VALID, 800U, now_ms, &old_pose);
+        now_ms += TOF_PERIOD_MS;
+    }
+
+    /* The distance change starts a fresh window, with a different cane pose. */
+    Imu_Sample_t pose = { .ax = 0.4f, .az = -0.9f };
+    GroundProjection_FeedWithImu(&d, GP_RANGE_VALID, 1000U, now_ms, &pose);
+    now_ms += TOF_PERIOD_MS;
+    GroundProjection_FeedWithImu(&d, GP_RANGE_INVALID, 0U, now_ms, &old_pose);
+    now_ms += TOF_PERIOD_MS;
+
+    pose.ax = 0.45f;
+    for (uint32_t i = 1U; i < GP_CAL_SAMPLES; ++i)
+    {
+        GroundProjection_FeedWithImu(&d, GP_RANGE_VALID, 1000U, now_ms, &pose);
+        now_ms += TOF_PERIOD_MS;
+    }
+
+    TEST_ASSERT_EQUAL(GP_CAL_EVENT_DONE, GroundProjection_TakeCalEvent(&d));
+    TEST_ASSERT_EQUAL_UINT16(1000U, d.baseline_mm);
+    TEST_ASSERT_TRUE(d.is_tilt_calibrated);
+    TEST_ASSERT_TRUE(d.cal_tilt_saved);
+    float expected_x = (0.4f + 0.45f * (GP_CAL_SAMPLES - 1U)) / GP_CAL_SAMPLES;
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, expected_x, d.tilt_reference[0]);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, d.tilt_reference[1]);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, -0.9f, d.tilt_reference[2]);
+}
+
+void test_GroundProjection_TiltCalibration_KeepsReferenceWithMissingSamplesOrCancellation(void)
+{
+    Gp_Detector_t d;
+    uint32_t now_ms = 0U;
+    GroundProjection_Init(&d, now_ms);
+    GroundProjection_SetArmed(&d, true, now_ms);
+    GroundProjection_StartCalibration(&d, now_ms);
+
+    const Imu_Sample_t initial_pose = { .ay = 0.6f, .az = -0.8f };
+    for (uint32_t i = 0U; i < GP_CAL_SAMPLES; ++i)
+    {
+        GroundProjection_FeedWithImu(&d, GP_RANGE_VALID, 1000U, now_ms, &initial_pose);
+        now_ms += TOF_PERIOD_MS;
+    }
+    TEST_ASSERT_TRUE(d.cal_tilt_saved);
+
+    GroundProjection_StartCalibration(&d, now_ms);
+    const Imu_Sample_t second_pose = { .ax = 1.0f };
+    for (uint32_t i = 0U; i < GP_CAL_SAMPLES; ++i)
+    {
+        const Imu_Sample_t * const sample = (i < GP_CAL_TILT_MIN_SAMPLES - 1U) ? &second_pose : NULL;
+        GroundProjection_FeedWithImu(&d, GP_RANGE_VALID, 1100U, now_ms, sample);
+        now_ms += TOF_PERIOD_MS;
+    }
+    TEST_ASSERT_EQUAL(GP_CAL_EVENT_DONE, GroundProjection_TakeCalEvent(&d));
+    TEST_ASSERT_EQUAL_UINT16(1100U, d.baseline_mm);
+    TEST_ASSERT_FALSE(d.cal_tilt_saved);
+
+    GroundProjection_StartCalibration(&d, now_ms);
+    GroundProjection_FeedWithImu(&d, GP_RANGE_VALID, 1200U, now_ms, &second_pose);
+    GroundProjection_CancelCalibration(&d, now_ms + TOF_PERIOD_MS);
+    TEST_ASSERT_EQUAL(GP_CAL_EVENT_CANCELLED, GroundProjection_TakeCalEvent(&d));
+    TEST_ASSERT_EQUAL_UINT16(1100U, d.baseline_mm);
+    TEST_ASSERT_FALSE(d.cal_tilt_saved);
+    TEST_ASSERT_TRUE(d.is_tilt_calibrated);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.0f, d.tilt_reference[0]);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 0.6f, d.tilt_reference[1]);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, -0.8f, d.tilt_reference[2]);
+}
+
+void test_GroundProjection_TiltCalibration_RejectsAnInconsistentPose(void)
+{
+    Gp_Detector_t d;
+    GroundProjection_Init(&d, 0U);
+    GroundProjection_SetArmed(&d, true, 0U);
+    GroundProjection_StartCalibration(&d, 0U);
+
+    Imu_Sample_t pose = { .az = 1.0f };
+    for (uint32_t i = 0U; i < GP_CAL_SAMPLES; ++i)
+    {
+        GroundProjection_FeedWithImu(&d, GP_RANGE_VALID, 1000U, i * TOF_PERIOD_MS, &pose);
+        pose.az = -pose.az;
+    }
+
+    TEST_ASSERT_EQUAL(GP_CAL_EVENT_DONE, GroundProjection_TakeCalEvent(&d));
+    TEST_ASSERT_EQUAL_UINT16(1000U, d.baseline_mm);
+    TEST_ASSERT_FALSE(d.is_tilt_calibrated);
+    TEST_ASSERT_FALSE(d.cal_tilt_saved);
+}
+
 static uint32_t Calibrate_And_Settle(Gp_Detector_t * const p_d, uint16_t level_mm)
 {
     uint32_t t = 0U;
@@ -121,6 +220,114 @@ static uint32_t Calibrate_And_Settle(Gp_Detector_t * const p_d, uint16_t level_m
         t += TOF_PERIOD_MS;
     }
     return t;
+}
+
+void test_GroundProjection_PoseGate_UsesFreshSamplesOnResume(void)
+{
+    Gp_Detector_t d;
+    uint32_t now_ms = Calibrate_And_Settle(&d, 1000U);
+    GroundProjection_FeedProjected(&d, GP_RANGE_VALID, 1350U, now_ms, NULL);
+    TEST_ASSERT_TRUE(d.change_pending);
+    TEST_ASSERT_EQUAL_UINT8(5U, d.history_count);
+
+    /* Rejected poses come from a responsive sensor, even across the stale timeout. */
+    for (uint32_t elapsed_ms = 0U; elapsed_ms <= GP_STALE_TIMEOUT_MS; elapsed_ms += TOF_PERIOD_MS)
+    {
+        now_ms += TOF_PERIOD_MS;
+        GroundProjection_FeedProjected(&d, GP_RANGE_POSE_UNAVAILABLE, 0U, now_ms, NULL);
+        TEST_ASSERT_EQUAL(GP_STATE_POSE_UNAVAILABLE, d.state);
+        TEST_ASSERT_EQUAL_UINT32(now_ms, d.last_sample_ms);
+        TEST_ASSERT_EQUAL(ALERT_NONE, GroundProjection_GetHapticRequest(&d));
+    }
+    TEST_ASSERT_FALSE(d.change_pending);
+    TEST_ASSERT_EQUAL_UINT8(0U, d.history_count);
+    TEST_ASSERT_EQUAL_UINT16(1000U, d.baseline_mm);
+
+    uint32_t first_fresh_ms = now_ms + TOF_PERIOD_MS;
+    for (uint32_t i = 0U; i < 5U; ++i)
+    {
+        now_ms += TOF_PERIOD_MS;
+        GroundProjection_FeedProjected(&d, GP_RANGE_VALID, 1350U, now_ms, NULL);
+        TEST_ASSERT_EQUAL(i < 4U ? GP_STATE_UNKNOWN : GP_STATE_STEP_DOWN, d.state);
+    }
+    TEST_ASSERT_EQUAL_UINT32(first_fresh_ms, d.change_start_ms);
+}
+
+void test_GroundProjection_PoseGate_ResetsNoReturnVotes(void)
+{
+    Gp_Detector_t d;
+    uint32_t now_ms = Calibrate_And_Settle(&d, 1000U);
+    GroundProjection_FeedProjected(&d, GP_RANGE_NO_RETURN, 0U, now_ms, NULL);
+    TEST_ASSERT_EQUAL_UINT8(1U, d.candidate_count);
+    now_ms += TOF_PERIOD_MS;
+    GroundProjection_FeedProjected(&d, GP_RANGE_POSE_UNAVAILABLE, 0U, now_ms, NULL);
+    TEST_ASSERT_EQUAL_UINT8(0U, d.candidate_count);
+
+    for (uint32_t i = 1U; i <= GP_CONFIRM_SAMPLES; ++i)
+    {
+        now_ms += TOF_PERIOD_MS;
+        GroundProjection_FeedProjected(&d, GP_RANGE_NO_RETURN, 0U, now_ms, NULL);
+        TEST_ASSERT_EQUAL(i < GP_CONFIRM_SAMPLES ? GP_STATE_UNKNOWN : GP_STATE_NO_GROUND, d.state);
+    }
+}
+
+void test_GroundProjection_PoseGate_DiscardsPartialCalibrationWindow(void)
+{
+    Gp_Detector_t d;
+    uint32_t now_ms = Calibrate_And_Settle(&d, 1000U);
+    GroundProjection_StartCalibration(&d, now_ms);
+    const Imu_Sample_t pose = { .az = 1.0f };
+    GroundProjection_FeedProjected(&d, GP_RANGE_VALID, 30U, now_ms, &pose);
+    TEST_ASSERT_EQUAL_UINT8(1U, d.cal_count);
+    TEST_ASSERT_EQUAL_UINT8(1U, d.cal_tilt_count);
+
+    now_ms += TOF_PERIOD_MS;
+    GroundProjection_FeedProjected(&d, GP_RANGE_POSE_UNAVAILABLE, 0U, now_ms, NULL);
+    TEST_ASSERT_EQUAL(GP_STATE_POSE_UNAVAILABLE, d.state);
+    TEST_ASSERT_TRUE(d.is_calibrating);
+    TEST_ASSERT_EQUAL_UINT8(0U, d.cal_count);
+    TEST_ASSERT_EQUAL_UINT8(0U, d.cal_tilt_count);
+    TEST_ASSERT_EQUAL_UINT16(1000U, d.baseline_mm);
+
+    /* Only the raw ToF distance is bounded by GP_MIN_RANGE_MM before projection. */
+    for (uint32_t i = 1U; i <= GP_CAL_SAMPLES; ++i)
+    {
+        now_ms += TOF_PERIOD_MS;
+        GroundProjection_FeedProjected(&d, GP_RANGE_VALID, GP_MIN_RANGE_MM - 1U, now_ms, &pose);
+        TEST_ASSERT_EQUAL(i < GP_CAL_SAMPLES ? GP_STATE_CALIBRATING : GP_STATE_LEVEL, d.state);
+    }
+    TEST_ASSERT_EQUAL(GP_CAL_EVENT_DONE, GroundProjection_TakeCalEvent(&d));
+    TEST_ASSERT_EQUAL_UINT16(GP_MIN_RANGE_MM - 1U, d.baseline_mm);
+}
+
+void test_GroundProjection_PoseGate_CalibrationStillTimesOutAndDetectsLostSensor(void)
+{
+    Gp_Detector_t d;
+    uint32_t start_ms = Calibrate_And_Settle(&d, 1000U);
+    GroundProjection_StartCalibration(&d, start_ms);
+
+    for (uint32_t elapsed_ms = TOF_PERIOD_MS; elapsed_ms <= GP_CAL_TIMEOUT_MS;
+         elapsed_ms += TOF_PERIOD_MS)
+    {
+        GroundProjection_FeedProjected(&d, GP_RANGE_POSE_UNAVAILABLE, 0U, start_ms + elapsed_ms, NULL);
+    }
+    TEST_ASSERT_EQUAL(GP_CAL_EVENT_TIMEOUT, GroundProjection_TakeCalEvent(&d));
+    TEST_ASSERT_EQUAL(GP_STATE_POSE_UNAVAILABLE, d.state);
+    TEST_ASSERT_FALSE(d.is_calibrating);
+
+    start_ms += GP_CAL_TIMEOUT_MS;
+    GroundProjection_StartCalibration(&d, start_ms);
+    GroundProjection_FeedProjected(&d, GP_RANGE_POSE_UNAVAILABLE, 0U, start_ms, NULL);
+    GroundProjection_CancelCalibration(&d, start_ms);
+    TEST_ASSERT_EQUAL(GP_CAL_EVENT_CANCELLED, GroundProjection_TakeCalEvent(&d));
+
+    GroundProjection_StartCalibration(&d, start_ms);
+    GroundProjection_FeedProjected(&d, GP_RANGE_POSE_UNAVAILABLE, 0U, start_ms, NULL);
+    GroundProjection_FeedProjected(&d, GP_RANGE_INVALID, 0U, start_ms + GP_STALE_TIMEOUT_MS, NULL);
+    TEST_ASSERT_EQUAL(GP_CAL_EVENT_SENSOR_FAULT, GroundProjection_TakeCalEvent(&d));
+    TEST_ASSERT_EQUAL(GP_STATE_SENSOR_FAULT, d.state);
+    TEST_ASSERT_FALSE(d.is_calibrating);
+    TEST_ASSERT_EQUAL_UINT16(1000U, d.baseline_mm);
 }
 
 /* Feeds range_mm every 100 ms until the detector reaches target; returns the time it did, or 0 if never */
@@ -412,6 +619,13 @@ int main(void)
     RUN_TEST(test_GroundProjection_Cliff_StepDown_Detection);
     RUN_TEST(test_GroundProjection_SevereCliff_FastPathBypass);
     RUN_TEST(test_GroundProjection_NoGround_SustainedVoting);
+    RUN_TEST(test_GroundProjection_TiltCalibration_AveragesFinalRangeWindow);
+    RUN_TEST(test_GroundProjection_TiltCalibration_KeepsReferenceWithMissingSamplesOrCancellation);
+    RUN_TEST(test_GroundProjection_TiltCalibration_RejectsAnInconsistentPose);
+    RUN_TEST(test_GroundProjection_PoseGate_UsesFreshSamplesOnResume);
+    RUN_TEST(test_GroundProjection_PoseGate_ResetsNoReturnVotes);
+    RUN_TEST(test_GroundProjection_PoseGate_DiscardsPartialCalibrationWindow);
+    RUN_TEST(test_GroundProjection_PoseGate_CalibrationStillTimesOutAndDetectsLostSensor);
     RUN_TEST(test_GroundProjection_RebootWithoutCalibration_PromptsAndNeverWarns);
     RUN_TEST(test_GroundProjection_CancelledRecalibration_KeepsOldBaseline);
     RUN_TEST(test_GroundProjection_CompletedRecalibration_ReplacesBaseline);

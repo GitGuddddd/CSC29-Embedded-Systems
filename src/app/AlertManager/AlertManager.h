@@ -25,6 +25,10 @@ uint16_t AlertManager_MapDistanceToPitch(uint16_t distance_mm);
 void AlertManager_AcknowledgeReset(void);
 /* Synchronize the mode manager's incident and audio state without conflating pause/reset. */
 void AlertManager_SetFallState(bool latched, bool paused, uint32_t now_ms);
+/* Play a one-shot CAL_STARTED, CAL_DONE, or CAL_FAILED cue on the cane.
+ * Use the same task and clock as AlertManager_ArbitrateSynced().
+ */
+void AlertManager_PlayCalibrationCue(Alert_Type_t cue, uint32_t now_ms);
 void AlertManager_Arbitrate(Alert_Type_t requested_alert,
                             uint16_t param,
                             uint32_t now_ms,

@@ -89,6 +89,7 @@ if (BUILD_FOR_PICO_TARGET)
         src/app/FallDetection/FallDetection.c
         src/app/FallDetection/FallDetection_Lcfg.c
         src/app/GroundProjection/GroundProjection.c
+        src/app/GroundProjection/GroundBeam.c
         src/app/AlertManager/AlertManager.c
         src/drivers/Mpu9250/Mpu9250.c
         src/drivers/Mpu9250/Mpu9250_Lcfg.c
@@ -303,6 +304,13 @@ add_executable(test_GroundProjection
 )
 target_link_libraries(test_GroundProjection PRIVATE unity)
 add_test(NAME Unit_GroundProjection COMMAND test_GroundProjection)
+
+add_executable(test_GroundBeam
+    tests/unit/test_GroundBeam.c
+    src/app/GroundProjection/GroundBeam.c
+)
+target_link_libraries(test_GroundBeam PRIVATE unity m)
+add_test(NAME Unit_GroundBeam COMMAND test_GroundBeam)
 
 # 2b. Cane Haptic arbitration Unit Test
 add_executable(test_Haptic

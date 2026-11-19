@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <math.h>
 #include "Cane_Board.h"
 #include "Feature_Cfg.h"
 #include "rte/Rte.h"
@@ -22,10 +23,12 @@
 #include "services/Watchdog/Watchdog.h"
 #include "services/Watchdog/Watchdog_Cfg.h"
 #include "app/FallDetection/FallDetection.h"
+#include "app/GroundProjection/GroundBeam.h"
 #include "app/GroundProjection/GroundProjection.h"
 #include "app/GroundProjection/GroundProjection_Cfg.h"
 #include "app/AlertManager/AlertManager.h"
 #include "app/CaneMode/CaneMode.h"
+#include "app/CaneMode/CaneMode_Cfg.h"
 
 #ifdef PICO_ON_DEVICE
 #include "pico/stdlib.h"
@@ -50,6 +53,9 @@ static bool s_is_l1x = false;
 static Sys_State_t s_sys_mode = SYS_STATE_INIT;
 
 #define CANE_TOF_RECOVERY_MS      (3000U)
+#define CANE_BEAM_ALIGN_SAMPLES   (50U)
+#define CANE_BEAM_ALIGN_TIMEOUT_MS (5000U)
+#define CANE_GROUND_LOG_SETTLE_MS (300U)
 
 /* Any free fall while the grip is released is a dropped cane: alarm at once, without
  * waiting for impact/stillness/tilt. Tracked independently of the FallDetection state
@@ -89,8 +95,14 @@ static bool Tof_Reinit(void)
     return (s_is_l0x || s_is_l1x);
 }
 
-/* True only for a calibration the user explicitly asked for (button/serial). */
-static bool s_cal_feedback = false;
+typedef enum
+{
+    GROUND_CAL_FEEDBACK_NONE = 0U,
+    GROUND_CAL_FEEDBACK_TONE,
+    GROUND_CAL_FEEDBACK_TONE_AND_HAPTIC
+} Ground_CalFeedback_t;
+
+static Ground_CalFeedback_t s_cal_feedback = GROUND_CAL_FEEDBACK_NONE;
 
 /* While gripped, the motor is reserved for uneven ground (step down / step up).
  * Link loss, sensor faults and calibration prompts are not felt in the handle.
@@ -115,7 +127,7 @@ static Alert_Type_t Ground_HapticCue(const Gp_Detector_t * const p_d)
 }
 
 static void Ground_StartCalibration(uint32_t now_ms, bool grip_held, const char * p_source,
-                                    bool announce)
+                                    Ground_CalFeedback_t feedback)
 {
     if (!grip_held)
     {
@@ -124,12 +136,175 @@ static void Ground_StartCalibration(uint32_t now_ms, bool grip_held, const char 
     }
 
     GroundProjection_StartCalibration(&s_ground_detector, now_ms);
-    s_cal_feedback = announce;
-    if (announce)
+    s_cal_feedback = feedback;
+    if (feedback != GROUND_CAL_FEEDBACK_NONE)
+    {
+        AlertManager_PlayCalibrationCue(ALERT_CAL_STARTED, now_ms);
+    }
+    if (feedback == GROUND_CAL_FEEDBACK_TONE_AND_HAPTIC)
     {
         Haptic_PlayOnce(ALERT_CAL_STARTED, now_ms);
     }
-    printf("[GROUND] Calibrating (%s): hold the cane still on level ground...\n", p_source);
+    printf("[GROUND] Calibrating distance and tilt (%s): hold the cane still on level ground...\n", p_source);
+}
+
+#ifdef PICO_ON_DEVICE
+static Gp_CalEvent_t Ground_ReportCalibration(uint32_t now_ms)
+{
+    Gp_CalEvent_t event = GroundProjection_TakeCalEvent(&s_ground_detector);
+    if (event == GP_CAL_EVENT_NONE)
+    {
+        return event;
+    }
+
+    bool tilt_saved = (event == GP_CAL_EVENT_DONE) && s_ground_detector.cal_tilt_saved;
+    if (event == GP_CAL_EVENT_DONE)
+    {
+        const char * tilt_status = "unavailable";
+        if (tilt_saved)
+        {
+            tilt_status = "set to 0.0 deg";
+        }
+        else if (s_ground_detector.is_tilt_calibrated)
+        {
+            tilt_status = "previous reference kept";
+        }
+        printf("[GROUND] Calibration complete. Baseline: %u mm, IMU zero: %s\n",
+               (unsigned int)s_ground_detector.baseline_mm, tilt_status);
+    }
+    else
+    {
+        printf("[GROUND] Calibration ended: %s\n", GroundProjection_GetCalEventName(event));
+    }
+
+    if (s_cal_feedback != GROUND_CAL_FEEDBACK_NONE)
+    {
+        Alert_Type_t cue = tilt_saved ? ALERT_CAL_DONE : ALERT_CAL_FAILED;
+        AlertManager_PlayCalibrationCue(cue, now_ms);
+        if ((s_cal_feedback == GROUND_CAL_FEEDBACK_TONE_AND_HAPTIC) &&
+            (event != GP_CAL_EVENT_CANCELLED))
+        {
+            Haptic_PlayOnce(cue, now_ms);
+        }
+    }
+    s_cal_feedback = GROUND_CAL_FEEDBACK_NONE;
+    return event;
+}
+
+static void Ground_SetArmed(bool armed, uint32_t now_ms)
+{
+    if (!armed && s_ground_detector.is_armed)
+    {
+        GroundProjection_CancelCalibration(&s_ground_detector, now_ms);
+        (void)Ground_ReportCalibration(now_ms);
+    }
+    GroundProjection_SetArmed(&s_ground_detector, armed, now_ms);
+}
+
+static const Imu_Sample_t * Ground_GetStillImuSample(const ImuSupervisor_t * const p_imu)
+{
+    if (!p_imu->sample_valid)
+    {
+        return NULL;
+    }
+
+    const Imu_Sample_t * const p_s = &p_imu->sample;
+    float a_sq = (p_s->ax * p_s->ax) + (p_s->ay * p_s->ay) + (p_s->az * p_s->az);
+    float g_sq = (p_s->gx * p_s->gx) + (p_s->gy * p_s->gy) + (p_s->gz * p_s->gz);
+    if ((a_sq >= CANEMODE_STILL_ACC_MIN_SQ) && (a_sq <= CANEMODE_STILL_ACC_MAX_SQ) &&
+        (g_sq <= CANEMODE_STILL_GYRO_MAX_SQ))
+    {
+        return p_s;
+    }
+    return NULL;
+}
+
+typedef struct
+{
+    bool active;
+    uint32_t start_ms;
+    uint32_t count;
+    Imu_Sample_t sum;
+} BeamCapture_t;
+
+static void Ground_StartBeamCapture(BeamCapture_t * const p_capture, uint32_t now_ms)
+{
+    GroundProjection_CancelCalibration(&s_ground_detector, now_ms);
+    (void)Ground_ReportCalibration(now_ms);
+    *p_capture = (BeamCapture_t){ .active = true, .start_ms = now_ms };
+    printf("[GROUND] Aligning ToF beam: keep it pointing straight down and hold still.\n");
+}
+
+/* Return true when a new beam alignment replaces the previous one. */
+static bool Ground_UpdateBeamCapture(BeamCapture_t * const p_capture, GroundBeam_t * const p_beam,
+                                     const ImuSupervisor_t * const p_imu, uint32_t now_ms)
+{
+    if ((uint32_t)(now_ms - p_capture->start_ms) >= CANE_BEAM_ALIGN_TIMEOUT_MS)
+    {
+        p_capture->active = false;
+        printf("[GROUND] Beam alignment timed out. Hold the beam straight down and send v again.\n");
+        return false;
+    }
+
+    const Imu_Sample_t * const p_sample = Ground_GetStillImuSample(p_imu);
+    if (p_sample == NULL)
+    {
+        p_capture->sum = (Imu_Sample_t){0};
+        p_capture->count = 0U;
+        return false;
+    }
+    p_capture->sum.ax += p_sample->ax;
+    p_capture->sum.ay += p_sample->ay;
+    p_capture->sum.az += p_sample->az;
+    ++p_capture->count;
+    if (p_capture->count < CANE_BEAM_ALIGN_SAMPLES)
+    {
+        return false;
+    }
+
+    p_capture->active = false;
+    const float count = (float)p_capture->count;
+    Imu_Sample_t mean = {
+        .ax = p_capture->sum.ax / count,
+        .ay = p_capture->sum.ay / count,
+        .az = p_capture->sum.az / count
+    };
+    if (!GroundBeam_Align(p_beam, &mean))
+    {
+        printf("[GROUND] Beam alignment rejected. Hold the beam straight down and send v again.\n");
+        return false;
+    }
+
+    printf("[GROUND] Beam aligned (X=%.5f Y=%.5f Z=%.5f).\n",
+           (double)mean.ax, (double)mean.ay, (double)mean.az);
+    printf("[GROUND] Hold at your walking angle on level ground and send c to calibrate distance.\n");
+    return true;
+}
+
+static void Log_GroundSample(Gp_State_t state, bool state_changed, uint16_t raw_mm,
+                             uint16_t vertical_mm, GroundBeam_Status_t beam_status,
+                             float beam_cosine)
+{
+    const float radians_to_degrees = 180.0f / 3.14159265f;
+    char raw[16] = "N/A";
+    char vertical[16] = "N/A";
+    char beam[20] = "pose unavailable";
+    if (raw_mm != UINT16_MAX)
+    {
+        (void)snprintf(raw, sizeof(raw), "%u mm", (unsigned int)raw_mm);
+    }
+    if (vertical_mm != UINT16_MAX)
+    {
+        (void)snprintf(vertical, sizeof(vertical), "%u mm", (unsigned int)vertical_mm);
+    }
+    if (isfinite(beam_cosine))
+    {
+        (void)snprintf(beam, sizeof(beam), "%.1f deg", (double)(acosf(beam_cosine) * radians_to_degrees));
+    }
+    const char * const beam_text = (beam_status == GROUND_BEAM_UNALIGNED) ? "unaligned" : beam;
+    printf("[CLIFF] %s%s (Vertical Distance: %s, Beam from vertical: %s, Raw Distance: %s)\n",
+           state_changed ? "State -> " : "Sample ", GroundProjection_GetStateName(state),
+           vertical, beam_text, raw);
 }
 
 /*
@@ -138,7 +313,6 @@ static void Ground_StartCalibration(uint32_t now_ms, bool grip_held, const char 
  * Handles System Mode Management (Sys_State_t), Fall Detection, ToF, Touch
  * =========================================================================
  */
-#ifdef PICO_ON_DEVICE
 static void vTask_SafetyPerception(void *pvParameters)
 {
     (void)pvParameters;
@@ -154,6 +328,19 @@ static void vTask_SafetyPerception(void *pvParameters)
     }
     ImuSupervisor_t imu;
     ImuSupervisor_Init(&imu, &Mpu9250_Config_Cane, CANE_PIN_I2C0_SDA, CANE_PIN_I2C0_SCL, start_ms);
+    GroundBeam_t ground_beam;
+    GroundBeam_Init(&ground_beam);
+    const Imu_Sample_t mounted_beam = {
+        .ax = CANE_TOF_DOWN_ACCEL_X,
+        .ay = CANE_TOF_DOWN_ACCEL_Y,
+        .az = CANE_TOF_DOWN_ACCEL_Z
+    };
+    if (!GroundBeam_Align(&ground_beam, &mounted_beam))
+    {
+        printf("[GROUND] Using raw range. Aim the ToF beam straight down and send v to enable projection.\n");
+    }
+    BeamCapture_t beam_capture = {0};
+    bool log_ground_samples = false;
     CaneMode_t mode;
     CaneMode_Init(&mode, start_ms);
     /* Standby would sleep the IMU; a released cane must always detect free fall. */
@@ -176,7 +363,9 @@ static void vTask_SafetyPerception(void *pvParameters)
 
     Grip_State_t prev_grip = GRIP_STATE_RELEASED;
     uint16_t last_dist_mm = 0xFFFFU;
-    Gp_State_t last_gstate = GP_STATE_LEVEL;
+    Gp_State_t previous_ground_state = GP_STATE_DISARMED;
+    Gp_State_t logged_ground_state = GP_STATE_DISARMED;
+    uint32_t ground_state_since_ms = start_ms;
     BleComm_PeerFall_t peer_fall = {0};
     bool prev_link_lost = false;
     uint8_t last_sent_flags = 0xFFU;
@@ -234,10 +423,6 @@ static void vTask_SafetyPerception(void *pvParameters)
             printf("[TOUCH] State changed -> %s (Raw GPIO: %d)\n",
                    (current_grip == GRIP_STATE_HELD) ? "HELD" : "RELEASED", raw_touch);
 
-            if (current_grip == GRIP_STATE_RELEASED)
-            {
-                GroundProjection_CancelCalibration(&s_ground_detector, now_ms);
-            }
             prev_grip = current_grip;
             cane_status.grip_state = (uint16_t)current_grip;
         }
@@ -284,6 +469,12 @@ static void vTask_SafetyPerception(void *pvParameters)
             sleep_requested = false;
         }
         ImuSupervisor_Step(&imu, sleep_requested, now_ms);
+        if (beam_capture.active && Ground_UpdateBeamCapture(&beam_capture, &ground_beam, &imu, now_ms))
+        {
+            /* A raw or previously projected distance baseline cannot be reused. */
+            GroundProjection_Init(&s_ground_detector, now_ms);
+            Haptic_Request(HAPTIC_SRC_GROUND, ALERT_NONE);
+        }
         bool local_fall = false;
         if (imu.sample_valid && mode_out.fall_detection_enabled)
         {
@@ -345,13 +536,25 @@ static void vTask_SafetyPerception(void *pvParameters)
 
         bool ground_enabled = mode_out.ground_enabled &&
                               (current_grip == GRIP_STATE_HELD) && !local_fall && !remote_fall;
-        GroundProjection_SetArmed(&s_ground_detector, ground_enabled, now_ms);
+        Ground_SetArmed(ground_enabled, now_ms);
+        if (!ground_enabled)
+        {
+            previous_ground_state = GP_STATE_DISARMED;
+            logged_ground_state = GP_STATE_DISARMED;
+        }
+
+        /* Track rotation at the IMU rate, including cycles with no ToF read. */
+        float beam_cosine;
+        GroundBeam_Status_t beam_status = GroundBeam_Update(&ground_beam,
+            imu.sample_valid ? &imu.sample : NULL, &beam_cosine);
 
         /* Sub-Task 1D: Ground ToF Cliff Detection (10 Hz / Every 100ms) */
         if (((now_ms - last_tof_ms) >= 100U) && ground_enabled)
         {
             last_tof_ms = now_ms;
             uint16_t dist_mm = 0U;
+            uint16_t ground_range_mm = 0U;
+            Gp_Quality_t quality = GP_RANGE_INVALID;
             bool read_ok = false;
 
             if (s_is_l0x)
@@ -371,7 +574,8 @@ static void vTask_SafetyPerception(void *pvParameters)
                     cane_status.tof_obstructed = 0U;
                 }
                 last_dist_mm = dist_mm;
-                GroundProjection_Feed(&s_ground_detector, GP_RANGE_VALID, dist_mm, now_ms);
+                ground_range_mm = dist_mm;
+                quality = GP_RANGE_VALID;
             }
             else if (read_ok && (dist_mm < GP_MIN_RANGE_MM))
             {
@@ -385,21 +589,56 @@ static void vTask_SafetyPerception(void *pvParameters)
                     printf("[TOF] Object very close (%u mm) -> obstacle\n", dist_mm);
                 }
                 last_dist_mm = dist_mm;
-                GroundProjection_Feed(&s_ground_detector, GP_RANGE_VALID, GP_MIN_RANGE_MM, now_ms);
+                ground_range_mm = GP_MIN_RANGE_MM;
+                quality = GP_RANGE_VALID;
             }
             else if (read_ok && dist_mm == 0xFFFFU)
             {
                 cane_status.tof_obstructed = 0U;
                 last_dist_mm = 0xFFFFU;
-                GroundProjection_Feed(&s_ground_detector, GP_RANGE_NO_RETURN, 0U, now_ms);
+                quality = GP_RANGE_NO_RETURN;
             }
             else
             {
                 cane_status.tof_obstructed = 0U;
-                GroundProjection_Feed(&s_ground_detector, GP_RANGE_INVALID, 0U, now_ms);
             }
 
-            if (read_ok && (dist_mm != 0xFFFFU))
+            if ((quality == GP_RANGE_VALID) && (ground_range_mm > GP_MAX_RANGE_MM))
+            {
+                quality = GP_RANGE_INVALID;
+            }
+            uint32_t range_ms = GetCurrentTimeMs();
+            const Imu_Sample_t * p_range_imu = NULL;
+            if (imu.sample_valid &&
+                ((uint32_t)(range_ms - imu.sample.timestamp_ms) <= CANEMODE_MAX_SAMPLE_AGE_MS))
+            {
+                p_range_imu = &imu.sample;
+            }
+            if ((p_range_imu == NULL) && ground_beam.aligned)
+            {
+                beam_status = GROUND_BEAM_IMU_UNAVAILABLE;
+                beam_cosine = NAN;
+            }
+            uint16_t vertical_mm = UINT16_MAX;
+            if ((quality != GP_RANGE_INVALID) && (beam_capture.active ||
+                ((beam_status != GROUND_BEAM_UNALIGNED) && (beam_status != GROUND_BEAM_AVAILABLE))))
+            {
+                quality = GP_RANGE_POSE_UNAVAILABLE;
+            }
+            else if ((quality == GP_RANGE_VALID) && (beam_status == GROUND_BEAM_AVAILABLE))
+            {
+                vertical_mm = GroundBeam_Project(ground_range_mm, beam_cosine);
+                ground_range_mm = vertical_mm;
+            }
+
+            const Imu_Sample_t * p_cal_imu = NULL;
+            if ((quality == GP_RANGE_VALID) && s_ground_detector.is_calibrating && (p_range_imu != NULL))
+            {
+                p_cal_imu = Ground_GetStillImuSample(&imu);
+            }
+            GroundProjection_FeedProjected(&s_ground_detector, quality, ground_range_mm, range_ms, p_cal_imu);
+
+            if ((read_ok && (dist_mm != 0xFFFFU)) || (quality == GP_RANGE_POSE_UNAVAILABLE))
             {
                 last_tof_alive_ms = now_ms;
             }
@@ -414,40 +653,23 @@ static void vTask_SafetyPerception(void *pvParameters)
             }
 
             Gp_State_t gstate = s_ground_detector.state;
-            if (gstate != last_gstate)
+            if (gstate != previous_ground_state)
             {
-                printf("[CLIFF] State -> %s (Distance: %u mm)\n", GroundProjection_GetStateName(gstate), last_dist_mm);
-                last_gstate = gstate;
+                previous_ground_state = gstate;
+                ground_state_since_ms = range_ms;
             }
-
-            Gp_CalEvent_t cal_event = GroundProjection_TakeCalEvent(&s_ground_detector);
-            if (cal_event == GP_CAL_EVENT_DONE)
-            {
-                if (s_cal_feedback)
-                {
-                    Haptic_PlayOnce(ALERT_CAL_DONE, now_ms);
-                }
-                printf("[GROUND] Calibration complete. Baseline: %u mm\n", s_ground_detector.baseline_mm);
-            }
-            else if (cal_event != GP_CAL_EVENT_NONE)
-            {
-                if (s_cal_feedback)
-                {
-                    Haptic_PlayOnce(ALERT_CAL_FAILED, now_ms);
-                }
-                printf("[GROUND] Calibration ended: %s\n", GroundProjection_GetCalEventName(cal_event));
-            }
-            if (cal_event != GP_CAL_EVENT_NONE)
-            {
-                s_cal_feedback = false;
-            }
-            /* Without a baseline no hazard can be classified, so a failed automatic
-             * calibration (cane moving, timeout) silently retries while still gripped.
+            /* Brief gaps can alternate these two states during a swing. Log real alerts
+             * immediately and keep the full sample stream available for debugging.
              */
-            if ((cal_event != GP_CAL_EVENT_NONE) && (cal_event != GP_CAL_EVENT_DONE) &&
-                !s_ground_detector.is_calibrated && s_ground_detector.is_armed)
+            bool waiting_for_ground = (gstate == GP_STATE_UNKNOWN) || (gstate == GP_STATE_POSE_UNAVAILABLE);
+            bool report_state_change = (gstate != logged_ground_state) &&
+                (log_ground_samples || !waiting_for_ground ||
+                 ((uint32_t)(range_ms - ground_state_since_ms) >= CANE_GROUND_LOG_SETTLE_MS));
+            if (log_ground_samples || report_state_change)
             {
-                Ground_StartCalibration(now_ms, true, "retry", false);
+                Log_GroundSample(gstate, report_state_change, read_ok ? dist_mm : UINT16_MAX,
+                                 vertical_mm, beam_status, beam_cosine);
+                logged_ground_state = gstate;
             }
 
             /* Close objects and no-ground vibrate; stale/missing ToF stays visible via
@@ -461,9 +683,20 @@ static void vTask_SafetyPerception(void *pvParameters)
          */
         now_ms = GetCurrentTimeMs();
         GroundProjection_Tick(&s_ground_detector, now_ms);
+        Gp_CalEvent_t cal_event = Ground_ReportCalibration(now_ms);
+        if ((cal_event == GP_CAL_EVENT_DONE) && !ground_beam.aligned)
+        {
+            printf("[GROUND] Raw baseline saved. For vertical distance, aim the ToF straight down and send v.\n");
+        }
         /* A close object is an obstacle (vibration), not a technical fault. */
         bool ground_fault = (!s_is_l0x && !s_is_l1x) ||
                             (s_ground_detector.state == GP_STATE_SENSOR_FAULT);
+        /* Retry without feedback while gripped if there is still no distance baseline. */
+        if ((cal_event != GP_CAL_EVENT_NONE) && (cal_event != GP_CAL_EVENT_DONE) &&
+            !s_ground_detector.is_calibrated && s_ground_detector.is_armed && !beam_capture.active)
+        {
+            Ground_StartCalibration(now_ms, true, "retry", GROUND_CAL_FEEDBACK_NONE);
+        }
         CaneMode_Input_t mode_in = {
             .grip = current_grip,
             .imu_ready = (imu.state == IMU_SUPERVISOR_RUNNING),
@@ -490,11 +723,11 @@ static void vTask_SafetyPerception(void *pvParameters)
             FallDetection_Reset();
         }
         bool ground_was_armed = s_ground_detector.is_armed;
-        GroundProjection_SetArmed(&s_ground_detector, mode_out.ground_enabled, now_ms);
-        if (mode_out.ground_enabled && !ground_was_armed && !s_ground_detector.is_calibrated)
+        Ground_SetArmed(mode_out.ground_enabled, now_ms);
+        if (mode_out.ground_enabled && !ground_was_armed &&
+            !s_ground_detector.is_calibrated && !beam_capture.active)
         {
-            /* Silent auto-calibration: first touch after boot must not vibrate. */
-            Ground_StartCalibration(now_ms, true, "first grip", false);
+            Ground_StartCalibration(now_ms, true, "first grip", GROUND_CAL_FEEDBACK_TONE);
         }
         Haptic_SetGripHeld(mode_out.ground_enabled);
         if (!mode_out.ground_enabled)
@@ -579,15 +812,30 @@ static void vTask_SafetyPerception(void *pvParameters)
         if ((now_ms - last_cmd_ms) >= 50U)
         {
             last_cmd_ms = now_ms;
-            bool calibrate_allowed = mode_out.ground_enabled;
-            if (CalButton_Update(Hal_Gpio_Read(CANE_PIN_CAL_BTN), now_ms) == CALBTN_EVENT_GROUND_HOLD)
-            {
-                Ground_StartCalibration(now_ms, calibrate_allowed, "button", true);
-            }
+            bool button_calibration = (CalButton_Update(Hal_Gpio_Read(CANE_PIN_CAL_BTN), now_ms) ==
+                                       CALBTN_EVENT_GROUND_HOLD);
             int ch = getchar_timeout_us(0);
-            if ((ch == (int)'c') || (ch == (int)'C'))
+            if ((ch == (int)'v') || (ch == (int)'V'))
             {
-                Ground_StartCalibration(now_ms, calibrate_allowed, "serial", true);
+                Ground_StartBeamCapture(&beam_capture, now_ms);
+            }
+            else if (button_calibration || (ch == (int)'c') || (ch == (int)'C'))
+            {
+                if (beam_capture.active)
+                {
+                    printf("[GROUND] Wait for beam alignment before calibrating distance.\n");
+                }
+                else
+                {
+                    Ground_StartCalibration(now_ms, mode_out.ground_enabled,
+                                            button_calibration ? "button" : "serial",
+                                            GROUND_CAL_FEEDBACK_TONE_AND_HAPTIC);
+                }
+            }
+            else if ((ch == (int)'d') || (ch == (int)'D'))
+            {
+                log_ground_samples = !log_ground_samples;
+                printf("[GROUND] Per-sample logging %s.\n", log_ground_samples ? "on" : "off");
             }
             else if ((ch == (int)'b') || (ch == (int)'B'))
             {

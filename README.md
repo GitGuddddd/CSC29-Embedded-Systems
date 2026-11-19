@@ -17,10 +17,18 @@ Uses **FreeRTOS SMP with task affinity** across the RP2040's dual ARM Cortex-M0+
 ## Key Features & Algorithms
 
 ### 1. Virtual Ground Plane Projection
-- **Sensor Fusion**: Dynamically projects ToF distance vectors (`VL53L1X` / `VL53L0X`) onto the virtual ground plane using `MPU9250` pitch and roll angle estimates via complementary filtering.
-- **Pendulum Compensation**: Rejects false drop-off alerts caused by the user's natural pendulum cane swinging motion during walking.
-- **Voting Filter**: Applies a 5-sample median filter and 3-vote threshold logic to detect genuine drop-offs (`STEP_DOWN > +150mm`) or curb rises (`STEP_UP <= -80mm`).
-- **Ground Calibration**: Starts on the first active grip when no baseline exists. To recalibrate, grip the cane at walking height over level ground and hold the GP20 button for 2 s (or send `c` over serial). Vibration feedback: 1 short pulse = started, one 1 s pulse = saved, two 1 s pulses = failed (no steady reading within 10 s, sensor fault or cane released; the previous baseline is kept). Without a baseline the gripped cane plays 4 quick ticks every 3 s.
+
+- **Distance correction** uses raw ToF ranges until the beam is aligned. After alignment, the firmware multiplies each slanted range by the cosine of the beam's angle from vertical. Ground calibration and step detection both use that vertical distance.
+- **Angle cutoff** suspends ground alerts when the beam exceeds the provisional 35° limit or the IMU cannot provide a trustworthy angle. Detection resumes at 30° or less with a valid angle. The firmware tracks the beam at the IMU sample rate using the gyroscope and corrects the estimate with reliable accelerometer readings.
+- **Step detection** uses a five-sample median and vote confirmation for drop-offs (`STEP_DOWN`, more than 150 mm below the baseline) and rises (`STEP_UP`, at least 80 mm above it).
+
+#### Bench setup
+
+1. Aim the mounted ToF beam straight down and hold the cane still. Send `v` over USB serial to capture roughly half a second of stationary IMU samples within a five-second window.
+2. After alignment prints the measured X, Y and Z accelerometer values and clears the old ground baseline, hold the cane at its normal walking angle over level ground. Send `c`, hold the GP20 calibration button for two seconds, or release and regrip to calibrate the vertical distance baseline. A tone signals the start and result of calibration.
+3. Send `d` to toggle per-sample logs of the raw range, vertical distance and beam angle. With per-sample logs off, `UNKNOWN` and `GROUND_UNAVAILABLE` appear after 300 ms of stability. Before choosing a cutoff, bench-test a flat floor, known steps up and down, and typical cane swing. Check for missed steps during out-of-angle periods as well as false alerts.
+
+Serial alignment lasts until reboot. To use a measured alignment at boot, put the printed values in `CANE_TOF_DOWN_ACCEL_X`, `CANE_TOF_DOWN_ACCEL_Y` and `CANE_TOF_DOWN_ACCEL_Z`, then rebuild the cane firmware. [Cane board configuration](config/Cane_Board.h)
 
 ### 2. Dual-Stage Fall Detection Engine
 - **Physics Pipeline**: Monitors 3-axis accelerometer/gyroscope magnitude for free-fall ($|a| < 0.35g$ for cane, $< 0.5g$ for head) followed by impact ($|a| > 2.5g$ within 800–1000 ms) and post-impact stillness/tilt verification.

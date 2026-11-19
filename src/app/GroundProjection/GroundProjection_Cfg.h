@@ -9,6 +9,9 @@
 
 #define GP_CAL_SAMPLES            (25U)
 #define GP_CAL_SPREAD_MM          (40U)
+#define GP_CAL_TILT_MIN_SAMPLES   (20U)
+/* Reject a mean below 0.8 g, where inconsistent directions can cancel out. */
+#define GP_CAL_TILT_MEAN_MIN_SQ   (0.64f)
 /* A calibration that has not collected GP_CAL_SAMPLES steady readings by then fails (Week 6 section 6.3) */
 #define GP_CAL_TIMEOUT_MS         (10000U)
 #define GP_MIN_RANGE_MM           (30U)

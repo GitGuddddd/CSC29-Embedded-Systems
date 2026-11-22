@@ -922,6 +922,87 @@ void test_ThreatAssessment_PersonWalkingOutOfLaneClearsAfterNormalHold(void)
     TEST_ASSERT_EQUAL_UINT8(0U, ThreatAssessment_GetBlockedMask());
 }
 
+/* One bit per filtering step, set only on the frame where that step acted. */
+void test_ThreatAssessment_FilterFlagsMarkEachFilter(void)
+{
+    Threat_Result_t res;
+    const Radar_Target_t empty = { .distance_mm = 0U, .speed_cms = 0,
+                                   .x_mm = 0, .is_valid = false };
+
+    /* A plain obstacle ahead: no filter acted. */
+    ThreatAssessment_Init();
+    Radar_Target_t ahead = { .distance_mm = 2000U, .speed_cms = 0,
+                             .x_mm = 0, .is_valid = true };
+    ThreatAssessment_ProcessTargetsAt(&ahead, 1U, GRIP_STATE_HELD, 0U, &res);
+    TEST_ASSERT_EQUAL_UINT8(0U, ThreatAssessment_GetFilterFlags());
+
+    /* Outside the corridor. */
+    ThreatAssessment_Init();
+    Radar_Target_t wide = { .distance_mm = 2500U, .speed_cms = 0,
+                            .x_mm = USER_X(2000), .is_valid = true };
+    ThreatAssessment_ProcessTargetsAt(&wide, 1U, GRIP_STATE_HELD, 0U, &res);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_FLT_OUTSIDE,
+                            ThreatAssessment_GetFilterFlags());
+    /* ... cleared on the next frame without it. */
+    ThreatAssessment_ProcessTargetsAt(&ahead, 1U, GRIP_STATE_HELD, 100U, &res);
+    TEST_ASSERT_EQUAL_UINT8(0U, ThreatAssessment_GetFilterFlags() &
+                                    THREAT_FLT_OUTSIDE);
+
+    /* Crossing at 1.5 m/s, 2.5 m ahead. */
+    ThreatAssessment_Init();
+    Radar_Target_t cross = { .distance_mm = 2500U, .speed_cms = 0,
+                             .x_mm = USER_X(-1200), .is_valid = true };
+    bool seen = false;
+    for (uint32_t t = 0U; t <= 1000U; t += 100U)
+    {
+        ThreatAssessment_ProcessTargetsAt(&cross, 1U, GRIP_STATE_HELD, t, &res);
+        seen = seen || ((ThreatAssessment_GetFilterFlags() &
+                         THREAT_FLT_CROSSING) != 0U);
+        cross.x_mm = (int16_t)(cross.x_mm + USER_X(150));
+    }
+    TEST_ASSERT_TRUE(seen);
+
+    /* The radar hands slot 0 to a different person 1.5 m to the side. */
+    ThreatAssessment_Init();
+    Radar_Target_t slot0 = ahead;
+    ThreatAssessment_ProcessTargetsAt(&slot0, 1U, GRIP_STATE_HELD, 0U, &res);
+    slot0.x_mm = USER_X(1000);
+    slot0.distance_mm = 2800U;
+    ThreatAssessment_ProcessTargetsAt(&slot0, 1U, GRIP_STATE_HELD, 100U, &res);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_FLT_SLOT_JUMP,
+                            ThreatAssessment_GetFilterFlags() &
+                                THREAT_FLT_SLOT_JUMP);
+
+    /* Moving away. */
+    ThreatAssessment_Init();
+    Radar_Target_t away = { .distance_mm = 1800U, .speed_cms = APPROACHING(-40),
+                            .x_mm = USER_X(800), .is_valid = true };
+    for (uint32_t t = 0U; t < 800U; t += 100U)
+    {
+        ThreatAssessment_ProcessTargetsAt(&away, 1U, GRIP_STATE_HELD, t, &res);
+        away.distance_mm = (uint16_t)(away.distance_mm + 40U);
+    }
+    TEST_ASSERT_EQUAL_UINT8(THREAT_FLT_RECEDING,
+                            ThreatAssessment_GetFilterFlags());
+
+    /* A still person lost: flagged once the normal hold would have cleared
+     * the lane, and only while the still-person hold keeps it blocked. */
+    ThreatAssessment_Init();
+    for (uint32_t t = 0U; t < 500U; t += 100U)
+    {
+        ThreatAssessment_ProcessTargetsAt(&ahead, 1U, GRIP_STATE_HELD, t, &res);
+    }
+    ThreatAssessment_ProcessTargetsAt(&empty, 1U, GRIP_STATE_HELD, 500U, &res);
+    TEST_ASSERT_EQUAL_UINT8(0U, ThreatAssessment_GetFilterFlags());
+    ThreatAssessment_ProcessTargetsAt(&empty, 1U, GRIP_STATE_HELD,
+                                      500U + THREAT_LANE_HOLD_MS, &res);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_FLT_STILL_HOLD,
+                            ThreatAssessment_GetFilterFlags());
+    ThreatAssessment_ProcessTargetsAt(&empty, 1U, GRIP_STATE_HELD,
+                                      500U + THREAT_STILL_LANE_HOLD_MS, &res);
+    TEST_ASSERT_EQUAL_UINT8(0U, ThreatAssessment_GetFilterFlags());
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -960,5 +1041,6 @@ int main(void)
     RUN_TEST(test_ThreatAssessment_SpeedJitterOnStillPersonIsNotReceding);
     RUN_TEST(test_ThreatAssessment_StillPersonDropoutKeepsLaneBlocked);
     RUN_TEST(test_ThreatAssessment_PersonWalkingOutOfLaneClearsAfterNormalHold);
+    RUN_TEST(test_ThreatAssessment_FilterFlagsMarkEachFilter);
     return UNITY_END();
 }

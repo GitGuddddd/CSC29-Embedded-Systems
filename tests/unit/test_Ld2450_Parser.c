@@ -323,12 +323,22 @@ void test_Ld2450_ImplausibleValuesAreNotValidTargets(void)
     TEST_ASSERT_FALSE(targets[0].is_valid);
     TEST_ASSERT_FALSE(targets[1].is_valid);
     TEST_ASSERT_FALSE(targets[2].is_valid);
+    TEST_ASSERT_EQUAL_UINT8(0x07U, Ld2450_GetImplausibleMask());
 
     /* Values at the limits are still accepted. */
     SetSlot(frame, 0U, -6500, 8500, -1000);
     TEST_ASSERT_TRUE(Ld2450_ParseFrame(frame, sizeof(frame), targets, &count));
     TEST_ASSERT_TRUE(targets[0].is_valid);
     TEST_ASSERT_EQUAL_INT16(-1000, targets[0].speed_cms);
+    TEST_ASSERT_EQUAL_UINT8(0x06U, Ld2450_GetImplausibleMask());
+
+    /* Empty slots are not flagged. */
+    uint8_t empty[30] = { 0xAAU, 0xFFU, 0x03U, 0x00U };
+    empty[28] = 0x55U;
+    empty[29] = 0xCCU;
+    SetSlot(empty, 1U, 100, 2000, 0);
+    TEST_ASSERT_TRUE(Ld2450_ParseFrame(empty, sizeof(empty), targets, &count));
+    TEST_ASSERT_EQUAL_UINT8(0x00U, Ld2450_GetImplausibleMask());
 }
 
 int main(void)

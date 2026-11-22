@@ -26,5 +26,8 @@ bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target
 bool Ld2450_ProcessStream(Radar_Target_t * const p_targets, uint8_t * const p_count, uint32_t now_ms);
 bool Ld2450_HasRxFault(void);
 uint32_t Ld2450_GetOverrunCount(void);
+/* Bit n set: slot n of the last parsed frame was not empty but held a value
+ * outside the LD2450_CFG_* limits, so it was returned as not valid. */
+uint8_t Ld2450_GetImplausibleMask(void);
 
 #endif /* LD2450_H */

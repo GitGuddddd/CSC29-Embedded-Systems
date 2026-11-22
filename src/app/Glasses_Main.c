@@ -228,6 +228,8 @@ static void vTask_GlassesPerception(void *pvParameters)
     uint32_t radar_view_sig = UINT32_MAX;
     int16_t radar_dbg_x[3] = { 0, 0, 0 };   /* last frame, for the d debug line */
     uint8_t radar_dbg_valid = 0U;
+    /* THREAT_FLT_* bits of every frame since the last d debug line */
+    uint8_t radar_dbg_flt = 0U;
     uint32_t last_valid_radar_frame_ms = 0U;
 
     Grip_State_t cane_grip_telemetry = GRIP_STATE_UNKNOWN;
@@ -400,6 +402,11 @@ static void vTask_GlassesPerception(void *pvParameters)
                     }
                 }
                 ThreatAssessment_ProcessTargetsAt(targets, target_count, cane_grip_telemetry, now_ms, &current_threat);
+                radar_dbg_flt |= ThreatAssessment_GetFilterFlags();
+                if (Ld2450_GetImplausibleMask() != 0U)
+                {
+                    radar_dbg_flt |= THREAT_FLT_IMPLAUSIBLE;
+                }
             }
             if (Ld2450_HasRxFault() && ((uint32_t)(now_ms - last_radar_retry_ms) >= 1000U))
             {
@@ -474,13 +481,19 @@ static void vTask_GlassesPerception(void *pvParameters)
             radar_debug_last_ms = now_ms;
             /* ttc is in 20 ms ticks; 4095 = none. cue: bit0 STOP, bits1-2 side (0 centre, 1 left, 2 right). */
             /* ln: blocked lanes (bit0 centre, bit1 left, bit2 right); v: valid target slots; x: raw radar x per slot (mm). */
-            printf("[RADAR] t=%u dist=%u spd=%d ttc=%u thr=%u cue=%u to=%u grip=%u ln=%u v=%u x=%d,%d,%d\n",
+            printf("[RADAR] t=%u dist=%u spd=%d ttc=%u thr=%u cue=%u to=%u "
+                   "grip=%u ln=%u v=%u x=%d,%d,%d",
                    (unsigned)now_ms, (unsigned)current_threat.nearest_distance_mm,
                    (int)current_threat.closing_speed_cms, (unsigned)current_threat.ttc_20ms,
                    (unsigned)current_threat.is_threat_active, (unsigned)current_threat.open_direction_cue,
                    (unsigned)radar_timeout, (unsigned)cane_grip_telemetry,
                    (unsigned)ThreatAssessment_GetBlockedMask(), (unsigned)radar_dbg_valid,
                    (int)radar_dbg_x[0], (int)radar_dbg_x[1], (int)radar_dbg_x[2]);
+            /* flt: THREAT_FLT_* bits since the last line (bit0 outside
+             * corridor, bit1 crossing, bit2 implausible value, bit3 slot
+             * re-ordered, bit4 moving away, bit5 still-person hold). */
+            printf(" flt=0x%02X\n", (unsigned)radar_dbg_flt);
+            radar_dbg_flt = 0U;
         }
         bool standby = (imu.state == IMU_SUPERVISOR_ASLEEP) && sleep_requested;
         bool obstacle = !standby && (cane_grip_telemetry != GRIP_STATE_RELEASED) &&

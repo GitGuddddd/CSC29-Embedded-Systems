@@ -15,25 +15,35 @@ static Alert_Type_t s_previous_request = ALERT_NONE;
 static uint32_t s_request_start_ms = 0U;
 static Alert_Type_t s_calibration_cue = ALERT_NONE;
 static uint32_t s_calibration_start_ms = 0U;
-static uint8_t s_obstacle_cue = 0U;
-/* Obstacle renderer flags packed into one byte (data-representation change).
- * Only the main-loop alert arbitration touches them (AlertManager_Init runs before the
- * scheduler starts), so the non-atomic read-modify-write of a shared byte is safe. */
+/* Obstacle renderer flags and the three cues, packed to the bits they need
+ * (data-representation change). A cue is 3 bits: bit 0 STOP, bits 1-2 side.
+ * Only the main-loop alert arbitration touches them (AlertManager_Init runs before
+ * the scheduler starts; AlertManager_SetObstacleCue is called from
+ * AlertManager_ArbitrateSynced in the same task), so the non-atomic
+ * read-modify-write of this shared word is safe. */
 typedef struct
 {
-    uint8_t valid : 1;        /* obstacle render state below must restart when 0 */
-    uint8_t track_valid : 1;  /* side pattern start time is valid */
-    uint8_t pattern_side : 2; /* cue side 0..3 of the running pattern */
-    uint8_t beep_on : 1;      /* buzzer state of the last obstacle render */
+    uint16_t valid : 1;        /* obstacle render state below must restart when 0 */
+    uint16_t track_valid : 1;  /* side pattern start time is valid */
+    uint16_t pattern_side : 2; /* cue side 0..3 of the running pattern */
+    uint16_t beep_on : 1;      /* buzzer state of the last obstacle render */
+    uint16_t cue_latest : 3;   /* cue last set by AlertManager_SetObstacleCue */
+    uint16_t cue_pending : 3;  /* cue waiting out ALERT_OBSTACLE_CUE_DWELL_MS */
+    uint16_t cue_play : 3;     /* cue being played */
+    uint16_t reserved : 2;
 } Obstacle_Flags_t;
 
-_Static_assert(sizeof(Obstacle_Flags_t) == 1U, "Obstacle flags must pack into one byte");
+#define OBS_CUE_BITS (0x07U) /* STOP bit + 2-bit side */
 
-static Obstacle_Flags_t s_obs_flags = { 0U, 0U, 0U, 0U };
+_Static_assert(sizeof(Obstacle_Flags_t) == 2U, "Obstacle flags and cues must pack into 16 bits");
+_Static_assert(((ALERT_CUE_STOP | (ALERT_CUE_SIDE_MASK << ALERT_CUE_SIDE_SHIFT)) & ~OBS_CUE_BITS) == 0U,
+               "a cue must fit 3 bits");
+
+static Obstacle_Flags_t s_obs_flags = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
 
 void AlertManager_Init(void)
 {
-    s_obstacle_cue = 0U;
+    s_obs_flags.cue_latest = 0U;
     s_obs_flags.valid = 0U;
     s_fall_alarm_latched = false;
     s_fall_alarm_muted = false;
@@ -46,7 +56,7 @@ void AlertManager_Init(void)
 
 void AlertManager_SetObstacleCue(uint8_t cue)
 {
-    s_obstacle_cue = cue;
+    s_obs_flags.cue_latest = cue & OBS_CUE_BITS;
 }
 
 void AlertManager_AcknowledgeReset(void)
@@ -136,8 +146,6 @@ static bool Fall_PulseOn(uint32_t elapsed_ms)
  */
 #define OBS_DIST_Q (4U) /* smoothed distance kept in 1/16 mm to avoid rounding stalls */
 
-static uint8_t s_obs_cue = 0U;
-static uint8_t s_obs_pending_cue = 0U;
 static uint32_t s_obs_pending_since_ms = 0U;
 static uint32_t s_obs_last_ms = 0U;
 static uint32_t s_obs_dist_q = 0U;
@@ -153,7 +161,7 @@ static uint32_t Obstacle_SmoothedDistMm(void)
 
 static bool Obstacle_StopActive(void)
 {
-    return ((s_obs_cue & ALERT_CUE_STOP) != 0U);
+    return ((s_obs_flags.cue_play & ALERT_CUE_STOP) != 0U);
 }
 
 static uint32_t Obstacle_PauseMs(uint32_t distance_mm)
@@ -176,7 +184,7 @@ static uint32_t Obstacle_PauseMs(uint32_t distance_mm)
 
 static uint32_t Obstacle_Side(void)
 {
-    return ((uint32_t)s_obs_cue >> ALERT_CUE_SIDE_SHIFT) & ALERT_CUE_SIDE_MASK;
+    return ((uint32_t)s_obs_flags.cue_play >> ALERT_CUE_SIDE_SHIFT) & ALERT_CUE_SIDE_MASK;
 }
 
 /* Remember when the current side pattern and the STOP tone began. */
@@ -241,8 +249,8 @@ static void Obstacle_Update(uint32_t now_ms, uint16_t distance_mm)
     {
         /* Start of an obstacle alert: apply the cue and distance immediately. */
         s_obs_flags.valid = 1U;
-        s_obs_cue = s_obstacle_cue;
-        s_obs_pending_cue = s_obstacle_cue;
+        s_obs_flags.cue_play = s_obs_flags.cue_latest;
+        s_obs_flags.cue_pending = s_obs_flags.cue_latest;
         s_obs_pending_since_ms = now_ms;
         s_obs_last_ms = now_ms;
         s_obs_dist_q = ((uint32_t)distance_mm) << OBS_DIST_Q;
@@ -267,20 +275,20 @@ static void Obstacle_Update(uint32_t now_ms, uint16_t distance_mm)
                               ((err_q * (int32_t)dt) / (int32_t)(ALERT_OBSTACLE_PITCH_TAU_MS + dt)));
 
     /* Cue dwell: follow the requested cue only once it has been stable. */
-    if (s_obstacle_cue != s_obs_pending_cue)
+    if (s_obs_flags.cue_latest != s_obs_flags.cue_pending)
     {
-        s_obs_pending_cue = s_obstacle_cue;
+        s_obs_flags.cue_pending = s_obs_flags.cue_latest;
         s_obs_pending_since_ms = now_ms;
     }
-    if (s_obs_pending_cue != s_obs_cue)
+    if (s_obs_flags.cue_pending != s_obs_flags.cue_play)
     {
-        const bool stop_rising = ((s_obs_pending_cue & ALERT_CUE_STOP) != 0U) &&
-                                 ((s_obs_cue & ALERT_CUE_STOP) == 0U);
-        const bool beep_to_beep = ((s_obs_pending_cue & ALERT_CUE_STOP) == 0U) &&
-                                  ((s_obs_cue & ALERT_CUE_STOP) == 0U);
+        const bool stop_rising = ((s_obs_flags.cue_pending & ALERT_CUE_STOP) != 0U) &&
+                                 ((s_obs_flags.cue_play & ALERT_CUE_STOP) == 0U);
+        const bool beep_to_beep = ((s_obs_flags.cue_pending & ALERT_CUE_STOP) == 0U) &&
+                                  ((s_obs_flags.cue_play & ALERT_CUE_STOP) == 0U);
         if (stop_rising)
         {
-            s_obs_cue = s_obs_pending_cue;
+            s_obs_flags.cue_play = s_obs_flags.cue_pending;
             Obstacle_TrackPattern(now_ms);
             Obstacle_StartCycle(now_ms);
         }
@@ -291,9 +299,9 @@ static void Obstacle_Update(uint32_t now_ms, uint16_t distance_mm)
                 /* Leaving STOP for a beep pattern: the continuous tone ends here, then the
                  * same clear silence as any other pattern change, so the end of STOP is
                  * heard as an end and the first beep is not run onto the tone. */
-                const bool stop_falling = ((s_obs_cue & ALERT_CUE_STOP) != 0U) &&
-                                          ((s_obs_pending_cue & ALERT_CUE_STOP) == 0U);
-                s_obs_cue = s_obs_pending_cue;
+                const bool stop_falling = ((s_obs_flags.cue_play & ALERT_CUE_STOP) != 0U) &&
+                                          ((s_obs_flags.cue_pending & ALERT_CUE_STOP) == 0U);
+                s_obs_flags.cue_play = s_obs_flags.cue_pending;
                 Obstacle_TrackPattern(now_ms);
                 if (stop_falling)
                 {
@@ -309,7 +317,7 @@ static void Obstacle_Update(uint32_t now_ms, uint16_t distance_mm)
             {
                 /* Beep pattern to beep pattern: let the current burst finish, then leave a
                  * clear gap before the new pattern's first beep. */
-                s_obs_cue = s_obs_pending_cue;
+                s_obs_flags.cue_play = s_obs_flags.cue_pending;
                 Obstacle_TrackPattern(now_ms);
                 Obstacle_StartCycleSeparated(now_ms);
             }

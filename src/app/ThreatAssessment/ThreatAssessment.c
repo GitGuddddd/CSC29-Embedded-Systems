@@ -44,7 +44,6 @@ typedef struct
 _Static_assert(sizeof(Threat_Track_t) == 16U, "Crossing tracker must stay at 16 bytes per slot");
 
 static Threat_Track_t s_tracks[3];
-static Threat_Lane_t s_target_last_side[3];
 static uint32_t s_synthetic_ms = 0U;
 /* Decision flags, frame counters and the STOP clear distance, packed to the bits their
  * range needs (minimum-bit representation): counters saturate at their threshold (2 bits
@@ -60,13 +59,17 @@ typedef struct
     uint32_t recede_l : 2;
     uint32_t recede_r : 2;
     uint32_t stop_clear_mm : 12; /* clear distance fixed when STOP latched */
-    uint32_t reserved : 12;
+    uint32_t side_0 : 2;         /* per radar slot: lane it was last in (side hysteresis) */
+    uint32_t side_1 : 2;
+    uint32_t side_2 : 2;
+    uint32_t reserved : 6;
 } Threat_Flags_t;
 
-static Threat_Flags_t s_ta = { 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+static Threat_Flags_t s_ta = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
 
 _Static_assert(sizeof(Threat_Flags_t) == 4U, "Threat flags must pack into 32 bits");
 _Static_assert(THREAT_RECEDE_FRAMES <= 3U, "recede counters are 2-bit");
+_Static_assert((uint32_t)THREAT_LANE_COUNT <= 4U, "a slot's lane must fit 2 bits");
 _Static_assert(THREAT_ALERT_CLEAR_DIST_MM <= 4095U, "recede start distance must fit 12 bits");
 _Static_assert((THREAT_STOP_MAX_DIST_MM + THREAT_STOP_HYST_MM) <= 4095U, "STOP clear distance must fit 12 bits");
 _Static_assert(THREAT_STOP_MAX_DIST_MM < THREAT_ALERT_ENTER_DIST_MM, "STOP must fire inside the alert zone");
@@ -87,6 +90,41 @@ static uint8_t Recede_Get(uint8_t lane)
         /* centre */
     }
     return v;
+}
+
+/* Lane a radar slot (0..2) was last classified into. */
+static Threat_Lane_t Side_Get(uint8_t slot)
+{
+    uint32_t v = s_ta.side_0;
+    if (slot == 1U)
+    {
+        v = s_ta.side_1;
+    }
+    else if (slot == 2U)
+    {
+        v = s_ta.side_2;
+    }
+    else
+    {
+        /* slot 0 */
+    }
+    return (Threat_Lane_t)v;
+}
+
+static void Side_Set(uint8_t slot, Threat_Lane_t side)
+{
+    if (slot == 1U)
+    {
+        s_ta.side_1 = (uint32_t)side & 0x03U;
+    }
+    else if (slot == 2U)
+    {
+        s_ta.side_2 = (uint32_t)side & 0x03U;
+    }
+    else
+    {
+        s_ta.side_0 = (uint32_t)side & 0x03U;
+    }
 }
 
 static void Recede_Set(uint8_t lane, uint8_t frames)
@@ -138,12 +176,12 @@ static void Reset_AllState(void)
     {
         Reset_Lane(&s_lanes[lane]);
     }
+    s_ta = (Threat_Flags_t){ 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
     for (uint8_t i = 0U; i < 3U; i++)
     {
-        s_target_last_side[i] = THREAT_LANE_CENTER;
+        Side_Set(i, THREAT_LANE_CENTER);
         s_tracks[i] = (Threat_Track_t){ 0U, 0, 0, 0, 0U, 0U };
     }
-    s_ta = (Threat_Flags_t){ 0U, 0U, 0U, 0U, 0U, 0U, 0U };
 }
 
 /* Lateral position in the user's frame: negative is left (mirrored if the radar is fitted the other way). */
@@ -574,7 +612,7 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
         {
             if (i < 3U)
             {
-                s_target_last_side[i] = THREAT_LANE_CENTER;
+                Side_Set(i, THREAT_LANE_CENTER);
                 s_tracks[i].has_prev = 0U;
             }
             continue;
@@ -585,7 +623,7 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
             Track_IsCrossing(i, Lateral_Mm(p_t->x_mm), p_t->distance_mm, now_ms, &new_target);
         if (new_target)
         {
-            s_target_last_side[i] = THREAT_LANE_CENTER; /* classify afresh, no hysteresis carry-over */
+            Side_Set(i, THREAT_LANE_CENTER); /* classify afresh, no hysteresis carry-over */
         }
 
         /* Corridor gate: ignore targets outside +/- THREAT_CORRIDOR_HALF_MM */
@@ -595,7 +633,7 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
         {
             if (i < 3U)
             {
-                s_target_last_side[i] = THREAT_LANE_CENTER;
+                Side_Set(i, THREAT_LANE_CENTER);
             }
             continue;
         }
@@ -605,18 +643,18 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
             /* Not counted, but it is moving: a person who stood in this lane and then
              * walks across must not get the still-person hold. */
             const Threat_Lane_t cross_side =
-                Classify_Side(x_mm, (i < 3U) ? s_target_last_side[i] : THREAT_LANE_CENTER);
+                Classify_Side(x_mm, (i < 3U) ? Side_Get(i) : THREAT_LANE_CENTER);
             lane_crossed[cross_side] = true;
             continue; /* only crossing the path beyond the STOP zone */
         }
 
         const int16_t closing_cms = Closing_Cms(p_t->speed_cms);
 
-        Threat_Lane_t last_side = (i < 3U) ? s_target_last_side[i] : THREAT_LANE_CENTER;
+        Threat_Lane_t last_side = (i < 3U) ? Side_Get(i) : THREAT_LANE_CENTER;
         Threat_Lane_t side = Classify_Side(x_mm, last_side);
         if (i < 3U)
         {
-            s_target_last_side[i] = side;
+            Side_Set(i, side);
         }
 
         if (!lane_present[side] || (p_t->distance_mm < lane_nearest_mm[side]))
@@ -640,7 +678,7 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
 
     for (uint8_t i = safe_count; i < 3U; i++)
     {
-        s_target_last_side[i] = THREAT_LANE_CENTER;
+        Side_Set(i, THREAT_LANE_CENTER);
     }
 
     int16_t lane_eff_speed[THREAT_LANE_COUNT] = { 0, 0, 0 };

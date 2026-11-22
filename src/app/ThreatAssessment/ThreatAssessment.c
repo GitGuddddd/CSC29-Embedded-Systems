@@ -44,6 +44,7 @@ static Threat_Track_t s_tracks[3];
 static Threat_Lane_t s_target_last_side[3];
 static uint32_t s_synthetic_ms = 0U;
 static bool s_stop_latched = false;
+static uint8_t s_fast_frames = 0U; /* consecutive frames of a fast centre approach */
 
 _Static_assert(sizeof(Threat_LaneState_t) == 20U, "Lane state must stay free of padding holes");
 _Static_assert(sizeof(Threat_Result_t) == 6U, "Compact threat result must remain six bytes");
@@ -82,6 +83,7 @@ static void Reset_AllState(void)
         s_tracks[i] = (Threat_Track_t){ 0U, 0, 0, 0, 0U, 0U };
     }
     s_stop_latched = false;
+    s_fast_frames = 0U;
 }
 
 /* Lateral position in the user's frame: negative is left (mirrored if the radar is fitted the other way). */
@@ -371,17 +373,17 @@ static uint8_t Compute_DirectionCue(bool center_blocked, bool left_free, bool ri
 
 /* STOP: the user is about to walk into an obstacle in their own (centre) lane.
  * With all three lanes blocked the centre is blocked too, so it needs no extra case. */
-static bool Compute_Stop(bool center_blocked, uint16_t center_dist_mm)
+static bool Compute_Stop(bool center_blocked, uint16_t center_dist_mm, bool fast_approach)
 {
     if (!center_blocked)
     {
         s_stop_latched = false;
     }
-    else if (center_dist_mm <= THREAT_STOP_ENTER_DIST_MM)
+    else if ((center_dist_mm <= THREAT_STOP_ENTER_DIST_MM) || fast_approach)
     {
         s_stop_latched = true;
     }
-    else if (center_dist_mm > THREAT_STOP_CLEAR_DIST_MM)
+    else if ((center_dist_mm > THREAT_STOP_CLEAR_DIST_MM) && !fast_approach)
     {
         s_stop_latched = false;
     }
@@ -516,6 +518,29 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
         }
     }
 
+    /* Fast approach in the user's own lane (jogger, cyclist): STOP on time-to-collision
+     * as well as distance. The closing-speed floor is well above walking pace, so a
+     * walking target still gets STOP from distance alone. */
+    {
+        const Threat_LaneState_t * const p_c = &s_lanes[THREAT_LANE_CENTER];
+        const int16_t c_speed = lane_eff_speed[THREAT_LANE_CENTER];
+        const bool fast_now = (p_c->blocked != 0U) && (c_speed >= THREAT_FAST_CLOSING_MIN_CMS) &&
+            (Compute_Ttc20ms(p_c->last_dist_mm, c_speed) <= THREAT_FAST_STOP_TTC_20MS);
+        if (!fast_now)
+        {
+            s_fast_frames = 0U;
+        }
+        else if (s_fast_frames < UINT8_MAX)
+        {
+            s_fast_frames++;
+        }
+        else
+        {
+            /* saturated */
+        }
+    }
+    const bool fast_approach = (s_fast_frames >= THREAT_FAST_STOP_FRAMES);
+
     if (any_blocked)
     {
         uint16_t min_blocked_dist = UINT16_MAX;
@@ -554,7 +579,7 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
             Lane_IsFree(&s_lanes[THREAT_LANE_LEFT], now_ms),
             Lane_IsFree(&s_lanes[THREAT_LANE_RIGHT], now_ms));
         if (Compute_Stop(s_lanes[THREAT_LANE_CENTER].blocked,
-                         s_lanes[THREAT_LANE_CENTER].last_dist_mm))
+                         s_lanes[THREAT_LANE_CENTER].last_dist_mm, fast_approach))
         {
             cue |= (uint8_t)THREAT_CUE_STOP;
         }

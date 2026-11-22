@@ -556,6 +556,54 @@ void test_ThreatAssessment_CrossingTrackerSurvivesExtremeFrames(void)
     }
 }
 
+/* Fast approach in the user's own lane (jogger, cyclist): STOP from time-to-collision
+ * after two consecutive frames, before the distance rule would fire. */
+void test_ThreatAssessment_FastCentreApproachRaisesStopEarly(void)
+{
+    ThreatAssessment_Init();
+    Radar_Target_t t = { .distance_mm = 2900U, .speed_cms = APPROACHING(300), .x_mm = 0, .is_valid = true };
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);    /* one frame is not enough */
+    t.distance_mm = 2600U;
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 100U) & THREAT_CUE_STOP);
+    t.distance_mm = 2300U;
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 200U) & THREAT_CUE_STOP);
+
+    /* The jogger stops 2.3 m away: once the held speed expires, STOP clears again. */
+    t.speed_cms = 0;
+    (void)Run_Cue(&t, 1U, 300U);
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 300U + THREAT_SPEED_HOLD_MS + 100U) & THREAT_CUE_STOP);
+}
+
+/* Walking-pace targets keep the distance-only STOP rule (covers the recorded demo). */
+void test_ThreatAssessment_WalkingApproachStopsOnlyByDistance(void)
+{
+    ThreatAssessment_Init();
+    const int16_t walking_cms = (int16_t)(THREAT_FAST_CLOSING_MIN_CMS - 10);
+    Radar_Target_t t = { .distance_mm = 3000U, .speed_cms = APPROACHING(walking_cms), .x_mm = 0, .is_valid = true };
+    uint32_t now = 0U;
+    for (uint16_t d = 3000U; d > THREAT_STOP_ENTER_DIST_MM; d = (uint16_t)(d - 19U))
+    {
+        t.distance_mm = d;
+        TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, now) & THREAT_CUE_STOP);
+        now += 100U;
+    }
+    t.distance_mm = THREAT_STOP_ENTER_DIST_MM;
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, now) & THREAT_CUE_STOP);
+}
+
+/* A fast target in a side lane is not in the user's path: no STOP. */
+void test_ThreatAssessment_FastSideApproachDoesNotStop(void)
+{
+    ThreatAssessment_Init();
+    Radar_Target_t t = { .distance_mm = 2900U, .speed_cms = APPROACHING(300),
+                         .x_mm = USER_X(-800), .is_valid = true };
+    (void)Run_Cue(&t, 1U, 0U);
+    t.distance_mm = 2600U;
+    (void)Run_Cue(&t, 1U, 100U);
+    t.distance_mm = 2300U;
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 200U) & THREAT_CUE_STOP);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -583,5 +631,8 @@ int main(void)
     RUN_TEST(test_ThreatAssessment_ApproachingTargetsStillAlert);
     RUN_TEST(test_ThreatAssessment_CrossingInsideStopZoneStillCounts);
     RUN_TEST(test_ThreatAssessment_CrossingTrackerSurvivesExtremeFrames);
+    RUN_TEST(test_ThreatAssessment_FastCentreApproachRaisesStopEarly);
+    RUN_TEST(test_ThreatAssessment_WalkingApproachStopsOnlyByDistance);
+    RUN_TEST(test_ThreatAssessment_FastSideApproachDoesNotStop);
     return UNITY_END();
 }

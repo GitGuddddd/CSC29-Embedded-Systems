@@ -31,6 +31,16 @@
 #define THREAT_STOP_CLEAR_DIST_MM    (1600U)
 
 /*
+ * Fast-approach STOP: a centre-lane target closing at THREAT_FAST_CLOSING_MIN_CMS or
+ * more with a TTC of THREAT_FAST_STOP_TTC_20MS or less, for THREAT_FAST_STOP_FRAMES
+ * radar frames in a row, also raises STOP. 2 m/s is above walking pace, so walking
+ * targets keep the distance-only rule. 60 ticks = 1.2 s.
+ */
+#define THREAT_FAST_CLOSING_MIN_CMS  (200)
+#define THREAT_FAST_STOP_TTC_20MS    (60U)
+#define THREAT_FAST_STOP_FRAMES      (2U)
+
+/*
  * A side lane is only offered as "free" (left/right cue) after it has been clear
  * for this long. "Clear" means nothing was detected, which is weaker than
  * "empty" (stationary targets drop out), so a lane that has only just emptied

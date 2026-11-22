@@ -103,4 +103,15 @@
  * 16-bit state and 32-bit products cannot overflow on a corrupt or jumping frame. */
 #define THREAT_CROSSING_SPEED_CLAMP_MMPS (16000)
 
+/*
+ * The LD2450 re-orders its three slots when a target appears or drops out, so a slot
+ * can suddenly hold a different person. A slot whose position moves further than
+ * THREAT_TRACK_JUMP_MARGIN_MM + THREAT_TRACK_MAX_MMPS * elapsed time is treated as a
+ * new target: its crossing-speed history and side hysteresis are reset instead of
+ * reading the jump as fast sideways motion (which hid the target as "crossing").
+ * 4 m/s is above jogging pace; at 10 Hz the limit is 550 mm per frame.
+ */
+#define THREAT_TRACK_MAX_MMPS        (4000)
+#define THREAT_TRACK_JUMP_MARGIN_MM  (150)
+
 #endif /* THREATASSESSMENT_CFG_H */

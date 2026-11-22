@@ -137,16 +137,39 @@ static int16_t Smooth_Speed(int16_t state, int32_t sample_mmps, int32_t dt_ms)
     return (int16_t)((int32_t)state + (((s - (int32_t)state) * dt_ms) / (THREAT_CROSSING_SMOOTH_MS + dt_ms)));
 }
 
+/* True if the slot's new position is further from its last one than a person can move
+ * in the elapsed time: the radar has handed this slot to a different target (it
+ * re-orders its slots when targets appear or drop out). */
+static bool Track_Jumped(const Threat_Track_t * const p_trk, int16_t x_mm, uint16_t y_mm, int32_t dt_ms)
+{
+    const int32_t limit_mm = THREAT_TRACK_JUMP_MARGIN_MM + ((THREAT_TRACK_MAX_MMPS * dt_ms) / 1000);
+    const int32_t dx = (int32_t)x_mm - (int32_t)p_trk->prev_x_mm;
+    const int32_t dy = (int32_t)y_mm - (int32_t)p_trk->prev_y_mm;
+    return (dx > limit_mm) || (dx < -limit_mm) || (dy > limit_mm) || (dy < -limit_mm);
+}
+
 /* Update the slot's sideways-speed estimate; true if the target should not be counted
- * because it is only crossing the user's path beyond the STOP zone. */
+ * because it is only crossing the user's path beyond the STOP zone. *p_new_target is
+ * set when the slot now holds a different target, so its old history was dropped. */
 static bool Track_IsCrossing(uint8_t slot,
                              int16_t x_mm,
                              uint16_t distance_mm,
-                             uint32_t now_ms)
+                             uint32_t now_ms,
+                             bool * const p_new_target)
 {
     Threat_Track_t * const p_trk = &s_tracks[slot];
     const uint16_t y_mm = Forward_Mm(distance_mm, x_mm);
     bool known = false;
+
+    *p_new_target = false;
+    if ((p_trk->has_prev != 0U) &&
+        ((uint32_t)(now_ms - p_trk->prev_ms) <= THREAT_CROSSING_MAX_GAP_MS) &&
+        (now_ms != p_trk->prev_ms) &&
+        Track_Jumped(p_trk, x_mm, y_mm, (int32_t)(now_ms - p_trk->prev_ms)))
+    {
+        *p_new_target = true; /* different target: start a fresh track */
+        p_trk->has_prev = 0U;
+    }
 
     if ((p_trk->has_prev != 0U) &&
         ((uint32_t)(now_ms - p_trk->prev_ms) <= THREAT_CROSSING_MAX_GAP_MS) &&
@@ -456,8 +479,13 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
             continue;
         }
 
+        bool new_target = false;
         const bool crossing = (i < 3U) &&
-            Track_IsCrossing(i, Lateral_Mm(p_t->x_mm), p_t->distance_mm, now_ms);
+            Track_IsCrossing(i, Lateral_Mm(p_t->x_mm), p_t->distance_mm, now_ms, &new_target);
+        if (new_target)
+        {
+            s_target_last_side[i] = THREAT_LANE_CENTER; /* classify afresh, no hysteresis carry-over */
+        }
 
         /* Corridor gate: ignore targets outside +/- THREAT_CORRIDOR_HALF_MM */
         const int16_t x_mm = Lateral_Mm(p_t->x_mm);

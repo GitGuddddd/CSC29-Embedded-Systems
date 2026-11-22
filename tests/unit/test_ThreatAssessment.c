@@ -604,6 +604,37 @@ void test_ThreatAssessment_FastSideApproachDoesNotStop(void)
     TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 200U) & THREAT_CUE_STOP);
 }
 
+/* The LD2450 re-orders its slots: when a still person drops out, the person in the next
+ * slot moves into their slot. That jump must be read as a different target, not as fast
+ * sideways motion, otherwise the crossing filter hides the person and the lane clears
+ * (bench log: a still person 2.5 m ahead plus one beside them). */
+void test_ThreatAssessment_RadarSlotReorderDoesNotClearLane(void)
+{
+    ThreatAssessment_Init();
+    const Radar_Target_t centre = { .distance_mm = 2500U, .speed_cms = 0, .x_mm = USER_X(-100), .is_valid = true };
+    const Radar_Target_t right  = { .distance_mm = 2570U, .speed_cms = 0, .x_mm = USER_X(900), .is_valid = true };
+    const Radar_Target_t empty  = { .distance_mm = 0U, .speed_cms = 0, .x_mm = 0, .is_valid = false };
+    Threat_Result_t res;
+    for (uint32_t t = 0U; t < 6000U; t += 100U)
+    {
+        Radar_Target_t frame[3];
+        if ((t % 1000U) < 400U)
+        {
+            frame[0] = right; frame[1] = empty; frame[2] = empty;   /* centre person dropped out, slots shifted */
+        }
+        else
+        {
+            frame[0] = centre; frame[1] = right; frame[2] = empty;
+        }
+        ThreatAssessment_ProcessTargetsAt(frame, 3U, GRIP_STATE_HELD, t, &res);
+        if (t >= 500U)
+        {
+            TEST_ASSERT_EQUAL_UINT8(0x01U, ThreatAssessment_GetBlockedMask() & 0x01U); /* centre stays blocked */
+            TEST_ASSERT_EQUAL_UINT8(0x04U, ThreatAssessment_GetBlockedMask() & 0x04U); /* right stays blocked */
+        }
+    }
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -634,5 +665,6 @@ int main(void)
     RUN_TEST(test_ThreatAssessment_FastCentreApproachRaisesStopEarly);
     RUN_TEST(test_ThreatAssessment_WalkingApproachStopsOnlyByDistance);
     RUN_TEST(test_ThreatAssessment_FastSideApproachDoesNotStop);
+    RUN_TEST(test_ThreatAssessment_RadarSlotReorderDoesNotClearLane);
     return UNITY_END();
 }

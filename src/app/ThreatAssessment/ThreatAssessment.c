@@ -43,26 +43,29 @@ _Static_assert(sizeof(Threat_Track_t) == 16U, "Crossing tracker must stay at 16 
 static Threat_Track_t s_tracks[3];
 static Threat_Lane_t s_target_last_side[3];
 static uint32_t s_synthetic_ms = 0U;
-/* Decision flags and short frame counters, packed to the bits their range needs
- * (minimum-bit representation). Each counter saturates at its threshold, so 2 bits
- * hold 0..3. Only the radar task calls ThreatAssessment_* (Glasses_Main perception
- * task), so the read-modify-write of this shared word never races another context. */
+/* Decision flags, frame counters and the STOP clear distance, packed to the bits their
+ * range needs (minimum-bit representation): counters saturate at their threshold (2 bits
+ * hold 0..3) and the clear distance is at most THREAT_STOP_MAX_DIST_MM +
+ * THREAT_STOP_HYST_MM (12 bits). Only the radar task calls ThreatAssessment_*
+ * (Glasses_Main perception task), so the read-modify-write of this shared word never
+ * races another context. */
 typedef struct
 {
-    uint16_t stop_latched : 1; /* STOP hysteresis state */
-    uint16_t receding : 1;     /* every blocked lane's obstacle is moving away */
-    uint16_t fast_frames : 2;  /* frames of a fast centre approach, 0..THREAT_FAST_STOP_FRAMES */
-    uint16_t recede_c : 2;     /* per-lane frames moving away, 0..THREAT_RECEDE_FRAMES */
-    uint16_t recede_l : 2;
-    uint16_t recede_r : 2;
-    uint16_t reserved : 6;
+    uint32_t stop_latched : 1;   /* STOP hysteresis state */
+    uint32_t receding : 1;       /* every blocked lane's obstacle is moving away */
+    uint32_t recede_c : 2;       /* per-lane frames moving away, 0..THREAT_RECEDE_FRAMES */
+    uint32_t recede_l : 2;
+    uint32_t recede_r : 2;
+    uint32_t stop_clear_mm : 12; /* clear distance fixed when STOP latched */
+    uint32_t reserved : 12;
 } Threat_Flags_t;
 
 static Threat_Flags_t s_ta = { 0U, 0U, 0U, 0U, 0U, 0U, 0U };
 
-_Static_assert(sizeof(Threat_Flags_t) == 2U, "Threat flags must pack into 16 bits");
-_Static_assert(THREAT_FAST_STOP_FRAMES <= 3U, "fast_frames is a 2-bit counter");
+_Static_assert(sizeof(Threat_Flags_t) == 4U, "Threat flags must pack into 32 bits");
 _Static_assert(THREAT_RECEDE_FRAMES <= 3U, "recede counters are 2-bit");
+_Static_assert((THREAT_STOP_MAX_DIST_MM + THREAT_STOP_HYST_MM) <= 4095U, "STOP clear distance must fit 12 bits");
+_Static_assert(THREAT_STOP_MAX_DIST_MM < THREAT_ALERT_ENTER_DIST_MM, "STOP must fire inside the alert zone");
 
 static uint8_t Recede_Get(uint8_t lane)
 {
@@ -445,25 +448,56 @@ static uint8_t Compute_DirectionCue(bool center_blocked, bool left_free, bool ri
     return (uint8_t)((uint8_t)THREAT_CUE_SIDE_ALL_BLOCKED << THREAT_CUE_SIDE_SHIFT);
 }
 
+/* STOP distance for a closing speed (cm/s, <= 0 means not approaching), see
+ * THREAT_STOP_* in the Cfg header. Integer maths; the speed cap keeps the square
+ * inside uint32_t. */
+static uint16_t Stop_DistanceMm(int16_t closing_cms)
+{
+    uint32_t v = (closing_cms > 0) ? (uint32_t)closing_cms : 0U;
+    if (v > THREAT_STOP_SPEED_CAP_CMS)
+    {
+        v = THREAT_STOP_SPEED_CAP_CMS;
+    }
+    /* v cm/s = 10 v mm/s: delay term = 10 v * DELAY_ms / 1000, braking = (10 v)^2 / (2 DECEL) */
+    const uint32_t delay_mm = (v * THREAT_STOP_DELAY_MS) / 100U;
+    const uint32_t brake_mm = (100U * v * v) / (2U * THREAT_STOP_DECEL_MMPS2);
+    uint32_t d = THREAT_STOP_MARGIN_MM + delay_mm + brake_mm;
+    if (d < THREAT_STOP_ENTER_DIST_MM)
+    {
+        d = THREAT_STOP_ENTER_DIST_MM;
+    }
+    if (d > THREAT_STOP_MAX_DIST_MM)
+    {
+        d = THREAT_STOP_MAX_DIST_MM;
+    }
+    return (uint16_t)d;
+}
+
 /* STOP: the user is about to walk into an obstacle in their own (centre) lane.
- * With all three lanes blocked the centre is blocked too, so it needs no extra case. */
-static bool Compute_Stop(bool center_blocked, uint16_t center_dist_mm, bool fast_approach)
+ * With all three lanes blocked the centre is blocked too, so it needs no extra case.
+ * The distance is chosen from the closing speed when STOP latches and then kept, so
+ * slowing down does not drop the tone early. */
+static bool Compute_Stop(bool center_blocked, uint16_t center_dist_mm, int16_t closing_cms)
 {
     if (!center_blocked)
     {
         s_ta.stop_latched = 0U;
     }
-    else if ((center_dist_mm <= THREAT_STOP_ENTER_DIST_MM) || fast_approach)
+    else if (s_ta.stop_latched != 0U)
     {
-        s_ta.stop_latched = 1U;
-    }
-    else if ((center_dist_mm > THREAT_STOP_CLEAR_DIST_MM) && !fast_approach)
-    {
-        s_ta.stop_latched = 0U;
+        if (center_dist_mm > s_ta.stop_clear_mm)
+        {
+            s_ta.stop_latched = 0U;
+        }
     }
     else
     {
-        /* between enter and clear: keep the previous state */
+        const uint16_t enter_mm = Stop_DistanceMm(closing_cms);
+        if (center_dist_mm <= enter_mm)
+        {
+            s_ta.stop_latched = 1U;
+            s_ta.stop_clear_mm = ((uint32_t)enter_mm + THREAT_STOP_HYST_MM) & 0x0FFFU;
+        }
     }
     return (s_ta.stop_latched != 0U);
 }
@@ -602,29 +636,6 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
         }
     }
 
-    /* Fast approach in the user's own lane (jogger, cyclist): STOP on time-to-collision
-     * as well as distance. The closing-speed floor is well above walking pace, so a
-     * walking target still gets STOP from distance alone. */
-    {
-        const Threat_LaneState_t * const p_c = &s_lanes[THREAT_LANE_CENTER];
-        const int16_t c_speed = lane_eff_speed[THREAT_LANE_CENTER];
-        const bool fast_now = (p_c->blocked != 0U) && (c_speed >= THREAT_FAST_CLOSING_MIN_CMS) &&
-            (Compute_Ttc20ms(p_c->last_dist_mm, c_speed) <= THREAT_FAST_STOP_TTC_20MS);
-        if (!fast_now)
-        {
-            s_ta.fast_frames = 0U;
-        }
-        else if (s_ta.fast_frames < THREAT_FAST_STOP_FRAMES)
-        {
-            s_ta.fast_frames++;
-        }
-        else
-        {
-            /* saturated at the threshold */
-        }
-    }
-    const bool fast_approach = (s_ta.fast_frames >= THREAT_FAST_STOP_FRAMES);
-
     /* Per lane: how long its nearest target has been clearly moving away. A lane with
      * no target this frame (held blocked) keeps its count; a cleared lane restarts. */
     for (uint8_t lane = 0U; lane < (uint8_t)THREAT_LANE_COUNT; lane++)
@@ -692,7 +703,8 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
             Lane_IsFree(&s_lanes[THREAT_LANE_LEFT], now_ms),
             Lane_IsFree(&s_lanes[THREAT_LANE_RIGHT], now_ms));
         if (Compute_Stop(s_lanes[THREAT_LANE_CENTER].blocked,
-                         s_lanes[THREAT_LANE_CENTER].last_dist_mm, fast_approach))
+                         s_lanes[THREAT_LANE_CENTER].last_dist_mm,
+                         lane_eff_speed[THREAT_LANE_CENTER]))
         {
             cue |= (uint8_t)THREAT_CUE_STOP;
         }

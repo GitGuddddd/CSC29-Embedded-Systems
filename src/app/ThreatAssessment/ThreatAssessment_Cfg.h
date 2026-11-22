@@ -19,26 +19,30 @@
 
 /*
  * STOP cue ("about to collide"): set when the centre lane (the user's own lane)
- * is blocked and its obstacle is within THREAT_STOP_ENTER_DIST_MM. This also
- * covers all three lanes blocked, since the centre is then blocked too. Clears
- * above THREAT_STOP_CLEAR_DIST_MM (hysteresis, so the tone does not flicker).
- * The 1 m safety bubble above is where a collision is deemed to start, so STOP
- * must fire before it: bubble 1000 mm + roughly 1 s of reaction and stopping at
- * 0.5-1.0 m/s = 1500 mm. This margin is an engineering estimate, not from the
- * paper; tune on the real walking test.
+ * is blocked and its obstacle is within the STOP distance. This also covers all
+ * three lanes blocked, since the centre is then blocked too.
+ *
+ * The STOP distance grows with the closing speed v so a faster approach is warned
+ * earlier (ported from the earlier test-branch patch "Scale STOP distance with
+ * closing speed"):
+ *     D = MARGIN + v * DELAY + v^2 / (2 * DECEL)
+ * clamped to [THREAT_STOP_ENTER_DIST_MM, THREAT_STOP_MAX_DIST_MM]. DELAY covers the
+ * user's reaction (about 0.5 s) plus radar frame, lane hold and cue dwell (about
+ * 0.35 s, estimated). DECEL is the braking seen on two stand walks (about 0.8 m/s^2).
+ * MARGIN is an engineering estimate. D is fixed when STOP latches and STOP clears
+ * THREAT_STOP_HYST_MM beyond it. With no closing speed D is the 1500 mm floor.
+ * Examples: 0.8 m/s -> 1580 mm, 1.0 m/s -> 1975 mm, 1.1 m/s -> 2191 mm,
+ * 1.4 m/s or faster -> capped at 2800 mm. Tune on the real walking test.
  */
-#define THREAT_STOP_ENTER_DIST_MM    (1500U)
-#define THREAT_STOP_CLEAR_DIST_MM    (1600U)
+#define THREAT_STOP_ENTER_DIST_MM    (1500U)  /* floor: STOP distance at low speed */
+#define THREAT_STOP_MAX_DIST_MM      (2800U)  /* ceiling; below THREAT_ALERT_ENTER_DIST_MM */
+#define THREAT_STOP_HYST_MM          (100U)
+#define THREAT_STOP_CLEAR_DIST_MM    (THREAT_STOP_ENTER_DIST_MM + THREAT_STOP_HYST_MM)
+#define THREAT_STOP_MARGIN_MM        (500U)
+#define THREAT_STOP_DELAY_MS         (850U)   /* reaction 500 + system 350 */
+#define THREAT_STOP_DECEL_MMPS2      (800U)
+#define THREAT_STOP_SPEED_CAP_CMS    (300U)   /* speeds above this give the ceiling anyway */
 
-/*
- * Fast-approach STOP: a centre-lane target closing at THREAT_FAST_CLOSING_MIN_CMS or
- * more with a TTC of THREAT_FAST_STOP_TTC_20MS or less, for THREAT_FAST_STOP_FRAMES
- * radar frames in a row, also raises STOP. 2 m/s is above walking pace, so walking
- * targets keep the distance-only rule. 60 ticks = 1.2 s.
- */
-#define THREAT_FAST_CLOSING_MIN_CMS  (200)
-#define THREAT_FAST_STOP_TTC_20MS    (60U)
-#define THREAT_FAST_STOP_FRAMES      (2U)
 
 /*
  * Departing obstacles: when every blocked lane's obstacle has been moving away at

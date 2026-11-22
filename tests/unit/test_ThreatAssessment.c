@@ -556,39 +556,77 @@ void test_ThreatAssessment_CrossingTrackerSurvivesExtremeFrames(void)
     }
 }
 
-/* Fast approach in the user's own lane (jogger, cyclist): STOP from time-to-collision
- * after two consecutive frames, before the distance rule would fire. */
-void test_ThreatAssessment_FastCentreApproachRaisesStopEarly(void)
+/* Speed-scaled STOP: same obstacle distance, different closing speed: only the faster
+ * approach is in STOP. 1.0 m/s gives 500 + 850 + 625 = 1975 mm. */
+void test_ThreatAssessment_StopDistanceGrowsWithClosingSpeed(void)
+{
+    ThreatAssessment_Init();
+    Radar_Target_t t = { .distance_mm = 1900U, .speed_cms = APPROACHING(50), .x_mm = 0, .is_valid = true };
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);      /* 0.5 m/s: floor 1500 mm */
+
+    ThreatAssessment_Init();
+    t.speed_cms = APPROACHING(100);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
+
+    ThreatAssessment_Init();
+    t.distance_mm = 2000U;                                                   /* just outside 1975 mm */
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
+}
+
+void test_ThreatAssessment_StopDistanceIsFlooredAndCapped(void)
+{
+    /* Slow: the floor. 0.75 m/s computes 1226 mm, floored to 1500 mm. */
+    ThreatAssessment_Init();
+    Radar_Target_t t = { .distance_mm = 1600U, .speed_cms = APPROACHING(75), .x_mm = 0, .is_valid = true };
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
+    t.distance_mm = THREAT_STOP_ENTER_DIST_MM;
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 100U) & THREAT_CUE_STOP);
+
+    /* Moving away: the floor, not a bigger distance. */
+    ThreatAssessment_Init();
+    t.distance_mm = 1500U;
+    t.speed_cms = APPROACHING(-100);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
+    ThreatAssessment_Init();
+    t.distance_mm = 1700U;
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
+
+    /* Very fast: capped at THREAT_STOP_MAX_DIST_MM (the parser already rejects > 10 m/s). */
+    ThreatAssessment_Init();
+    t.speed_cms = APPROACHING(900);
+    t.distance_mm = (uint16_t)(THREAT_STOP_MAX_DIST_MM + 50U);
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
+    t.distance_mm = THREAT_STOP_MAX_DIST_MM;
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 100U) & THREAT_CUE_STOP);
+}
+
+void test_ThreatAssessment_StopDistanceIsFrozenWhileLatched(void)
+{
+    ThreatAssessment_Init();
+    /* 1.2 m/s: 500 + 1020 + 900 = 2420 mm, so STOP clears above 2520 mm. */
+    Radar_Target_t t = { .distance_mm = 2400U, .speed_cms = APPROACHING(120), .x_mm = 0, .is_valid = true };
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
+    /* The approach slows to a stop: STOP must not drop just because the speed fell. */
+    t.speed_cms = 0;
+    t.distance_mm = 2450U;
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 300U) & THREAT_CUE_STOP);
+    t.distance_mm = 2500U;
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 400U) & THREAT_CUE_STOP);
+    t.distance_mm = 2560U;
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 500U) & THREAT_CUE_STOP);
+    /* After clearing, the next STOP uses the new (zero) speed again: floor 1500 mm. */
+    t.distance_mm = 2000U;
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 600U) & THREAT_CUE_STOP);
+}
+
+/* A jogger at 3 m/s gets STOP at the 2800 mm ceiling, well before the 1500 mm floor. */
+void test_ThreatAssessment_JoggerGetsStopAtTheCeiling(void)
 {
     ThreatAssessment_Init();
     Radar_Target_t t = { .distance_mm = 2900U, .speed_cms = APPROACHING(300), .x_mm = 0, .is_valid = true };
-    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);    /* one frame is not enough */
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
     t.distance_mm = 2600U;
     TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 100U) & THREAT_CUE_STOP);
-    t.distance_mm = 2300U;
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 200U) & THREAT_CUE_STOP);
-
-    /* The jogger stops 2.3 m away: once the held speed expires, STOP clears again. */
-    t.speed_cms = 0;
-    (void)Run_Cue(&t, 1U, 300U);
-    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 300U + THREAT_SPEED_HOLD_MS + 100U) & THREAT_CUE_STOP);
-}
-
-/* Walking-pace targets keep the distance-only STOP rule (covers the recorded demo). */
-void test_ThreatAssessment_WalkingApproachStopsOnlyByDistance(void)
-{
-    ThreatAssessment_Init();
-    const int16_t walking_cms = (int16_t)(THREAT_FAST_CLOSING_MIN_CMS - 10);
-    Radar_Target_t t = { .distance_mm = 3000U, .speed_cms = APPROACHING(walking_cms), .x_mm = 0, .is_valid = true };
-    uint32_t now = 0U;
-    for (uint16_t d = 3000U; d > THREAT_STOP_ENTER_DIST_MM; d = (uint16_t)(d - 19U))
-    {
-        t.distance_mm = d;
-        TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, now) & THREAT_CUE_STOP);
-        now += 100U;
-    }
-    t.distance_mm = THREAT_STOP_ENTER_DIST_MM;
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, now) & THREAT_CUE_STOP);
 }
 
 /* A fast target in a side lane is not in the user's path: no STOP. */
@@ -600,7 +638,7 @@ void test_ThreatAssessment_FastSideApproachDoesNotStop(void)
     (void)Run_Cue(&t, 1U, 0U);
     t.distance_mm = 2600U;
     (void)Run_Cue(&t, 1U, 100U);
-    t.distance_mm = 2300U;
+    t.distance_mm = 1200U;
     TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 200U) & THREAT_CUE_STOP);
 }
 
@@ -728,8 +766,10 @@ int main(void)
     RUN_TEST(test_ThreatAssessment_ApproachingTargetsStillAlert);
     RUN_TEST(test_ThreatAssessment_CrossingInsideStopZoneStillCounts);
     RUN_TEST(test_ThreatAssessment_CrossingTrackerSurvivesExtremeFrames);
-    RUN_TEST(test_ThreatAssessment_FastCentreApproachRaisesStopEarly);
-    RUN_TEST(test_ThreatAssessment_WalkingApproachStopsOnlyByDistance);
+    RUN_TEST(test_ThreatAssessment_StopDistanceGrowsWithClosingSpeed);
+    RUN_TEST(test_ThreatAssessment_StopDistanceIsFlooredAndCapped);
+    RUN_TEST(test_ThreatAssessment_StopDistanceIsFrozenWhileLatched);
+    RUN_TEST(test_ThreatAssessment_JoggerGetsStopAtTheCeiling);
     RUN_TEST(test_ThreatAssessment_FastSideApproachDoesNotStop);
     RUN_TEST(test_ThreatAssessment_RadarSlotReorderDoesNotClearLane);
     RUN_TEST(test_ThreatAssessment_DepartingObstacleIsReceding);

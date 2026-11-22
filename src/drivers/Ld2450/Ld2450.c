@@ -63,7 +63,14 @@ bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target
         return false;
     }
 
-    uint8_t count = 0U;
+    /* Every radar slot keeps its own index: an empty slot is returned as
+     * is_valid = false rather than letting later targets shift down.
+     * ThreatAssessment tracks per index, so compaction would hand one person's
+     * history to another. */
+    for (uint8_t i = 0U; i < LD2450_CFG_MAX_TARGETS; i++)
+    {
+        p_targets[i] = (Radar_Target_t){ 0U, 0, 0, 0, false };
+    }
 
     /* Up to 3 targets: 8 bytes per target starting at index 4 */
     for (uint8_t i = 0U; i < LD2450_CFG_MAX_TARGETS; i++)
@@ -83,20 +90,28 @@ bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target
 
         (void)dist_res;
 
-        if (y > 0)
+        /* An empty slot is all zeros (y == 0). The limits reject values the
+         * radar cannot physically report, so one corrupt value cannot become,
+         * for example, a 15 m/s closing speed. */
+        const bool plausible = (y > 0) && (y <= LD2450_CFG_MAX_Y_MM) &&
+                               (x >= -LD2450_CFG_MAX_ABS_X_MM) &&
+                               (x <= LD2450_CFG_MAX_ABS_X_MM) &&
+                               (speed >= -LD2450_CFG_MAX_ABS_SPEED_CMS) &&
+                               (speed <= LD2450_CFG_MAX_ABS_SPEED_CMS);
+
+        if (plausible)
         {
             uint32_t x_sq = (uint32_t)((int32_t)x * (int32_t)x);
             uint32_t y_sq = (uint32_t)((int32_t)y * (int32_t)y);
             uint16_t dist_mm = Isqrt32(x_sq + y_sq);
-            p_targets[count].distance_mm = dist_mm;
-            p_targets[count].speed_cms = speed;
-            p_targets[count].is_valid = true;
-            p_targets[count].angle_deg = 0;
-            p_targets[count].x_mm = x;
-            count++;
+            p_targets[i].distance_mm = dist_mm;
+            p_targets[i].speed_cms = speed;
+            p_targets[i].is_valid = true;
+            p_targets[i].angle_deg = 0;
+            p_targets[i].x_mm = x;
         }
     }
 
-    *p_count = count;
+    *p_count = (uint8_t)LD2450_CFG_MAX_TARGETS;
     return true;
 }

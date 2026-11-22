@@ -79,6 +79,100 @@ static void Clear_HeadFall(Glasses_FallState_t * const p_fall,
     IncidentRetention_Store(false, BleComm_GetSessionId(), p_fall->sequence);
 }
 
+/* Plain-language view of the radar decision, toggled by the 'v' key: the three
+ * lanes, what the glasses decide and the buzzer pattern (ported from the
+ * earlier test-branch patch "Add a plain-language radar view"). cue: bit0 STOP,
+ * bits1-2 side (0 centre, 1 left, 2 right, 3 no free side lane). quiet: 0
+ * audible, 1 standby, 2 cane not held, 3 radar timeout, 4 obstacle moving
+ * away. */
+static void RadarView_Print(uint8_t blocked_mask,
+                            uint8_t cue,
+                            uint16_t dist_mm,
+                            int16_t closing_cms,
+                            uint8_t quiet)
+{
+    static const char * const quiet_text[5] = { "", "standby", "cane not held",
+                                                "radar timeout",
+                                                "obstacle moving away" };
+    const bool stop = ((cue & THREAT_CUE_STOP) != 0U);
+    const uint8_t side = (uint8_t)((cue >> THREAT_CUE_SIDE_SHIFT) & 0x03U);
+    const char *decision = "ALL CLEAR";
+    const char *buzzer = "SILENT";
+
+    if (blocked_mask != 0U)
+    {
+        if (stop)
+        {
+            buzzer = "CONTINUOUS TONE";
+            if (side == (uint8_t)THREAT_CUE_SIDE_ALL_BLOCKED)
+            {
+                decision = "STOP (no way round)";
+            }
+            else if (side == (uint8_t)THREAT_LANE_LEFT)
+            {
+                decision = "STOP (left is open)";
+            }
+            else if (side == (uint8_t)THREAT_LANE_RIGHT)
+            {
+                decision = "STOP (right is open)";
+            }
+            else
+            {
+                decision = "STOP";
+            }
+        }
+        else if (side == (uint8_t)THREAT_LANE_LEFT)
+        {
+            decision = "MOVE LEFT";
+            buzzer = "2 BEEPS";
+        }
+        else if (side == (uint8_t)THREAT_LANE_RIGHT)
+        {
+            decision = "MOVE RIGHT";
+            buzzer = "3 BEEPS";
+        }
+        else if (side == (uint8_t)THREAT_CUE_SIDE_ALL_BLOCKED)
+        {
+            decision = "NO FREE LANE (slow down)";
+            buzzer = "4 SHORT BEEPS";
+        }
+        else
+        {
+            decision = "KEEP GOING (obstacle at the side)";
+            buzzer = "1 BEEP";
+        }
+    }
+
+    printf("\n----------------------------------------\n");
+    printf(" LEFT   : %s\n",
+           ((blocked_mask & (1U << (uint8_t)THREAT_LANE_LEFT)) != 0U)
+               ? "OBSTACLE DETECTED"
+               : "clear");
+    printf(" MIDDLE : %s\n",
+           ((blocked_mask & (1U << (uint8_t)THREAT_LANE_CENTER)) != 0U)
+               ? "OBSTACLE DETECTED"
+               : "clear");
+    printf(" RIGHT  : %s\n",
+           ((blocked_mask & (1U << (uint8_t)THREAT_LANE_RIGHT)) != 0U)
+               ? "OBSTACLE DETECTED"
+               : "clear");
+    if (blocked_mask != 0U)
+    {
+        printf(" NEAREST: %u mm, closing %d cm/s\n", (unsigned)dist_mm,
+               (int)closing_cms);
+    }
+    printf(" DECISION: %s\n", decision);
+    if ((quiet != 0U) && (quiet <= 4U) && (blocked_mask != 0U))
+    {
+        printf(" BUZZER  : SILENT (%s), would be %s\n", quiet_text[quiet],
+               buzzer);
+    }
+    else
+    {
+        printf(" BUZZER  : %s\n", buzzer);
+    }
+}
+
 static void vTask_GlassesPerception(void *pvParameters)
 {
     (void)pvParameters;
@@ -128,6 +222,10 @@ static void vTask_GlassesPerception(void *pvParameters)
     Threat_Result_t current_threat = {0};
     bool radar_debug = false;          /* toggled by 'd' on the USB serial console */
     uint32_t radar_debug_last_ms = 0U;
+    /* toggled by 'v': plain-language lanes, decision and buzzer */
+    bool radar_view = false;
+    uint32_t radar_view_last_ms = 0U;
+    uint32_t radar_view_sig = UINT32_MAX;
     int16_t radar_dbg_x[3] = { 0, 0, 0 };   /* last frame, for the d debug line */
     uint8_t radar_dbg_valid = 0U;
     uint32_t last_valid_radar_frame_ms = 0U;
@@ -350,6 +448,15 @@ static void vTask_GlassesPerception(void *pvParameters)
                 radar_debug = !radar_debug;
                 printf("[RADAR DEBUG] %s\n", radar_debug ? "ON (10 Hz)" : "OFF");
             }
+            else if ((ch == (int)'v') || (ch == (int)'V'))
+            {
+                radar_view = !radar_view;
+                /* print the current state straight away */
+                radar_view_sig = UINT32_MAX;
+                printf("[RADAR VIEW] %s\n",
+                       radar_view ? "ON (prints when the decision changes)"
+                                  : "OFF");
+            }
             else if ((ch == (int)'s') || (ch == (int)'S'))
             {
                 printf("[STATUS] up=%u mode=%u ready=%u adv=%u scan=%u imu_f=%u radar_to=%u cane_seen=%u tx_seq=%u\n",
@@ -378,6 +485,50 @@ static void vTask_GlassesPerception(void *pvParameters)
         bool standby = (imu.state == IMU_SUPERVISOR_ASLEEP) && sleep_requested;
         bool obstacle = !standby && (cane_grip_telemetry != GRIP_STATE_RELEASED) &&
                         current_threat.is_threat_active && !radar_timeout;
+        /* Buzzer only: stay quiet while every blocked lane's obstacle is moving
+         * away. */
+        bool obstacle_audible = obstacle && !ThreatAssessment_IsReceding();
+        if (radar_view)
+        {
+            /* Why the buzzer is quiet, checked in the same order as the gates
+             * above. */
+            uint8_t quiet = 0U;
+            if (current_threat.is_threat_active && !obstacle_audible)
+            {
+                if (standby)
+                {
+                    quiet = 1U;
+                }
+                else if (radar_timeout)
+                {
+                    quiet = 3U;
+                }
+                else if (!obstacle)
+                {
+                    /* the only remaining gate on obstacle: cane released */
+                    quiet = 2U;
+                }
+                else
+                {
+                    quiet = 4U; /* obstacle moving away */
+                }
+            }
+            const uint8_t view_mask = ThreatAssessment_GetBlockedMask();
+            const uint32_t sig =
+                (uint32_t)view_mask |
+                ((uint32_t)current_threat.open_direction_cue << 4U) |
+                ((uint32_t)quiet << 8U);
+            if ((sig != radar_view_sig) &&
+                ((uint32_t)(now_ms - radar_view_last_ms) >= 200U))
+            {
+                radar_view_sig = sig;
+                radar_view_last_ms = now_ms;
+                RadarView_Print(view_mask,
+                                (uint8_t)current_threat.open_direction_cue,
+                                current_threat.nearest_distance_mm,
+                                current_threat.closing_speed_cms, quiet);
+            }
+        }
         /* Derive the display mode once, so sensor recovery cannot overwrite a fall. */
         if (head_fall.latched)
         {
@@ -414,7 +565,7 @@ static void vTask_GlassesPerception(void *pvParameters)
             .delivery_fallback = delivery_fallback,
             .cane_link_fresh = cane_fresh,
             .cane_buzzer_fault = cane_buzzer_fault,
-            .obstacle_active = obstacle,
+            .obstacle_active = obstacle_audible,
             .obstacle_dist_mm = current_threat.nearest_distance_mm,
             .obstacle_cue = (uint8_t)current_threat.open_direction_cue,
             .sensor_fault = !standby && (imu.fault || radar_timeout),

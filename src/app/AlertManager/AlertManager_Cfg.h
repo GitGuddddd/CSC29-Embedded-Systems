@@ -65,7 +65,15 @@
  *    constant (first-order, about 250 ms lag);
  *  - the pause between bursts is latched at the start of each burst cycle.
  */
-#define ALERT_OBSTACLE_CUE_DWELL_MS    (450U)
+#define ALERT_OBSTACLE_CUE_DWELL_MS    (250U)
+/* Silence before a new beep pattern when the cue changes between two beep
+ * patterns (not STOP), so the old and new bursts cannot be heard as one. At
+ * least 2.5x the 150 ms in-burst gap; shorter values made bursts hard to count
+ * in simulation. */
+#define ALERT_OBSTACLE_SWITCH_GAP_MS   (400U)
+/* Shortest pause after a 2/3/4-beep burst (keeps it about 3x the in-burst
+ * gap). */
+#define ALERT_OBSTACLE_MULTI_PAUSE_MIN_MS (280U)
 #define ALERT_OBSTACLE_PITCH_TAU_MS    (250U)
 #define ALERT_DELIVERY_PULSE_MS         (100U)
 #define ALERT_DELIVERY_PERIOD_MS       (2000U)

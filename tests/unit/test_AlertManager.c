@@ -769,6 +769,207 @@ void test_AlertManager_BeepsNeverTruncatedWhileDistanceSweeps(void)
     TEST_ASSERT_TRUE(beeps >= 6U);
 }
 
+/* Changing between two beep patterns must not run the old burst into the new
+ * one (bench/simulation case: a 2-beep "left free" burst followed straight away
+ * by the new pattern's first beep was heard as a 3-beep "right free"). For
+ * every moment of change: no beep is cut or merged, and the new pattern starts
+ * after a clear silence. */
+/* Play cue_a, switch to cue_b at change_ms, and check what is heard: every
+ * burst is a whole pattern (never cut, never merged), every beep is a full
+ * pulse, and the first new burst starts at least ALERT_OBSTACLE_SWITCH_GAP_MS
+ * after the old one ends. */
+static void Check_PatternChange(uint8_t cue_a, uint32_t beeps_a, uint8_t cue_b,
+                                uint32_t beeps_b, uint32_t change_ms)
+{
+    AlertManager_Init();
+    bool prev_on = false;
+    uint32_t on_start = 0U;
+    uint32_t off_start = 0U;
+    bool seen_off = false;
+    uint32_t count = 0U;           /* beeps in the burst being heard */
+    uint32_t burst_start = 0U;
+    uint32_t silence_before = 0U;  /* silence before the burst being heard */
+    /* a burst of the new pattern has been heard */
+    bool switched = false;
+    uint32_t new_bursts = 0U;
+    for (uint32_t t = 0U; t < 5000U; t += 10U)
+    {
+        const uint8_t cue = (t >= change_ms) ? cue_b : cue_a;
+        const bool on = Obstacle_Step(cue, 2000U, t).buzzer_active;
+        if (on && !prev_on)
+        {
+            if (seen_off && ((t - off_start) <= ALERT_OBSTACLE_BEEP_GAP_MS))
+            {
+                count++; /* same burst */
+            }
+            else
+            {
+                if (count != 0U)
+                {
+                    /* A burst just ended: it must be a whole old or new
+                     * pattern, old ones first, and the first new one must
+                     * follow a clear silence. */
+                    if (!switched && (count == beeps_a))
+                    {
+                        /* old pattern */
+                    }
+                    else
+                    {
+                        TEST_ASSERT_EQUAL_UINT32(beeps_b, count);
+                        TEST_ASSERT_TRUE(burst_start >= change_ms);
+                        if (!switched)
+                        {
+                            TEST_ASSERT_TRUE(silence_before >=
+                                             ALERT_OBSTACLE_SWITCH_GAP_MS);
+                        }
+                        switched = true;
+                        new_bursts++;
+                    }
+                }
+                silence_before = seen_off ? (t - off_start) : UINT32_MAX;
+                burst_start = t;
+                count = 1U;
+            }
+            on_start = t;
+        }
+        if (!on && prev_on)
+        {
+            TEST_ASSERT_EQUAL_UINT32(ALERT_OBSTACLE_PULSE_MS, t - on_start);
+            off_start = t;
+            seen_off = true;
+        }
+        prev_on = on;
+    }
+    TEST_ASSERT_TRUE(new_bursts >= 2U);
+}
+
+void test_AlertManager_PatternChangeNeverMergesBursts(void)
+{
+    for (uint32_t change_ms = 0U; change_ms < 1500U; change_ms += 10U)
+    {
+        Check_PatternChange(CUE_LEFT, ALERT_OBSTACLE_LEFT_BEEPS, 0U,
+                            ALERT_OBSTACLE_CENTER_BEEPS, change_ms + 100U);
+    }
+}
+
+/* Bench log, three people 1.5-3 m ahead: the guidance switched between "move
+ * left" and "move right" every second or so. A 3-beep burst cut after two beeps
+ * would be heard as "move left", so a change waits for the burst to finish. */
+void test_AlertManager_BurstIsNeverCutByAPatternChange(void)
+{
+    for (uint32_t change_ms = 0U; change_ms < 1500U; change_ms += 10U)
+    {
+        Check_PatternChange(CUE_RIGHT, ALERT_OBSTACLE_RIGHT_BEEPS, CUE_LEFT,
+                            ALERT_OBSTACLE_LEFT_BEEPS, change_ms + 100U);
+        Check_PatternChange(CUE_LEFT, ALERT_OBSTACLE_LEFT_BEEPS, CUE_RIGHT,
+                            ALERT_OBSTACLE_RIGHT_BEEPS, change_ms + 100U);
+    }
+}
+
+/* Counted bursts keep a pause clearly longer than the in-burst gap, even close
+ * up. The 1-beep centre pattern keeps its original distance-based pause. */
+static uint32_t Silence_After_Burst(uint8_t cue, uint32_t beeps)
+{
+    AlertManager_Init();
+    uint32_t count = 0U;
+    uint32_t off_at = 0U;
+    bool prev_on = false;
+    for (uint32_t t = 0U; t < 3000U; t += 10U)
+    {
+        const bool on =
+            Obstacle_Step(cue, ALERT_OBSTACLE_MIN_DIST_MM, t).buzzer_active;
+        if (!on && prev_on)
+        {
+            off_at = t;
+            count++;
+        }
+        if (on && !prev_on && (count == beeps))
+        {
+            return t - off_at;
+        }
+        prev_on = on;
+    }
+    return 0U;
+}
+
+void test_AlertManager_MultiBeepPauseHasFloor(void)
+{
+    TEST_ASSERT_EQUAL_UINT32(ALERT_OBSTACLE_BEEP_GAP_MS +
+                                 ALERT_OBSTACLE_MULTI_PAUSE_MIN_MS,
+                             Silence_After_Burst(CUE_RIGHT, 3U));
+    TEST_ASSERT_EQUAL_UINT32(ALERT_OBSTACLE_BEEP_GAP_MS +
+                                 ALERT_OBSTACLE_MULTI_PAUSE_MIN_MS,
+                             Silence_After_Burst(CUE_LEFT, 2U));
+    TEST_ASSERT_EQUAL_UINT32(ALERT_OBSTACLE_BEEP_GAP_MS +
+                                 ALERT_OBSTACLE_PAUSE_MIN_MS,
+                             /* centre: unchanged */
+                             Silence_After_Burst(0U, 1U));
+}
+
+/* An obstacle that clears mid-beep lets that beep play its full length (no
+ * blip); a STOP tone still ends at once. */
+void test_AlertManager_LastBeepFinishesWhenObstacleClears(void)
+{
+    AlertManager_Init();
+    Alert_Output_t out;
+    /* beep starts at 0 ms */
+    AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, 2000U, 0U, &out);
+    TEST_ASSERT_TRUE(out.buzzer_active);
+    AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, 2000U, 40U, &out);
+    for (uint32_t t = 50U; t < ALERT_OBSTACLE_PULSE_MS; t += 10U)
+    {
+        /* cleared at 50 ms */
+        AlertManager_Arbitrate(ALERT_NONE, 0U, t, &out);
+        TEST_ASSERT_TRUE(out.buzzer_active);
+    }
+    AlertManager_Arbitrate(ALERT_NONE, 0U, ALERT_OBSTACLE_PULSE_MS, &out);
+    TEST_ASSERT_FALSE(out.buzzer_active);
+    AlertManager_Arbitrate(ALERT_NONE, 0U, 1000U, &out);
+    /* no new beeps afterwards */
+    TEST_ASSERT_FALSE(out.buzzer_active);
+
+    AlertManager_Init();
+    AlertManager_SetObstacleCue(ALERT_CUE_STOP);
+    AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, 800U, 0U, &out);
+    TEST_ASSERT_TRUE(out.buzzer_active);
+    AlertManager_Arbitrate(ALERT_NONE, 0U, 10U, &out);
+    /* STOP ends immediately */
+    TEST_ASSERT_FALSE(out.buzzer_active);
+}
+
+/* When STOP ends and a beep pattern follows, the tone stops and a clear silence
+ * of ALERT_OBSTACLE_SWITCH_GAP_MS comes before the first beep (no beep run onto
+ * the tone). */
+void test_AlertManager_StopEndIsFollowedBySilenceBeforeBeeps(void)
+{
+    AlertManager_Init();
+    for (uint32_t t = 0U; t < 1000U; t += 10U)
+    {
+        TEST_ASSERT_TRUE(Obstacle_Step(ALERT_CUE_STOP, 1200U, t).buzzer_active);
+    }
+    uint32_t off_at = UINT32_MAX;
+    uint32_t next_on = UINT32_MAX;
+    bool prev_on = true;
+    for (uint32_t t = 1000U; t < 3000U; t += 10U)
+    {
+        const bool on = Obstacle_Step(CUE_LEFT, 1200U, t).buzzer_active;
+        if (!on && prev_on && (off_at == UINT32_MAX))
+        {
+            off_at = t;
+        }
+        if (on && !prev_on && (off_at != UINT32_MAX) && (next_on == UINT32_MAX))
+        {
+            next_on = t;
+        }
+        prev_on = on;
+    }
+    TEST_ASSERT_NOT_EQUAL_UINT32(UINT32_MAX, off_at);
+    TEST_ASSERT_NOT_EQUAL_UINT32(UINT32_MAX, next_on);
+    TEST_ASSERT_TRUE((next_on - off_at) >= ALERT_OBSTACLE_SWITCH_GAP_MS);
+    /* the tone ended after the cue dwell, not before */
+    TEST_ASSERT_TRUE(off_at >= (1000U + ALERT_OBSTACLE_CUE_DWELL_MS));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -800,5 +1001,10 @@ int main(void)
     RUN_TEST(test_AlertManager_StopRisingAppliesImmediatelyAndRestartsCycle);
     RUN_TEST(test_AlertManager_PitchFollowsDistanceThroughLowPass);
     RUN_TEST(test_AlertManager_BeepsNeverTruncatedWhileDistanceSweeps);
+    RUN_TEST(test_AlertManager_PatternChangeNeverMergesBursts);
+    RUN_TEST(test_AlertManager_BurstIsNeverCutByAPatternChange);
+    RUN_TEST(test_AlertManager_MultiBeepPauseHasFloor);
+    RUN_TEST(test_AlertManager_LastBeepFinishesWhenObstacleClears);
+    RUN_TEST(test_AlertManager_StopEndIsFollowedBySilenceBeforeBeeps);
     return UNITY_END();
 }

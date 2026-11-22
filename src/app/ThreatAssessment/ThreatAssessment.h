@@ -31,6 +31,11 @@ typedef struct
     uint16_t open_direction_cue : 3;
 } Threat_Result_t;
 
+/* True while every blocked lane's obstacle has been moving away for
+ * THREAT_RECEDE_FRAMES frames and STOP is not active. Used to keep the buzzer quiet
+ * for departing obstacles; the threat result, lanes and STOP are unaffected. */
+bool ThreatAssessment_IsReceding(void);
+
 /* Debug: bit n set = lane n (THREAT_LANE_CENTER/LEFT/RIGHT) is currently blocked. */
 uint8_t ThreatAssessment_GetBlockedMask(void);
 

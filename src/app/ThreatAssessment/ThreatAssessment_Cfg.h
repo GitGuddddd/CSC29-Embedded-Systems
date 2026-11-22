@@ -41,6 +41,16 @@
 #define THREAT_FAST_STOP_FRAMES      (2U)
 
 /*
+ * Departing obstacles: when every blocked lane's obstacle has been moving away at
+ * THREAT_RECEDE_MIN_CMS or more for THREAT_RECEDE_FRAMES radar frames in a row (and
+ * STOP is not active), ThreatAssessment_IsReceding() is true and the glasses keep the
+ * buzzer quiet. 16 cm/s is two LD2450 speed steps, above its jitter; 3 frames = 300 ms.
+ * The lanes, STOP and BLE are unchanged; an obstacle that stops or turns back beeps again.
+ */
+#define THREAT_RECEDE_MIN_CMS        (16)
+#define THREAT_RECEDE_FRAMES         (3U)
+
+/*
  * A side lane is only offered as "free" (left/right cue) after it has been clear
  * for this long. "Clear" means nothing was detected, which is weaker than
  * "empty" (stationary targets drop out), so a lane that has only just emptied

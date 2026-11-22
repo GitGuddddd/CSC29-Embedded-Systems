@@ -45,6 +45,8 @@ static Threat_Lane_t s_target_last_side[3];
 static uint32_t s_synthetic_ms = 0U;
 static bool s_stop_latched = false;
 static uint8_t s_fast_frames = 0U; /* consecutive frames of a fast centre approach */
+static uint8_t s_recede_frames[THREAT_LANE_COUNT]; /* consecutive frames each lane's target moved away */
+static bool s_receding = false;
 
 _Static_assert(sizeof(Threat_LaneState_t) == 20U, "Lane state must stay free of padding holes");
 _Static_assert(sizeof(Threat_Result_t) == 6U, "Compact threat result must remain six bytes");
@@ -84,6 +86,11 @@ static void Reset_AllState(void)
     }
     s_stop_latched = false;
     s_fast_frames = 0U;
+    for (uint8_t lane = 0U; lane < (uint8_t)THREAT_LANE_COUNT; lane++)
+    {
+        s_recede_frames[lane] = 0U;
+    }
+    s_receding = false;
 }
 
 /* Lateral position in the user's frame: negative is left (mirrored if the radar is fitted the other way). */
@@ -417,6 +424,11 @@ static bool Compute_Stop(bool center_blocked, uint16_t center_dist_mm, bool fast
     return s_stop_latched;
 }
 
+bool ThreatAssessment_IsReceding(void)
+{
+    return s_receding;
+}
+
 uint8_t ThreatAssessment_GetBlockedMask(void)
 {
     uint8_t mask = 0U;
@@ -569,6 +581,34 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
     }
     const bool fast_approach = (s_fast_frames >= THREAT_FAST_STOP_FRAMES);
 
+    /* Per lane: how long its nearest target has been clearly moving away. A lane with
+     * no target this frame (held blocked) keeps its count; a cleared lane restarts. */
+    for (uint8_t lane = 0U; lane < (uint8_t)THREAT_LANE_COUNT; lane++)
+    {
+        if (!s_lanes[lane].blocked)
+        {
+            s_recede_frames[lane] = 0U;
+        }
+        else if (lane_present[lane])
+        {
+            if (lane_live_speed[lane] <= -THREAT_RECEDE_MIN_CMS)
+            {
+                if (s_recede_frames[lane] < UINT8_MAX)
+                {
+                    s_recede_frames[lane]++;
+                }
+            }
+            else
+            {
+                s_recede_frames[lane] = 0U;
+            }
+        }
+        else
+        {
+            /* held lane: keep the count */
+        }
+    }
+
     if (any_blocked)
     {
         uint16_t min_blocked_dist = UINT16_MAX;
@@ -613,6 +653,17 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
         }
         p_out_result->open_direction_cue = (uint16_t)(cue & 0x07U);
 
+        /* Receding: every blocked lane's obstacle is moving away and STOP is not active. */
+        bool all_receding = ((cue & (uint8_t)THREAT_CUE_STOP) == 0U);
+        for (uint8_t lane = 0U; lane < (uint8_t)THREAT_LANE_COUNT; lane++)
+        {
+            if (s_lanes[lane].blocked && (s_recede_frames[lane] < THREAT_RECEDE_FRAMES))
+            {
+                all_receding = false;
+            }
+        }
+        s_receding = all_receding;
+
         if (best_ttc < BLE_TTC_NO_THREAT)
         {
             p_out_result->ttc_20ms = (uint16_t)(best_ttc & 0x0FFFU);
@@ -633,6 +684,7 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
     }
     else if (found_valid)
     {
+        s_receding = false;
         s_stop_latched = false;
         p_out_result->is_threat_active = 0U;
         p_out_result->nearest_distance_mm = min_valid_dist;
@@ -642,6 +694,7 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
     }
     else
     {
+        s_receding = false;
         s_stop_latched = false;
         Clear_Result(p_out_result);
     }

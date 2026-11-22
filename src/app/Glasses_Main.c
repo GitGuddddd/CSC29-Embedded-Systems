@@ -378,6 +378,8 @@ static void vTask_GlassesPerception(void *pvParameters)
         bool standby = (imu.state == IMU_SUPERVISOR_ASLEEP) && sleep_requested;
         bool obstacle = !standby && (cane_grip_telemetry != GRIP_STATE_RELEASED) &&
                         current_threat.is_threat_active && !radar_timeout;
+        /* Buzzer only: stay quiet while every blocked lane's obstacle is moving away. */
+        bool obstacle_audible = obstacle && !ThreatAssessment_IsReceding();
         /* Derive the display mode once, so sensor recovery cannot overwrite a fall. */
         if (head_fall.latched)
         {
@@ -414,7 +416,7 @@ static void vTask_GlassesPerception(void *pvParameters)
             .delivery_fallback = delivery_fallback,
             .cane_link_fresh = cane_fresh,
             .cane_buzzer_fault = cane_buzzer_fault,
-            .obstacle_active = obstacle,
+            .obstacle_active = obstacle_audible,
             .obstacle_dist_mm = current_threat.nearest_distance_mm,
             .obstacle_cue = (uint8_t)current_threat.open_direction_cue,
             .sensor_fault = !standby && (imu.fault || radar_timeout),

@@ -386,6 +386,24 @@ void AlertManager_Arbitrate(Alert_Type_t requested_alert,
 
     memset(p_out, 0, sizeof(*p_out));
 
+    /* An obstacle that clears mid-beep lets that beep finish (at most one pulse), so the
+     * last beep is never cut to a blip. Only when nothing else is requested, never STOP. */
+    if ((requested_alert == ALERT_NONE) &&
+        (s_previous_request == ALERT_OBSTACLE_PROXIMITY) &&
+        (s_obs_flags.beep_on != 0U) && !Obstacle_StopActive() && !s_fall_alarm_latched)
+    {
+        p_out->active_alert = ALERT_OBSTACLE_PROXIMITY;
+        p_out->buzzer_active = Obstacle_BeepOn(now_ms);
+        if (p_out->buzzer_active)
+        {
+            p_out->generated_freq_hz = AlertManager_MapDistanceToPitch((uint16_t)Obstacle_SmoothedDistMm());
+            p_out->generated_duty_percent = ALERT_STANDARD_DUTY_PERCENT;
+            return;
+        }
+        s_obs_flags.beep_on = 0U;
+        memset(p_out, 0, sizeof(*p_out));
+    }
+
     if (requested_alert != s_previous_request)
     {
         s_previous_request = requested_alert;
@@ -512,6 +530,7 @@ void AlertManager_ArbitrateSynced(const Alert_SyncInput_t * const p_in,
         {
             req = ALERT_SENSOR_FAULT;
         }
+        s_obs_flags.beep_on = 0U; /* the cane never plays obstacle beeps: nothing to finish */
         AlertManager_Arbitrate(req, 0U, now_ms, p_out);
         if ((p_out->active_alert == ALERT_NONE) && !p_in->peer_fall_active && !p_in->cane_buzzer_fault)
         {

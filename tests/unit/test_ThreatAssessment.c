@@ -635,6 +635,54 @@ void test_ThreatAssessment_RadarSlotReorderDoesNotClearLane(void)
     }
 }
 
+/* A departing obstacle keeps its lane blocked but reports "receding" so the glasses can
+ * keep the buzzer quiet; it beeps again once it stops. STOP is never made quiet. */
+void test_ThreatAssessment_DepartingObstacleIsReceding(void)
+{
+    ThreatAssessment_Init();
+    Threat_Result_t res;
+    Radar_Target_t t = { .distance_mm = 1800U, .speed_cms = APPROACHING(-40), .x_mm = USER_X(800), .is_valid = true };
+    uint32_t now = 0U;
+    for (uint8_t f = 0U; f < THREAT_RECEDE_FRAMES; f++)
+    {
+        TEST_ASSERT_FALSE(ThreatAssessment_IsReceding() && (f + 1U < THREAT_RECEDE_FRAMES));
+        ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
+        t.distance_mm = (uint16_t)(t.distance_mm + 40U);
+        now += 100U;
+    }
+    TEST_ASSERT_TRUE(res.is_threat_active);         /* lane still blocked */
+    TEST_ASSERT_TRUE(ThreatAssessment_IsReceding());
+
+    t.speed_cms = 0;                                 /* stops walking away */
+    ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
+    TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
+
+    /* Centre lane inside STOP range: never quiet, even when moving away. */
+    ThreatAssessment_Init();
+    Radar_Target_t c = { .distance_mm = 1000U, .speed_cms = APPROACHING(-40), .x_mm = 0, .is_valid = true };
+    for (uint32_t k = 0U; k < 6U; k++)
+    {
+        ThreatAssessment_ProcessTargetsAt(&c, 1U, GRIP_STATE_HELD, k * 100U, &res);
+        c.distance_mm = (uint16_t)(c.distance_mm + 40U);
+    }
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, res.open_direction_cue & THREAT_CUE_STOP);
+    TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
+}
+
+/* An approaching obstacle is never receding. */
+void test_ThreatAssessment_ApproachingObstacleIsNotReceding(void)
+{
+    ThreatAssessment_Init();
+    Threat_Result_t res;
+    Radar_Target_t t = { .distance_mm = 2800U, .speed_cms = APPROACHING(40), .x_mm = USER_X(-800), .is_valid = true };
+    for (uint32_t k = 0U; k < 10U; k++)
+    {
+        ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, k * 100U, &res);
+        TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
+        t.distance_mm = (uint16_t)(t.distance_mm - 40U);
+    }
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -666,5 +714,7 @@ int main(void)
     RUN_TEST(test_ThreatAssessment_WalkingApproachStopsOnlyByDistance);
     RUN_TEST(test_ThreatAssessment_FastSideApproachDoesNotStop);
     RUN_TEST(test_ThreatAssessment_RadarSlotReorderDoesNotClearLane);
+    RUN_TEST(test_ThreatAssessment_DepartingObstacleIsReceding);
+    RUN_TEST(test_ThreatAssessment_ApproachingObstacleIsNotReceding);
     return UNITY_END();
 }

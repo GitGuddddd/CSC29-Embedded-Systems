@@ -848,6 +848,33 @@ void test_AlertManager_MultiBeepPauseHasFloor(void)
                              Silence_After_Burst(0U, 1U)); /* centre: unchanged */
 }
 
+/* An obstacle that clears mid-beep lets that beep play its full length (no blip);
+ * a STOP tone still ends at once. */
+void test_AlertManager_LastBeepFinishesWhenObstacleClears(void)
+{
+    AlertManager_Init();
+    Alert_Output_t out;
+    AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, 2000U, 0U, &out);   /* beep starts at 0 ms */
+    TEST_ASSERT_TRUE(out.buzzer_active);
+    AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, 2000U, 40U, &out);
+    for (uint32_t t = 50U; t < ALERT_OBSTACLE_PULSE_MS; t += 10U)
+    {
+        AlertManager_Arbitrate(ALERT_NONE, 0U, t, &out);                 /* cleared at 50 ms */
+        TEST_ASSERT_TRUE(out.buzzer_active);
+    }
+    AlertManager_Arbitrate(ALERT_NONE, 0U, ALERT_OBSTACLE_PULSE_MS, &out);
+    TEST_ASSERT_FALSE(out.buzzer_active);
+    AlertManager_Arbitrate(ALERT_NONE, 0U, 1000U, &out);
+    TEST_ASSERT_FALSE(out.buzzer_active);                                 /* no new beeps afterwards */
+
+    AlertManager_Init();
+    AlertManager_SetObstacleCue(ALERT_CUE_STOP);
+    AlertManager_Arbitrate(ALERT_OBSTACLE_PROXIMITY, 800U, 0U, &out);
+    TEST_ASSERT_TRUE(out.buzzer_active);
+    AlertManager_Arbitrate(ALERT_NONE, 0U, 10U, &out);
+    TEST_ASSERT_FALSE(out.buzzer_active);                                 /* STOP ends immediately */
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -881,5 +908,6 @@ int main(void)
     RUN_TEST(test_AlertManager_BeepsNeverTruncatedWhileDistanceSweeps);
     RUN_TEST(test_AlertManager_PatternChangeNeverMergesBursts);
     RUN_TEST(test_AlertManager_MultiBeepPauseHasFloor);
+    RUN_TEST(test_AlertManager_LastBeepFinishesWhenObstacleClears);
     return UNITY_END();
 }

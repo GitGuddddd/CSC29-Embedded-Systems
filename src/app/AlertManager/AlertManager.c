@@ -233,6 +233,8 @@ static void Obstacle_StartCycleSeparated(uint32_t now_ms)
     s_obs_cycle_pause_ms = Obstacle_CyclePauseMs(now_ms);
 }
 
+static bool Obstacle_BurstUnfinished(uint32_t now_ms);
+
 static void Obstacle_Update(uint32_t now_ms, uint16_t distance_mm)
 {
     if (s_obs_flags.valid == 0U)
@@ -303,9 +305,9 @@ static void Obstacle_Update(uint32_t now_ms, uint16_t distance_mm)
                     Obstacle_StartCycle(now_ms);
                 }
             }
-            else if (s_obs_flags.beep_on == 0U)
+            else if (!Obstacle_BurstUnfinished(now_ms))
             {
-                /* Beep pattern to beep pattern: let the current beep finish, then leave a
+                /* Beep pattern to beep pattern: let the current burst finish, then leave a
                  * clear gap before the new pattern's first beep. */
                 s_obs_cue = s_obs_pending_cue;
                 Obstacle_TrackPattern(now_ms);
@@ -313,10 +315,56 @@ static void Obstacle_Update(uint32_t now_ms, uint16_t distance_mm)
             }
             else
             {
-                /* wait for the beep that is sounding to end */
+                /* wait for the burst that is sounding to end */
             }
         }
     }
+}
+
+/* Beep count, pulse and gap of the current side pattern. */
+static void Obstacle_PatternShape(uint32_t * const p_beeps, uint32_t * const p_pulse_ms, uint32_t * const p_gap_ms)
+{
+    const uint32_t side = Obstacle_Side();
+    *p_beeps = ALERT_OBSTACLE_CENTER_BEEPS;
+    *p_pulse_ms = ALERT_OBSTACLE_PULSE_MS;
+    *p_gap_ms = ALERT_OBSTACLE_BEEP_GAP_MS;
+    if (side == ALERT_CUE_SIDE_ALL_BLOCKED)
+    {
+        *p_beeps = ALERT_OBSTACLE_BLOCKED_BEEPS;
+        *p_pulse_ms = ALERT_OBSTACLE_BLOCKED_PULSE_MS;
+        *p_gap_ms = ALERT_OBSTACLE_BLOCKED_GAP_MS;
+    }
+    else if (side == ALERT_CUE_SIDE_LEFT)
+    {
+        *p_beeps = ALERT_OBSTACLE_LEFT_BEEPS;
+    }
+    else if (side == ALERT_CUE_SIDE_RIGHT)
+    {
+        *p_beeps = ALERT_OBSTACLE_RIGHT_BEEPS;
+    }
+    else
+    {
+        /* centre clear: one beep */
+    }
+}
+
+/* True while a burst is part-way through: from its first pulse until its last pulse
+ * ends. A pattern change waits for this, so the user never hears a cut burst (a 3-beep
+ * "move right" cut after two beeps would be heard as "move left"). */
+static bool Obstacle_BurstUnfinished(uint32_t now_ms)
+{
+    if ((int32_t)(now_ms - s_obs_cycle_start_ms) < 0)
+    {
+        return false; /* still in the separation gap: nothing of this burst sounded yet */
+    }
+    uint32_t beeps = 0U;
+    uint32_t pulse_ms = 0U;
+    uint32_t gap_ms = 0U;
+    Obstacle_PatternShape(&beeps, &pulse_ms, &gap_ms);
+    const uint32_t burst_end_ms = ((pulse_ms + gap_ms) * beeps) - gap_ms;
+    const uint32_t cycle_ms = ((pulse_ms + gap_ms) * beeps) + s_obs_cycle_pause_ms;
+    const uint32_t elapsed = (uint32_t)(now_ms - s_obs_cycle_start_ms) % cycle_ms;
+    return (s_obs_flags.beep_on != 0U) || ((elapsed > 0U) && (elapsed < burst_end_ms));
 }
 
 static bool Obstacle_BeepOn(uint32_t now_ms)
@@ -327,25 +375,10 @@ static bool Obstacle_BeepOn(uint32_t now_ms)
         return true;
     }
 
-    const uint32_t side = Obstacle_Side();
-
-    uint32_t beeps = ALERT_OBSTACLE_CENTER_BEEPS;
-    uint32_t pulse_ms = ALERT_OBSTACLE_PULSE_MS;
-    uint32_t gap_ms = ALERT_OBSTACLE_BEEP_GAP_MS;
-    if (side == ALERT_CUE_SIDE_ALL_BLOCKED)
-    {
-        beeps = ALERT_OBSTACLE_BLOCKED_BEEPS;
-        pulse_ms = ALERT_OBSTACLE_BLOCKED_PULSE_MS;
-        gap_ms = ALERT_OBSTACLE_BLOCKED_GAP_MS;
-    }
-    else if (side == ALERT_CUE_SIDE_LEFT)
-    {
-        beeps = ALERT_OBSTACLE_LEFT_BEEPS;
-    }
-    else if (side == ALERT_CUE_SIDE_RIGHT)
-    {
-        beeps = ALERT_OBSTACLE_RIGHT_BEEPS;
-    }
+    uint32_t beeps = 0U;
+    uint32_t pulse_ms = 0U;
+    uint32_t gap_ms = 0U;
+    Obstacle_PatternShape(&beeps, &pulse_ms, &gap_ms);
     if ((int32_t)(now_ms - s_obs_cycle_start_ms) < 0)
     {
         return false; /* separation gap before a new pattern */

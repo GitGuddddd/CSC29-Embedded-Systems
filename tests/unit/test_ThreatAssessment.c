@@ -217,7 +217,8 @@ void test_ThreatAssessment_ThreeLaneOccupancy_CorridorAndSideHysteresis(void)
      */
     targets[0].x_mm = USER_X(-(THREAT_SIDE_DEADZONE_MM - THREAT_SIDE_HYSTERESIS_MM - 1));
     ThreatAssessment_ProcessTargetsAt(targets, 2U, GRIP_STATE_HELD, 60U, &res);
-    /* The target was standing still in LEFT, so LEFT gets the still-person hold. */
+    /* The target was standing still in LEFT, so LEFT gets the still-person
+     * hold. */
     const uint32_t left_cleared_ms = 60U + THREAT_STILL_LANE_HOLD_MS;
     ThreatAssessment_ProcessTargetsAt(targets, 2U, GRIP_STATE_HELD, left_cleared_ms, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
@@ -428,8 +429,8 @@ void test_ThreatAssessment_JustClearedLaneIsNotOfferedAsFree(void)
     const uint8_t left_free = (uint8_t)(THREAT_LANE_LEFT << THREAT_CUE_SIDE_SHIFT);
 
     TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, 0U));
-    /* The left target (standing still) is lost; the still-person hold then keeps the
-     * lane blocked for a while. */
+    /* The left target (standing still) is lost; the still-person hold then
+     * keeps the lane blocked for a while. */
     t[0].is_valid = false;
     (void)Run_Cue(t, 3U, 100U);
     const uint32_t cleared_ms = 100U + THREAT_STILL_LANE_HOLD_MS;
@@ -558,20 +559,26 @@ void test_ThreatAssessment_CrossingTrackerSurvivesExtremeFrames(void)
     }
 }
 
-/* Speed-scaled STOP: same obstacle distance, different closing speed: only the faster
- * approach is in STOP. 1.0 m/s gives 500 + 850 + 625 = 1975 mm. */
+/* Speed-scaled STOP: same obstacle distance, different closing speed: only the
+ * faster approach is in STOP. 1.0 m/s gives 500 + 850 + 625 = 1975 mm. */
 void test_ThreatAssessment_StopDistanceGrowsWithClosingSpeed(void)
 {
     ThreatAssessment_Init();
-    Radar_Target_t t = { .distance_mm = 1900U, .speed_cms = APPROACHING(50), .x_mm = 0, .is_valid = true };
-    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);      /* 0.5 m/s: floor 1500 mm */
+    Radar_Target_t t = { .distance_mm = 1900U,
+                         .speed_cms = APPROACHING(50),
+                         .x_mm = 0,
+                         .is_valid = true };
+    /* 0.5 m/s: floor 1500 mm */
+    TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
 
     ThreatAssessment_Init();
     t.speed_cms = APPROACHING(100);
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP,
+                            Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
 
     ThreatAssessment_Init();
-    t.distance_mm = 2000U;                                                   /* just outside 1975 mm */
+    /* just outside 1975 mm */
+    t.distance_mm = 2000U;
     TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
 }
 
@@ -579,56 +586,76 @@ void test_ThreatAssessment_StopDistanceIsFlooredAndCapped(void)
 {
     /* Slow: the floor. 0.75 m/s computes 1226 mm, floored to 1500 mm. */
     ThreatAssessment_Init();
-    Radar_Target_t t = { .distance_mm = 1600U, .speed_cms = APPROACHING(75), .x_mm = 0, .is_valid = true };
+    Radar_Target_t t = { .distance_mm = 1600U,
+                         .speed_cms = APPROACHING(75),
+                         .x_mm = 0,
+                         .is_valid = true };
     TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
     t.distance_mm = THREAT_STOP_ENTER_DIST_MM;
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 100U) & THREAT_CUE_STOP);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP,
+                            Run_Cue(&t, 1U, 100U) & THREAT_CUE_STOP);
 
     /* Moving away: the floor, not a bigger distance. */
     ThreatAssessment_Init();
     t.distance_mm = 1500U;
     t.speed_cms = APPROACHING(-100);
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP,
+                            Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
     ThreatAssessment_Init();
     t.distance_mm = 1700U;
     TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
 
-    /* Very fast: capped at THREAT_STOP_MAX_DIST_MM (the parser already rejects > 10 m/s). */
+    /* Very fast: capped at THREAT_STOP_MAX_DIST_MM (the parser already rejects
+     * > 10 m/s). */
     ThreatAssessment_Init();
     t.speed_cms = APPROACHING(900);
     t.distance_mm = (uint16_t)(THREAT_STOP_MAX_DIST_MM + 50U);
     TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
     t.distance_mm = THREAT_STOP_MAX_DIST_MM;
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 100U) & THREAT_CUE_STOP);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP,
+                            Run_Cue(&t, 1U, 100U) & THREAT_CUE_STOP);
 }
 
 void test_ThreatAssessment_StopDistanceIsFrozenWhileLatched(void)
 {
     ThreatAssessment_Init();
     /* 1.2 m/s: 500 + 1020 + 900 = 2420 mm, so STOP clears above 2520 mm. */
-    Radar_Target_t t = { .distance_mm = 2400U, .speed_cms = APPROACHING(120), .x_mm = 0, .is_valid = true };
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
-    /* The approach slows to a stop: STOP must not drop just because the speed fell. */
+    Radar_Target_t t = { .distance_mm = 2400U,
+                         .speed_cms = APPROACHING(120),
+                         .x_mm = 0,
+                         .is_valid = true };
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP,
+                            Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
+    /* The approach slows to a stop: STOP must not drop just because the speed
+     * fell. */
     t.speed_cms = 0;
     t.distance_mm = 2450U;
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 300U) & THREAT_CUE_STOP);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP,
+                            Run_Cue(&t, 1U, 300U) & THREAT_CUE_STOP);
     t.distance_mm = 2500U;
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 400U) & THREAT_CUE_STOP);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP,
+                            Run_Cue(&t, 1U, 400U) & THREAT_CUE_STOP);
     t.distance_mm = 2560U;
     TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 500U) & THREAT_CUE_STOP);
-    /* After clearing, the next STOP uses the new (zero) speed again: floor 1500 mm. */
+    /* After clearing, the next STOP uses the new (zero) speed again: floor
+     * 1500 mm. */
     t.distance_mm = 2000U;
     TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 600U) & THREAT_CUE_STOP);
 }
 
-/* A jogger at 3 m/s gets STOP at the 2800 mm ceiling, well before the 1500 mm floor. */
+/* A jogger at 3 m/s gets STOP at the 2800 mm ceiling, well before the 1500 mm
+ * floor. */
 void test_ThreatAssessment_JoggerGetsStopAtTheCeiling(void)
 {
     ThreatAssessment_Init();
-    Radar_Target_t t = { .distance_mm = 2900U, .speed_cms = APPROACHING(300), .x_mm = 0, .is_valid = true };
+    Radar_Target_t t = { .distance_mm = 2900U,
+                         .speed_cms = APPROACHING(300),
+                         .x_mm = 0,
+                         .is_valid = true };
     TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 0U) & THREAT_CUE_STOP);
     t.distance_mm = 2600U;
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, Run_Cue(&t, 1U, 100U) & THREAT_CUE_STOP);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP,
+                            Run_Cue(&t, 1U, 100U) & THREAT_CUE_STOP);
 }
 
 /* A fast target in a side lane is not in the user's path: no STOP. */
@@ -644,23 +671,33 @@ void test_ThreatAssessment_FastSideApproachDoesNotStop(void)
     TEST_ASSERT_EQUAL_UINT8(0U, Run_Cue(&t, 1U, 200U) & THREAT_CUE_STOP);
 }
 
-/* The LD2450 re-orders its slots: when a still person drops out, the person in the next
- * slot moves into their slot. That jump must be read as a different target, not as fast
- * sideways motion, otherwise the crossing filter hides the person and the lane clears
- * (bench log: a still person 2.5 m ahead plus one beside them). */
+/* The LD2450 re-orders its slots: when a still person drops out, the person in
+ * the next slot moves into their slot. That jump must be read as a different
+ * target, not as fast sideways motion, otherwise the crossing filter hides the
+ * person and the lane clears (bench log: a still person 2.5 m ahead plus one
+ * beside them). */
 void test_ThreatAssessment_RadarSlotReorderDoesNotClearLane(void)
 {
     ThreatAssessment_Init();
-    const Radar_Target_t centre = { .distance_mm = 2500U, .speed_cms = 0, .x_mm = USER_X(-100), .is_valid = true };
-    const Radar_Target_t right  = { .distance_mm = 2570U, .speed_cms = 0, .x_mm = USER_X(900), .is_valid = true };
-    const Radar_Target_t empty  = { .distance_mm = 0U, .speed_cms = 0, .x_mm = 0, .is_valid = false };
+    const Radar_Target_t centre = { .distance_mm = 2500U,
+                                    .speed_cms = 0,
+                                    .x_mm = USER_X(-100),
+                                    .is_valid = true };
+    const Radar_Target_t right = { .distance_mm = 2570U,
+                                   .speed_cms = 0,
+                                   .x_mm = USER_X(900),
+                                   .is_valid = true };
+    const Radar_Target_t empty = {
+        .distance_mm = 0U, .speed_cms = 0, .x_mm = 0, .is_valid = false
+    };
     Threat_Result_t res;
     for (uint32_t t = 0U; t < 6000U; t += 100U)
     {
         Radar_Target_t frame[3];
         if ((t % 1000U) < 400U)
         {
-            frame[0] = right; frame[1] = empty; frame[2] = empty;   /* centre person dropped out, slots shifted */
+            /* centre person dropped out, slots shifted */
+            frame[0] = right; frame[1] = empty; frame[2] = empty;
         }
         else
         {
@@ -669,23 +706,33 @@ void test_ThreatAssessment_RadarSlotReorderDoesNotClearLane(void)
         ThreatAssessment_ProcessTargetsAt(frame, 3U, GRIP_STATE_HELD, t, &res);
         if (t >= 500U)
         {
-            TEST_ASSERT_EQUAL_UINT8(0x01U, ThreatAssessment_GetBlockedMask() & 0x01U); /* centre stays blocked */
-            TEST_ASSERT_EQUAL_UINT8(0x04U, ThreatAssessment_GetBlockedMask() & 0x04U); /* right stays blocked */
+            /* centre stays blocked */
+            TEST_ASSERT_EQUAL_UINT8(0x01U,
+                                    ThreatAssessment_GetBlockedMask() & 0x01U);
+            /* right stays blocked */
+            TEST_ASSERT_EQUAL_UINT8(0x04U,
+                                    ThreatAssessment_GetBlockedMask() & 0x04U);
         }
     }
 }
 
-/* A departing obstacle keeps its lane blocked but reports "receding" so the glasses can
- * keep the buzzer quiet; it beeps again once it stops. STOP is never made quiet. */
+/* A departing obstacle keeps its lane blocked but reports "receding" so the
+ * glasses can keep the buzzer quiet; it beeps again once it stops. STOP is
+ * never made quiet. */
 void test_ThreatAssessment_DepartingObstacleIsReceding(void)
 {
     ThreatAssessment_Init();
     Threat_Result_t res;
-    Radar_Target_t t = { .distance_mm = 1800U, .speed_cms = APPROACHING(-40), .x_mm = USER_X(800), .is_valid = true };
+    Radar_Target_t t = { .distance_mm = 1800U,
+                         .speed_cms = APPROACHING(-40),
+                         .x_mm = USER_X(800),
+                         .is_valid = true };
     uint32_t now = 0U;
-    /* 40 mm per frame: quiet once the gap has grown THREAT_RECEDE_MIN_GAIN_MM, not before. */
+    /* 40 mm per frame: quiet once the gap has grown THREAT_RECEDE_MIN_GAIN_MM,
+     * not before. */
     const uint16_t start = t.distance_mm;
-    while ((uint32_t)t.distance_mm < ((uint32_t)start + THREAT_RECEDE_MIN_GAIN_MM))
+    while ((uint32_t)t.distance_mm <
+           ((uint32_t)start + THREAT_RECEDE_MIN_GAIN_MM))
     {
         ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
         TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
@@ -701,54 +748,73 @@ void test_ThreatAssessment_DepartingObstacleIsReceding(void)
     ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
     TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
 
-    /* STOP with the obstacle moving away beyond THREAT_STOP_RECEDE_MIN_MM: the STOP cue
-     * stays set (lanes, BLE) but it reports receding, so the tone can end early. */
+    /* STOP with the obstacle moving away beyond THREAT_STOP_RECEDE_MIN_MM: the
+     * STOP cue stays set (lanes, BLE) but it reports receding, so the tone can
+     * end early. */
     ThreatAssessment_Init();
-    Radar_Target_t c = { .distance_mm = 1000U, .speed_cms = APPROACHING(-40), .x_mm = 0, .is_valid = true };
+    Radar_Target_t c = { .distance_mm = 1000U,
+                         .speed_cms = APPROACHING(-40),
+                         .x_mm = 0,
+                         .is_valid = true };
     for (uint32_t k = 0U; k < 6U; k++)
     {
-        ThreatAssessment_ProcessTargetsAt(&c, 1U, GRIP_STATE_HELD, k * 100U, &res);
+        ThreatAssessment_ProcessTargetsAt(&c, 1U, GRIP_STATE_HELD, k * 100U,
+                                          &res);
         c.distance_mm = (uint16_t)(c.distance_mm + 40U);
     }
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, res.open_direction_cue & THREAT_CUE_STOP);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP,
+                            res.open_direction_cue & THREAT_CUE_STOP);
     TEST_ASSERT_TRUE(ThreatAssessment_IsReceding());
 
-    /* ... it turns back: the next frame is no longer receding, so STOP sounds again. */
+    /* ... it turns back: the next frame is no longer receding, so STOP sounds
+     * again. */
     c.speed_cms = APPROACHING(40);
     ThreatAssessment_ProcessTargetsAt(&c, 1U, GRIP_STATE_HELD, 600U, &res);
     TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
 
     /* Within THREAT_STOP_RECEDE_MIN_MM: never quiet, even when moving away. */
     ThreatAssessment_Init();
-    Radar_Target_t n = { .distance_mm = (uint16_t)(THREAT_STOP_RECEDE_MIN_MM - 200U), .speed_cms = APPROACHING(-40),
-                         .x_mm = 0, .is_valid = true };
+    Radar_Target_t n = { .distance_mm =
+                             (uint16_t)(THREAT_STOP_RECEDE_MIN_MM - 200U),
+                         .speed_cms = APPROACHING(-40),
+                         .x_mm = 0,
+                         .is_valid = true };
     for (uint32_t k = 0U; k < 5U; k++)
     {
-        ThreatAssessment_ProcessTargetsAt(&n, 1U, GRIP_STATE_HELD, k * 100U, &res);
+        ThreatAssessment_ProcessTargetsAt(&n, 1U, GRIP_STATE_HELD, k * 100U,
+                                          &res);
         n.distance_mm = (uint16_t)(n.distance_mm + 20U);
     }
-    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, res.open_direction_cue & THREAT_CUE_STOP);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP,
+                            res.open_direction_cue & THREAT_CUE_STOP);
     TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
 }
 
-/* Bench log: a person standing ~2 m ahead, then walking slowly towards the radar,
- * reads -16..-24 cm/s for a few frames at a time while the distance does not grow.
- * That must keep beeping. */
+/* Bench log: a person standing ~2 m ahead, then walking slowly towards the
+ * radar, reads -16..-24 cm/s for a few frames at a time while the distance does
+ * not grow. That must keep beeping. */
 void test_ThreatAssessment_SpeedJitterOnStillPersonIsNotReceding(void)
 {
-    static const int16_t jitter[12] = { -16, -24, -16, 8, -16, -16, -24, 0, -24, -16, -16, 8 };
-    static const int16_t drift[12]  = { 0, 10, -15, 20, -5, 15, -20, 5, 10, -30, -40, -50 };
+    static const int16_t jitter[12] = { -16, -24, -16, 8,   -16, -16,
+                                        -24, 0,   -24, -16, -16, 8 };
+    static const int16_t drift[12] = { 0,   10, -15, 20,  -5,  15,
+                                       -20, 5,  10,  -30, -40, -50 };
     for (uint8_t lane = 0U; lane < 2U; lane++)
     {
         ThreatAssessment_Init();
         Threat_Result_t res;
-        Radar_Target_t t = { .distance_mm = 2060U, .speed_cms = 0,
-                             .x_mm = (lane == 0U) ? 0 : USER_X(800), .is_valid = true };
+        Radar_Target_t t = { .distance_mm = 2060U,
+                             .speed_cms = 0,
+                             .x_mm = (lane == 0U) ? 0 : USER_X(800),
+                             .is_valid = true };
         for (uint32_t k = 0U; k < 60U; k++)
         {
             t.speed_cms = APPROACHING(jitter[k % 12U]);
-            t.distance_mm = (uint16_t)((int32_t)2060 + drift[k % 12U] - (int32_t)(k * 3U)); /* slow approach */
-            ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, k * 100U, &res);
+            /* slow approach */
+            t.distance_mm =
+                (uint16_t)((int32_t)2060 + drift[k % 12U] - (int32_t)(k * 3U));
+            ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, k * 100U,
+                                              &res);
             TEST_ASSERT_TRUE(res.is_threat_active);
             TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
         }
@@ -760,27 +826,39 @@ void test_ThreatAssessment_ApproachingObstacleIsNotReceding(void)
 {
     ThreatAssessment_Init();
     Threat_Result_t res;
-    Radar_Target_t t = { .distance_mm = 2800U, .speed_cms = APPROACHING(40), .x_mm = USER_X(-800), .is_valid = true };
+    Radar_Target_t t = { .distance_mm = 2800U,
+                         .speed_cms = APPROACHING(40),
+                         .x_mm = USER_X(-800),
+                         .is_valid = true };
     for (uint32_t k = 0U; k < 10U; k++)
     {
-        ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, k * 100U, &res);
+        ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, k * 100U,
+                                          &res);
         TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
         t.distance_mm = (uint16_t)(t.distance_mm - 40U);
     }
 }
 
-/* Bench log, three people standing 1.5-3 m ahead: the radar kept losing one of them
- * for more than the normal lane hold, so the guidance switched left/right. A lane whose
- * person was standing still is held for THREAT_STILL_LANE_HOLD_MS. */
+/* Bench log, three people standing 1.5-3 m ahead: the radar kept losing one of
+ * them for more than the normal lane hold, so the guidance switched left/right.
+ * A lane whose person was standing still is held for
+ * THREAT_STILL_LANE_HOLD_MS. */
 void test_ThreatAssessment_StillPersonDropoutKeepsLaneBlocked(void)
 {
     ThreatAssessment_Init();
     Radar_Target_t t[3] = {
-        { .distance_mm = 2200U, .speed_cms = 0, .x_mm = USER_X(-900), .is_valid = true },
+        { .distance_mm = 2200U,
+          .speed_cms = 0,
+          .x_mm = USER_X(-900),
+          .is_valid = true },
         { .distance_mm = 2300U, .speed_cms = 0, .x_mm = 0, .is_valid = true },
-        { .distance_mm = 2200U, .speed_cms = 0, .x_mm = USER_X(900), .is_valid = true }
+        { .distance_mm = 2200U,
+          .speed_cms = 0,
+          .x_mm = USER_X(900),
+          .is_valid = true }
     };
-    const uint8_t no_free = (uint8_t)(THREAT_CUE_SIDE_ALL_BLOCKED << THREAT_CUE_SIDE_SHIFT);
+    const uint8_t no_free =
+        (uint8_t)(THREAT_CUE_SIDE_ALL_BLOCKED << THREAT_CUE_SIDE_SHIFT);
     for (uint32_t now = 0U; now < 1000U; now += 100U)
     {
         (void)Run_Cue(t, 3U, now);
@@ -794,14 +872,17 @@ void test_ThreatAssessment_StillPersonDropoutKeepsLaneBlocked(void)
     TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, 2200U));
 }
 
-/* Someone who walks out of a lane is moving when last seen, so the lane clears after the
- * normal hold, not the still-person one. */
+/* Someone who walks out of a lane is moving when last seen, so the lane clears
+ * after the normal hold, not the still-person one. */
 void test_ThreatAssessment_PersonWalkingOutOfLaneClearsAfterNormalHold(void)
 {
     /* sideways out of the corridor at 1 m/s */
     ThreatAssessment_Init();
     Threat_Result_t res;
-    Radar_Target_t t = { .distance_mm = 2000U, .speed_cms = 0, .x_mm = USER_X(800), .is_valid = true };
+    Radar_Target_t t = { .distance_mm = 2000U,
+                         .speed_cms = 0,
+                         .x_mm = USER_X(800),
+                         .is_valid = true };
     uint32_t now = 0U;
     for (; now < 1000U; now += 100U)
     {
@@ -823,7 +904,10 @@ void test_ThreatAssessment_PersonWalkingOutOfLaneClearsAfterNormalHold(void)
 
     /* approaching, then gone */
     ThreatAssessment_Init();
-    Radar_Target_t a = { .distance_mm = 2500U, .speed_cms = APPROACHING(40), .x_mm = USER_X(-800), .is_valid = true };
+    Radar_Target_t a = { .distance_mm = 2500U,
+                         .speed_cms = APPROACHING(40),
+                         .x_mm = USER_X(-800),
+                         .is_valid = true };
     for (now = 0U; now < 500U; now += 100U)
     {
         ThreatAssessment_ProcessTargetsAt(&a, 1U, GRIP_STATE_HELD, now, &res);

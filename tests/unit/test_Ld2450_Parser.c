@@ -271,7 +271,8 @@ void test_Ld2450_DecodesLateralXAndEuclideanDistance(void)
 }
 
 /* An empty radar slot must not shift later targets down: ThreatAssessment keeps
- * per-slot tracking history, so a shifted target would inherit another person's. */
+ * per-slot tracking history, so a shifted target would inherit another
+ * person's. */
 void test_Ld2450_EmptySlotKeepsLaterTargetsInTheirOwnSlot(void)
 {
     uint8_t frame[30];
@@ -291,13 +292,16 @@ void test_Ld2450_EmptySlotKeepsLaterTargetsInTheirOwnSlot(void)
     TEST_ASSERT_FALSE(targets[2].is_valid);
 }
 
-static void SetSlot(uint8_t * const p_frame, uint8_t slot, int16_t x, int16_t y, int16_t speed)
+static void SetSlot(uint8_t * const p_frame, uint8_t slot, int16_t x, int16_t y,
+                    int16_t speed)
 {
     uint8_t * const p = &p_frame[4U + ((uint32_t)slot * 8U)];
     const int16_t val[3] = { x, y, speed };
     for (uint8_t i = 0U; i < 3U; i++)
     {
-        const uint16_t raw = (val[i] >= 0) ? (uint16_t)(0x8000U | (uint16_t)val[i]) : (uint16_t)(-val[i]);
+        const uint16_t raw = (val[i] >= 0)
+                                 ? (uint16_t)(0x8000U | (uint16_t)val[i])
+                                 : (uint16_t)(-val[i]);
         p[2U * i] = (uint8_t)(raw & 0xFFU);
         p[(2U * i) + 1U] = (uint8_t)(raw >> 8);
     }
@@ -309,7 +313,8 @@ void test_Ld2450_ImplausibleValuesAreNotValidTargets(void)
     frame[28] = 0x55U;
     frame[29] = 0xCCU;
     SetSlot(frame, 0U, 7000, 1000, 0);   /* sideways beyond the radar's reach */
-    SetSlot(frame, 1U, 0, 1000, 1500);   /* 15 m/s: not a walking speed, would give a tiny TTC */
+    /* 15 m/s: not a walking speed, would give a tiny TTC */
+    SetSlot(frame, 1U, 0, 1000, 1500);
     SetSlot(frame, 2U, 0, 9000, 0);      /* beyond the radar's range */
 
     Radar_Target_t targets[3];

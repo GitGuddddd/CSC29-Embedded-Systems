@@ -64,9 +64,9 @@ bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target
     }
 
     /* Every radar slot keeps its own index: an empty slot is returned as
-     * is_valid = false rather than letting later targets shift down. ThreatAssessment
-     * tracks per index, so compaction would hand one person's history to another.
-     */
+     * is_valid = false rather than letting later targets shift down.
+     * ThreatAssessment tracks per index, so compaction would hand one person's
+     * history to another. */
     for (uint8_t i = 0U; i < LD2450_CFG_MAX_TARGETS; i++)
     {
         p_targets[i] = (Radar_Target_t){ 0U, 0, 0, 0, false };
@@ -90,12 +90,14 @@ bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target
 
         (void)dist_res;
 
-        /* An empty slot is all zeros (y == 0). The limits reject values the radar cannot
-         * physically report, so one corrupt value cannot become, for example, a 15 m/s
-         * closing speed. */
+        /* An empty slot is all zeros (y == 0). The limits reject values the
+         * radar cannot physically report, so one corrupt value cannot become,
+         * for example, a 15 m/s closing speed. */
         const bool plausible = (y > 0) && (y <= LD2450_CFG_MAX_Y_MM) &&
-                               (x >= -LD2450_CFG_MAX_ABS_X_MM) && (x <= LD2450_CFG_MAX_ABS_X_MM) &&
-                               (speed >= -LD2450_CFG_MAX_ABS_SPEED_CMS) && (speed <= LD2450_CFG_MAX_ABS_SPEED_CMS);
+                               (x >= -LD2450_CFG_MAX_ABS_X_MM) &&
+                               (x <= LD2450_CFG_MAX_ABS_X_MM) &&
+                               (speed >= -LD2450_CFG_MAX_ABS_SPEED_CMS) &&
+                               (speed <= LD2450_CFG_MAX_ABS_SPEED_CMS);
 
         if (plausible)
         {

@@ -40,9 +40,12 @@ void test_Ld2450_ParseValidFrame(void)
 
     bool ok = Ld2450_ParseFrame(frame, 30U, targets, &count);
     TEST_ASSERT_TRUE(ok);
-    TEST_ASSERT_EQUAL_UINT8(1U, count);
+    TEST_ASSERT_EQUAL_UINT8(3U, count); /* every radar slot is returned */
+    TEST_ASSERT_TRUE(targets[0].is_valid);
     TEST_ASSERT_EQUAL_UINT16(1500U, targets[0].distance_mm);
     TEST_ASSERT_EQUAL_INT16(25, targets[0].speed_cms);
+    TEST_ASSERT_FALSE(targets[1].is_valid);
+    TEST_ASSERT_FALSE(targets[2].is_valid);
 }
 
 void test_Ld2450_RejectsCorruptFooter(void)
@@ -85,12 +88,16 @@ void test_StreamWaitsForCompleteFrame_AndReturnsLatestFrame(void)
     MakeFrame(frame, 900U);
     TEST_ASSERT_TRUE(Hal_Uart_TestInjectRx(frame, sizeof(frame)));
     TEST_ASSERT_TRUE(Ld2450_ProcessStream(targets, &count, 40U));
-    TEST_ASSERT_EQUAL_UINT8(1U, count);
+    TEST_ASSERT_EQUAL_UINT8(3U, count);
+    TEST_ASSERT_TRUE(targets[0].is_valid);
     TEST_ASSERT_EQUAL_UINT16(900U, targets[0].distance_mm);
     MakeFrame(frame, 0U); /* A complete no-target frame is healthy data, not a timeout. */
     TEST_ASSERT_TRUE(Hal_Uart_TestInjectRx(frame, sizeof(frame)));
     TEST_ASSERT_TRUE(Ld2450_ProcessStream(targets, &count, 60U));
-    TEST_ASSERT_EQUAL_UINT8(0U, count);
+    TEST_ASSERT_EQUAL_UINT8(3U, count);
+    TEST_ASSERT_FALSE(targets[0].is_valid);
+    TEST_ASSERT_FALSE(targets[1].is_valid);
+    TEST_ASSERT_FALSE(targets[2].is_valid);
     TEST_ASSERT_FALSE(Ld2450_HasRxFault());
 }
 
@@ -206,7 +213,8 @@ void test_PartialHeadersAndBadFooterCannotPublishAnUninitializedBody(void)
     uint8_t count;
     TEST_ASSERT_TRUE(Hal_Uart_TestInjectRx(stream, sizeof(stream)));
     TEST_ASSERT_TRUE(Ld2450_ProcessStream(targets, &count, 20U));
-    TEST_ASSERT_EQUAL_UINT8(1U, count);
+    TEST_ASSERT_EQUAL_UINT8(3U, count);
+    TEST_ASSERT_TRUE(targets[0].is_valid);
     TEST_ASSERT_EQUAL_UINT16(1300U, targets[0].distance_mm);
     TEST_ASSERT_FALSE(Ld2450_HasRxFault());
     TEST_ASSERT_EQUAL_UINT32(0U, Ld2450_GetOverrunCount());
@@ -248,7 +256,8 @@ void test_Ld2450_DecodesLateralXAndEuclideanDistance(void)
     Radar_Target_t targets[3];
     uint8_t count = 0U;
     TEST_ASSERT_TRUE(Ld2450_ParseFrame(frame, sizeof(frame), targets, &count));
-    TEST_ASSERT_EQUAL_UINT8(2U, count);
+    TEST_ASSERT_EQUAL_UINT8(3U, count);
+    TEST_ASSERT_FALSE(targets[2].is_valid);
 
     TEST_ASSERT_TRUE(targets[0].is_valid);
     TEST_ASSERT_EQUAL_INT16(-300, targets[0].x_mm);
@@ -259,6 +268,27 @@ void test_Ld2450_DecodesLateralXAndEuclideanDistance(void)
     TEST_ASSERT_EQUAL_INT16(600, targets[1].x_mm);
     TEST_ASSERT_EQUAL_UINT16(1000U, targets[1].distance_mm);
     TEST_ASSERT_EQUAL_INT16(-15, targets[1].speed_cms);
+}
+
+/* An empty radar slot must not shift later targets down: ThreatAssessment keeps
+ * per-slot tracking history, so a shifted target would inherit another person's. */
+void test_Ld2450_EmptySlotKeepsLaterTargetsInTheirOwnSlot(void)
+{
+    uint8_t frame[30];
+    MakeFrame(frame, 0U); /* slot 0 empty */
+    const uint16_t y1_raw = (uint16_t)(0x8000U | 2400U);
+    const uint16_t x1_raw = (uint16_t)(0x8000U | 900U);
+    frame[12] = (uint8_t)(x1_raw & 0xFFU); frame[13] = (uint8_t)(x1_raw >> 8);
+    frame[14] = (uint8_t)(y1_raw & 0xFFU); frame[15] = (uint8_t)(y1_raw >> 8);
+
+    Radar_Target_t targets[3];
+    uint8_t count = 0U;
+    TEST_ASSERT_TRUE(Ld2450_ParseFrame(frame, sizeof(frame), targets, &count));
+    TEST_ASSERT_EQUAL_UINT8(3U, count);
+    TEST_ASSERT_FALSE(targets[0].is_valid);
+    TEST_ASSERT_TRUE(targets[1].is_valid);
+    TEST_ASSERT_EQUAL_INT16(900, targets[1].x_mm);
+    TEST_ASSERT_FALSE(targets[2].is_valid);
 }
 
 int main(void)
@@ -275,5 +305,6 @@ int main(void)
     RUN_TEST(test_DmaFaultAndInvalidConfigurationAreReported);
     RUN_TEST(test_PartialHeadersAndBadFooterCannotPublishAnUninitializedBody);
     RUN_TEST(test_Ld2450_DecodesLateralXAndEuclideanDistance);
+    RUN_TEST(test_Ld2450_EmptySlotKeepsLaterTargetsInTheirOwnSlot);
     return UNITY_END();
 }

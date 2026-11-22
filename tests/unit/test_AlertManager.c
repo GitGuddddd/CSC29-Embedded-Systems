@@ -875,6 +875,38 @@ void test_AlertManager_LastBeepFinishesWhenObstacleClears(void)
     TEST_ASSERT_FALSE(out.buzzer_active);                                 /* STOP ends immediately */
 }
 
+/* When STOP ends and a beep pattern follows, the tone stops and a clear silence of
+ * ALERT_OBSTACLE_SWITCH_GAP_MS comes before the first beep (no beep run onto the tone). */
+void test_AlertManager_StopEndIsFollowedBySilenceBeforeBeeps(void)
+{
+    AlertManager_Init();
+    for (uint32_t t = 0U; t < 1000U; t += 10U)
+    {
+        TEST_ASSERT_TRUE(Obstacle_Step(ALERT_CUE_STOP, 1200U, t).buzzer_active);
+    }
+    uint32_t off_at = UINT32_MAX;
+    uint32_t next_on = UINT32_MAX;
+    bool prev_on = true;
+    for (uint32_t t = 1000U; t < 3000U; t += 10U)
+    {
+        const bool on = Obstacle_Step(CUE_LEFT, 1200U, t).buzzer_active;
+        if (!on && prev_on && (off_at == UINT32_MAX))
+        {
+            off_at = t;
+        }
+        if (on && !prev_on && (off_at != UINT32_MAX) && (next_on == UINT32_MAX))
+        {
+            next_on = t;
+        }
+        prev_on = on;
+    }
+    TEST_ASSERT_NOT_EQUAL_UINT32(UINT32_MAX, off_at);
+    TEST_ASSERT_NOT_EQUAL_UINT32(UINT32_MAX, next_on);
+    TEST_ASSERT_TRUE((next_on - off_at) >= ALERT_OBSTACLE_SWITCH_GAP_MS);
+    /* the tone ended after the cue dwell, not before */
+    TEST_ASSERT_TRUE(off_at >= (1000U + ALERT_OBSTACLE_CUE_DWELL_MS));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -909,5 +941,6 @@ int main(void)
     RUN_TEST(test_AlertManager_PatternChangeNeverMergesBursts);
     RUN_TEST(test_AlertManager_MultiBeepPauseHasFloor);
     RUN_TEST(test_AlertManager_LastBeepFinishesWhenObstacleClears);
+    RUN_TEST(test_AlertManager_StopEndIsFollowedBySilenceBeforeBeeps);
     return UNITY_END();
 }

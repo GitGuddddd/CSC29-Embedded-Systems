@@ -286,9 +286,22 @@ static void Obstacle_Update(uint32_t now_ms, uint16_t distance_mm)
         {
             if (!beep_to_beep)
             {
-                s_obs_cue = s_obs_pending_cue; /* leaving STOP: unchanged */
+                /* Leaving STOP for a beep pattern: the continuous tone ends here, then the
+                 * same clear silence as any other pattern change, so the end of STOP is
+                 * heard as an end and the first beep is not run onto the tone. */
+                const bool stop_falling = ((s_obs_cue & ALERT_CUE_STOP) != 0U) &&
+                                          ((s_obs_pending_cue & ALERT_CUE_STOP) == 0U);
+                s_obs_cue = s_obs_pending_cue;
                 Obstacle_TrackPattern(now_ms);
-                Obstacle_StartCycle(now_ms);
+                if (stop_falling)
+                {
+                    s_obs_last_off_ms = now_ms;
+                    Obstacle_StartCycleSeparated(now_ms);
+                }
+                else
+                {
+                    Obstacle_StartCycle(now_ms);
+                }
             }
             else if (s_obs_flags.beep_on == 0U)
             {

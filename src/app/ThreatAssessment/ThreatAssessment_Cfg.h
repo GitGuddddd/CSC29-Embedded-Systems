@@ -55,6 +55,16 @@
 #define THREAT_RECEDE_FRAMES         (3U)
 
 /*
+ * ... and the gap must also have grown by this much since the run began. The LD2450
+ * reports ~8 cm/s speed steps and jitters by +/-16-24 cm/s on a person standing or
+ * walking slowly, so three negative speed readings alone happen by chance (bench log:
+ * a person 2.0-2.2 m ahead walking slowly towards the radar went silent every other
+ * second). Distance jitter is ~30 mm, so 150 mm is a real departure: ~0.15 s at a
+ * normal walk, ~0.4 s at a slow one.
+ */
+#define THREAT_RECEDE_MIN_GAIN_MM    (150U)
+
+/*
  * A STOP is made quiet the same way when its obstacle is moving away (the radar
  * measures relative speed, so a growing gap means the wearer is not closing on it),
  * but never while the obstacle is within this distance. Bench log: a person walking

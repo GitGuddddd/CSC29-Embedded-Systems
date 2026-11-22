@@ -681,13 +681,17 @@ void test_ThreatAssessment_DepartingObstacleIsReceding(void)
     Threat_Result_t res;
     Radar_Target_t t = { .distance_mm = 1800U, .speed_cms = APPROACHING(-40), .x_mm = USER_X(800), .is_valid = true };
     uint32_t now = 0U;
-    for (uint8_t f = 0U; f < THREAT_RECEDE_FRAMES; f++)
+    /* 40 mm per frame: quiet once the gap has grown THREAT_RECEDE_MIN_GAIN_MM, not before. */
+    const uint16_t start = t.distance_mm;
+    while ((uint32_t)t.distance_mm < ((uint32_t)start + THREAT_RECEDE_MIN_GAIN_MM))
     {
-        TEST_ASSERT_FALSE(ThreatAssessment_IsReceding() && (f + 1U < THREAT_RECEDE_FRAMES));
         ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
+        TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
         t.distance_mm = (uint16_t)(t.distance_mm + 40U);
         now += 100U;
     }
+    ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
+    now += 100U;
     TEST_ASSERT_TRUE(res.is_threat_active);         /* lane still blocked */
     TEST_ASSERT_TRUE(ThreatAssessment_IsReceding());
 
@@ -723,6 +727,30 @@ void test_ThreatAssessment_DepartingObstacleIsReceding(void)
     }
     TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, res.open_direction_cue & THREAT_CUE_STOP);
     TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
+}
+
+/* Bench log: a person standing ~2 m ahead, then walking slowly towards the radar,
+ * reads -16..-24 cm/s for a few frames at a time while the distance does not grow.
+ * That must keep beeping. */
+void test_ThreatAssessment_SpeedJitterOnStillPersonIsNotReceding(void)
+{
+    static const int16_t jitter[12] = { -16, -24, -16, 8, -16, -16, -24, 0, -24, -16, -16, 8 };
+    static const int16_t drift[12]  = { 0, 10, -15, 20, -5, 15, -20, 5, 10, -30, -40, -50 };
+    for (uint8_t lane = 0U; lane < 2U; lane++)
+    {
+        ThreatAssessment_Init();
+        Threat_Result_t res;
+        Radar_Target_t t = { .distance_mm = 2060U, .speed_cms = 0,
+                             .x_mm = (lane == 0U) ? 0 : USER_X(800), .is_valid = true };
+        for (uint32_t k = 0U; k < 60U; k++)
+        {
+            t.speed_cms = APPROACHING(jitter[k % 12U]);
+            t.distance_mm = (uint16_t)((int32_t)2060 + drift[k % 12U] - (int32_t)(k * 3U)); /* slow approach */
+            ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, k * 100U, &res);
+            TEST_ASSERT_TRUE(res.is_threat_active);
+            TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
+        }
+    }
 }
 
 /* An approaching obstacle is never receding. */
@@ -774,5 +802,6 @@ int main(void)
     RUN_TEST(test_ThreatAssessment_RadarSlotReorderDoesNotClearLane);
     RUN_TEST(test_ThreatAssessment_DepartingObstacleIsReceding);
     RUN_TEST(test_ThreatAssessment_ApproachingObstacleIsNotReceding);
+    RUN_TEST(test_ThreatAssessment_SpeedJitterOnStillPersonIsNotReceding);
     return UNITY_END();
 }

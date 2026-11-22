@@ -22,8 +22,10 @@ typedef struct
     uint32_t cleared_at_ms;
     uint16_t last_dist_mm;
     int16_t held_closing_cms;
-    uint8_t blocked : 1;
-    uint8_t ever_blocked : 1;
+    uint16_t blocked : 1;
+    uint16_t ever_blocked : 1;
+    uint16_t recede_from_mm : 12; /* closest distance since this lane began moving away */
+    uint16_t reserved : 2;
 } Threat_LaneState_t;
 
 static Threat_LaneState_t s_lanes[THREAT_LANE_COUNT];
@@ -64,6 +66,7 @@ static Threat_Flags_t s_ta = { 0U, 0U, 0U, 0U, 0U, 0U, 0U };
 
 _Static_assert(sizeof(Threat_Flags_t) == 4U, "Threat flags must pack into 32 bits");
 _Static_assert(THREAT_RECEDE_FRAMES <= 3U, "recede counters are 2-bit");
+_Static_assert(THREAT_ALERT_CLEAR_DIST_MM <= 4095U, "recede start distance must fit 12 bits");
 _Static_assert((THREAT_STOP_MAX_DIST_MM + THREAT_STOP_HYST_MM) <= 4095U, "STOP clear distance must fit 12 bits");
 _Static_assert(THREAT_STOP_MAX_DIST_MM < THREAT_ALERT_ENTER_DIST_MM, "STOP must fire inside the alert zone");
 
@@ -123,6 +126,7 @@ static void Reset_Lane(Threat_LaneState_t * const p_lane)
     p_lane->held_closing_cms = 0;
     p_lane->speed_hold_pending_ms = UINT32_MAX;
     p_lane->ever_blocked = 0U;
+    p_lane->recede_from_mm = 0U;
     p_lane->cleared_at_ms = 0U;
 }
 
@@ -649,6 +653,13 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
             if (lane_live_speed[lane] <= -THREAT_RECEDE_MIN_CMS)
             {
                 const uint8_t frames = Recede_Get(lane);
+                const uint16_t dist = s_lanes[lane].last_dist_mm;
+                /* Remember the closest point of this run: the gap must really grow
+                 * from there, so speed jitter on a still person cannot silence it. */
+                if ((frames == 0U) || (dist < s_lanes[lane].recede_from_mm))
+                {
+                    s_lanes[lane].recede_from_mm = dist & 0x0FFFU;
+                }
                 if (frames < THREAT_RECEDE_FRAMES)
                 {
                     Recede_Set(lane, (uint8_t)(frames + 1U)); /* saturates at the threshold */
@@ -716,7 +727,9 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
                             (s_lanes[THREAT_LANE_CENTER].last_dist_mm > THREAT_STOP_RECEDE_MIN_MM);
         for (uint8_t lane = 0U; lane < (uint8_t)THREAT_LANE_COUNT; lane++)
         {
-            if (s_lanes[lane].blocked && (Recede_Get(lane) < THREAT_RECEDE_FRAMES))
+            if (s_lanes[lane].blocked &&
+                ((Recede_Get(lane) < THREAT_RECEDE_FRAMES) ||
+                 (s_lanes[lane].last_dist_mm < ((uint32_t)s_lanes[lane].recede_from_mm + THREAT_RECEDE_MIN_GAIN_MM))))
             {
                 all_receding = false;
             }

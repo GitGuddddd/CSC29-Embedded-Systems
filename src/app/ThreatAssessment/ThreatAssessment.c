@@ -67,10 +67,16 @@ typedef struct
     uint32_t side_0 : 2;
     uint32_t side_1 : 2;
     uint32_t side_2 : 2;
-    uint32_t reserved : 6;
+    /* Filter flags for the last frame (THREAT_FLT_* in ThreatAssessment.h) */
+    uint32_t flt_outside : 1;
+    uint32_t flt_crossing : 1;
+    uint32_t flt_slot_jump : 1;
+    uint32_t flt_still_hold : 1;
+    uint32_t reserved : 2;
 } Threat_Flags_t;
 
-static Threat_Flags_t s_ta = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+static Threat_Flags_t s_ta = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U,
+                                0U, 0U, 0U, 0U };
 
 _Static_assert(sizeof(Threat_Flags_t) == 4U,
                "Threat flags must pack into 32 bits");
@@ -83,6 +89,42 @@ _Static_assert((THREAT_STOP_MAX_DIST_MM + THREAT_STOP_HYST_MM) <= 4095U,
                "STOP clear distance must fit 12 bits");
 _Static_assert(THREAT_STOP_MAX_DIST_MM < THREAT_ALERT_ENTER_DIST_MM,
                "STOP must fire inside the alert zone");
+
+/* What happened to each radar slot in the last frame (THREAT_SLOT_*), for the
+ * debug view: 3 bits per slot. Radar task only, like s_ta. */
+typedef struct
+{
+    uint16_t slot_0 : 3;
+    uint16_t slot_1 : 3;
+    uint16_t slot_2 : 3;
+    uint16_t reserved : 7;
+} Threat_SlotView_t;
+
+_Static_assert(sizeof(Threat_SlotView_t) == 2U,
+               "slot view must pack into 16 bits");
+_Static_assert(THREAT_SLOT_CROSSING <= 7U, "a slot status must fit 3 bits");
+
+static Threat_SlotView_t s_slots = { 0U, 0U, 0U, 0U };
+
+static void Slot_Set(uint8_t slot, uint8_t status)
+{
+    if (slot == 1U)
+    {
+        s_slots.slot_1 = status & 0x07U;
+    }
+    else if (slot == 2U)
+    {
+        s_slots.slot_2 = status & 0x07U;
+    }
+    else if (slot == 0U)
+    {
+        s_slots.slot_0 = status & 0x07U;
+    }
+    else
+    {
+        /* the radar has three slots */
+    }
+}
 
 static uint8_t Recede_Get(uint8_t lane)
 {
@@ -186,7 +228,8 @@ static void Reset_AllState(void)
     {
         Reset_Lane(&s_lanes[lane]);
     }
-    s_ta = (Threat_Flags_t){ 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+    s_ta = (Threat_Flags_t){ 0U, 0U, 0U, 0U, 0U, 0U, 0U,
+                             0U, 0U, 0U, 0U, 0U, 0U, 0U };
     for (uint8_t i = 0U; i < 3U; i++)
     {
         Side_Set(i, THREAT_LANE_CENTER);
@@ -281,6 +324,7 @@ static bool Track_IsCrossing(uint8_t slot,
     {
         *p_new_target = true; /* different target: start a fresh track */
         p_trk->has_prev = 0U;
+        s_ta.flt_slot_jump = 1U;
     }
 
     if ((p_trk->has_prev != 0U) &&
@@ -587,6 +631,69 @@ uint8_t ThreatAssessment_GetBlockedMask(void)
     return mask;
 }
 
+uint8_t ThreatAssessment_GetSlotStatus(uint8_t slot)
+{
+    uint8_t status = (uint8_t)s_slots.slot_0;
+    if (slot == 1U)
+    {
+        status = (uint8_t)s_slots.slot_1;
+    }
+    else if (slot == 2U)
+    {
+        status = (uint8_t)s_slots.slot_2;
+    }
+    else if (slot != 0U)
+    {
+        status = THREAT_SLOT_EMPTY;
+    }
+    else
+    {
+        /* slot 0 */
+    }
+    return status;
+}
+
+int16_t ThreatAssessment_UserLateralMm(int16_t radar_x_mm)
+{
+    return Lateral_Mm(radar_x_mm);
+}
+
+uint16_t ThreatAssessment_ForwardMm(uint16_t distance_mm, int16_t x_mm)
+{
+    return Forward_Mm(distance_mm, x_mm);
+}
+
+int16_t ThreatAssessment_ClosingCms(int16_t radar_speed_cms)
+{
+    return Closing_Cms(radar_speed_cms);
+}
+
+uint8_t ThreatAssessment_GetFilterFlags(void)
+{
+    uint8_t flags = 0U;
+    if (s_ta.flt_outside != 0U)
+    {
+        flags |= THREAT_FLT_OUTSIDE;
+    }
+    if (s_ta.flt_crossing != 0U)
+    {
+        flags |= THREAT_FLT_CROSSING;
+    }
+    if (s_ta.flt_slot_jump != 0U)
+    {
+        flags |= THREAT_FLT_SLOT_JUMP;
+    }
+    if (s_ta.receding != 0U)
+    {
+        flags |= THREAT_FLT_RECEDING;
+    }
+    if (s_ta.flt_still_hold != 0U)
+    {
+        flags |= THREAT_FLT_STILL_HOLD;
+    }
+    return flags;
+}
+
 void ThreatAssessment_Init(void)
 {
     Reset_AllState();
@@ -612,6 +719,12 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
      * still scanned while released so their occupancy stays current; only the
      * reported result is forced clear (see the end of this function).
      */
+    s_slots = (Threat_SlotView_t){ 0U, 0U, 0U, 0U }; /* THREAT_SLOT_EMPTY */
+    s_ta.flt_outside = 0U;
+    s_ta.flt_crossing = 0U;
+    s_ta.flt_slot_jump = 0U;
+    s_ta.flt_still_hold = 0U;
+
     bool lane_present[THREAT_LANE_COUNT] = { false, false, false };
     uint16_t lane_nearest_mm[THREAT_LANE_COUNT] = { UINT16_MAX, UINT16_MAX, UINT16_MAX };
     int16_t lane_live_speed[THREAT_LANE_COUNT] = { 0, 0, 0 };
@@ -658,11 +771,15 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
             {
                 Side_Set(i, THREAT_LANE_CENTER);
             }
+            s_ta.flt_outside = 1U;
+            Slot_Set(i, THREAT_SLOT_OUTSIDE);
             continue;
         }
 
         if (crossing)
         {
+            s_ta.flt_crossing = 1U;
+            Slot_Set(i, THREAT_SLOT_CROSSING);
             /* Not counted, but it is moving: a person who stood in this lane
              * and then walks across must not get the still-person hold. */
             const Threat_Lane_t cross_side = Classify_Side(
@@ -679,6 +796,7 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
         {
             Side_Set(i, side);
         }
+        Slot_Set(i, (uint8_t)((uint8_t)side + THREAT_SLOT_CENTER));
 
         if (!lane_present[side] || (p_t->distance_mm < lane_nearest_mm[side]))
         {
@@ -725,6 +843,15 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
             /* no target this frame: keep how it was last seen */
         }
         Update_LaneOccupancy(&s_lanes[lane], lane_present[lane], lane_nearest_mm[lane], now_ms);
+        /* Still blocked only because of the longer still-person hold. */
+        if (s_lanes[lane].blocked && !lane_present[lane] &&
+            (s_lanes[lane].still != 0U) &&
+            (s_lanes[lane].hold_pending_ms != UINT32_MAX) &&
+            ((uint32_t)(now_ms - s_lanes[lane].hold_pending_ms) >=
+             THREAT_LANE_HOLD_MS))
+        {
+            s_ta.flt_still_hold = 1U;
+        }
         lane_eff_speed[lane] = Update_LaneSpeed(&s_lanes[lane], lane_present[lane], lane_live_speed[lane], now_ms);
         if (s_lanes[lane].blocked)
         {

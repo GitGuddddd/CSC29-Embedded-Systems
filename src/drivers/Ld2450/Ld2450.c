@@ -8,6 +8,19 @@
  * Compliance: Barr-C:2018
  */
 
+/* Per slot: the last parsed frame had a non-empty slot with a value outside
+ * the physical limits (bit n = slot n). Written by ParseFrame and read by
+ * Ld2450_GetImplausibleMask, both from the radar task only. */
+typedef struct
+{
+    uint8_t implausible : 3;
+    uint8_t reserved : 5;
+} Ld2450_Flags_t;
+
+_Static_assert(LD2450_CFG_MAX_TARGETS <= 3U, "one implausible bit per slot");
+
+static Ld2450_Flags_t s_ld = { 0U, 0U };
+
 static int16_t Decode_SignedMagnitude(uint16_t raw)
 {
     int16_t magnitude = (int16_t)(raw & 0x7FFFU);
@@ -73,6 +86,7 @@ bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target
     }
 
     /* Up to 3 targets: 8 bytes per target starting at index 4 */
+    uint8_t implausible = 0U;
     for (uint8_t i = 0U; i < LD2450_CFG_MAX_TARGETS; i++)
     {
         uint32_t offset = 4U + (i * 8U);
@@ -110,8 +124,22 @@ bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target
             p_targets[i].angle_deg = 0;
             p_targets[i].x_mm = x;
         }
+        else if ((x_raw != 0U) || (y_raw != 0U) || (speed_raw != 0U))
+        {
+            implausible |= (uint8_t)(1U << i); /* not empty, but rejected */
+        }
+        else
+        {
+            /* empty slot */
+        }
     }
+    s_ld.implausible = implausible & 0x07U;
 
     *p_count = (uint8_t)LD2450_CFG_MAX_TARGETS;
     return true;
+}
+
+uint8_t Ld2450_GetImplausibleMask(void)
+{
+    return (uint8_t)s_ld.implausible;
 }

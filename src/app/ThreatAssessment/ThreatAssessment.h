@@ -37,6 +37,40 @@ typedef struct
  * obstacles; the threat result, lanes and the STOP cue bit are unaffected. */
 bool ThreatAssessment_IsReceding(void);
 
+/*
+ * Filter flags: one bit per filtering step, set when that step acted on the
+ * last radar frame (minimum-bit representation: one shared bitmask). Bit 2 is
+ * set by the radar driver (Ld2450_GetImplausibleMask), not here.
+ */
+#define THREAT_FLT_OUTSIDE     (0x01U) /* a target was outside the corridor */
+#define THREAT_FLT_CROSSING    (0x02U) /* a target only crossing the path */
+#define THREAT_FLT_IMPLAUSIBLE (0x04U) /* radar value out of physical limits */
+#define THREAT_FLT_SLOT_JUMP   (0x08U) /* radar handed a slot to a new target */
+#define THREAT_FLT_RECEDING    (0x10U) /* buzzer quiet: obstacle moving away */
+#define THREAT_FLT_STILL_HOLD  (0x20U) /* lane held by the still-person hold */
+
+/* THREAT_FLT_* bits for the last ThreatAssessment_ProcessTargetsAt() call. */
+uint8_t ThreatAssessment_GetFilterFlags(void);
+
+/* What ThreatAssessment did with each radar slot in the last frame. A slot
+ * the radar driver rejected (Ld2450_GetImplausibleMask) shows as EMPTY. */
+#define THREAT_SLOT_EMPTY    (0U) /* no target in this slot */
+#define THREAT_SLOT_CENTER   (1U) /* counted in the centre lane */
+#define THREAT_SLOT_LEFT     (2U) /* counted in the left lane */
+#define THREAT_SLOT_RIGHT    (3U) /* counted in the right lane */
+#define THREAT_SLOT_OUTSIDE  (4U) /* ignored: outside the corridor */
+#define THREAT_SLOT_CROSSING (5U) /* ignored: only crossing the path */
+
+/* THREAT_SLOT_* for radar slot 0..2 in the last frame. */
+uint8_t ThreatAssessment_GetSlotStatus(uint8_t slot);
+
+/* Debug helpers, using the same conversions as the decision: the sideways
+ * position in the user's frame (negative = left), the forward distance, and
+ * the closing speed (positive = coming closer). */
+int16_t ThreatAssessment_UserLateralMm(int16_t radar_x_mm);
+uint16_t ThreatAssessment_ForwardMm(uint16_t distance_mm, int16_t x_mm);
+int16_t ThreatAssessment_ClosingCms(int16_t radar_speed_cms);
+
 /* Debug: bit n set = lane n (THREAT_LANE_CENTER/LEFT/RIGHT) is currently blocked. */
 uint8_t ThreatAssessment_GetBlockedMask(void);
 

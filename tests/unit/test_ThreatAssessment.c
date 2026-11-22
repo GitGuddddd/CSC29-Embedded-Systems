@@ -1003,6 +1003,35 @@ void test_ThreatAssessment_FilterFlagsMarkEachFilter(void)
     TEST_ASSERT_EQUAL_UINT8(0U, ThreatAssessment_GetFilterFlags());
 }
 
+/* The debug view's per-slot status follows what the decision did. */
+void test_ThreatAssessment_SlotStatusShowsWhatHappenedToEachSlot(void)
+{
+    ThreatAssessment_Init();
+    Threat_Result_t res;
+    Radar_Target_t t[3] = {
+        { .distance_mm = 2000U, .speed_cms = 0, .x_mm = USER_X(-800),
+          .is_valid = true },
+        { .distance_mm = 0U, .speed_cms = 0, .x_mm = 0, .is_valid = false },
+        { .distance_mm = 2500U, .speed_cms = 0, .x_mm = USER_X(2000),
+          .is_valid = true }
+    };
+    ThreatAssessment_ProcessTargetsAt(t, 3U, GRIP_STATE_HELD, 0U, &res);
+    TEST_ASSERT_EQUAL_UINT8(THREAT_SLOT_LEFT,
+                            ThreatAssessment_GetSlotStatus(0U));
+    TEST_ASSERT_EQUAL_UINT8(THREAT_SLOT_EMPTY,
+                            ThreatAssessment_GetSlotStatus(1U));
+    TEST_ASSERT_EQUAL_UINT8(THREAT_SLOT_OUTSIDE,
+                            ThreatAssessment_GetSlotStatus(2U));
+    TEST_ASSERT_EQUAL_UINT8(THREAT_SLOT_EMPTY,
+                            ThreatAssessment_GetSlotStatus(3U));
+
+    /* Debug conversions match the decision's: user frame, forward distance,
+     * closing speed. */
+    TEST_ASSERT_EQUAL_INT16(-800, ThreatAssessment_UserLateralMm(USER_X(-800)));
+    TEST_ASSERT_EQUAL_UINT16(1600U, ThreatAssessment_ForwardMm(2000U, -1200));
+    TEST_ASSERT_EQUAL_INT16(40, ThreatAssessment_ClosingCms(APPROACHING(40)));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1042,5 +1071,6 @@ int main(void)
     RUN_TEST(test_ThreatAssessment_StillPersonDropoutKeepsLaneBlocked);
     RUN_TEST(test_ThreatAssessment_PersonWalkingOutOfLaneClearsAfterNormalHold);
     RUN_TEST(test_ThreatAssessment_FilterFlagsMarkEachFilter);
+    RUN_TEST(test_ThreatAssessment_SlotStatusShowsWhatHappenedToEachSlot);
     return UNITY_END();
 }

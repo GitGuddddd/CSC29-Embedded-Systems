@@ -52,6 +52,25 @@ bool ThreatAssessment_IsReceding(void);
 /* THREAT_FLT_* bits for the last ThreatAssessment_ProcessTargetsAt() call. */
 uint8_t ThreatAssessment_GetFilterFlags(void);
 
+/* What ThreatAssessment did with each radar slot in the last frame. A slot
+ * the radar driver rejected (Ld2450_GetImplausibleMask) shows as EMPTY. */
+#define THREAT_SLOT_EMPTY    (0U) /* no target in this slot */
+#define THREAT_SLOT_CENTER   (1U) /* counted in the centre lane */
+#define THREAT_SLOT_LEFT     (2U) /* counted in the left lane */
+#define THREAT_SLOT_RIGHT    (3U) /* counted in the right lane */
+#define THREAT_SLOT_OUTSIDE  (4U) /* ignored: outside the corridor */
+#define THREAT_SLOT_CROSSING (5U) /* ignored: only crossing the path */
+
+/* THREAT_SLOT_* for radar slot 0..2 in the last frame. */
+uint8_t ThreatAssessment_GetSlotStatus(uint8_t slot);
+
+/* Debug helpers, using the same conversions as the decision: the sideways
+ * position in the user's frame (negative = left), the forward distance, and
+ * the closing speed (positive = coming closer). */
+int16_t ThreatAssessment_UserLateralMm(int16_t radar_x_mm);
+uint16_t ThreatAssessment_ForwardMm(uint16_t distance_mm, int16_t x_mm);
+int16_t ThreatAssessment_ClosingCms(int16_t radar_speed_cms);
+
 /* Debug: bit n set = lane n (THREAT_LANE_CENTER/LEFT/RIGHT) is currently blocked. */
 uint8_t ThreatAssessment_GetBlockedMask(void);
 

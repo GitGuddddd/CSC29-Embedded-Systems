@@ -85,15 +85,16 @@ static void Clear_HeadFall(Glasses_FallState_t * const p_fall,
  * bits1-2 side (0 centre, 1 left, 2 right, 3 no free side lane). quiet: 0
  * audible, 1 standby, 2 cane not held, 3 radar timeout, 4 obstacle moving
  * away. */
-static void RadarView_Print(uint8_t blocked_mask,
+static const char * const s_quiet_text[5] = { "", "standby", "cane not held",
+                                              "radar timeout",
+                                              "obstacle moving away" };
+
+/* The decision and the buzzer pattern, in words, for the lanes and cue. */
+static void RadarView_Words(uint8_t blocked_mask,
                             uint8_t cue,
-                            uint16_t dist_mm,
-                            int16_t closing_cms,
-                            uint8_t quiet)
+                            const char ** const pp_decision,
+                            const char ** const pp_buzzer)
 {
-    static const char * const quiet_text[5] = { "", "standby", "cane not held",
-                                                "radar timeout",
-                                                "obstacle moving away" };
     const bool stop = ((cue & THREAT_CUE_STOP) != 0U);
     const uint8_t side = (uint8_t)((cue >> THREAT_CUE_SIDE_SHIFT) & 0x03U);
     const char *decision = "ALL CLEAR";
@@ -142,6 +143,19 @@ static void RadarView_Print(uint8_t blocked_mask,
             buzzer = "1 BEEP";
         }
     }
+    *pp_decision = decision;
+    *pp_buzzer = buzzer;
+}
+
+static void RadarView_Print(uint8_t blocked_mask,
+                            uint8_t cue,
+                            uint16_t dist_mm,
+                            int16_t closing_cms,
+                            uint8_t quiet)
+{
+    const char *decision = "ALL CLEAR";
+    const char *buzzer = "SILENT";
+    RadarView_Words(blocked_mask, cue, &decision, &buzzer);
 
     printf("\n----------------------------------------\n");
     printf(" LEFT   : %s\n",
@@ -164,13 +178,168 @@ static void RadarView_Print(uint8_t blocked_mask,
     printf(" DECISION: %s\n", decision);
     if ((quiet != 0U) && (quiet <= 4U) && (blocked_mask != 0U))
     {
-        printf(" BUZZER  : SILENT (%s), would be %s\n", quiet_text[quiet],
+        printf(" BUZZER  : SILENT (%s), would be %s\n", s_quiet_text[quiet],
                buzzer);
     }
     else
     {
         printf(" BUZZER  : %s\n", buzzer);
     }
+}
+
+/* Snapshot for the readable radar debug ('d' key). */
+typedef struct
+{
+    Radar_Target_t targets[3]; /* last radar frame, as the radar sent it */
+    Threat_Result_t threat;
+    uint32_t now_ms;
+    uint8_t blocked_mask;      /* bit n = lane n blocked */
+    uint8_t quiet;             /* 0 audible, else s_quiet_text index */
+    uint8_t filters;           /* THREAT_FLT_* since the last print */
+    uint8_t implausible;       /* bit n = slot n rejected by the driver */
+    Grip_State_t grip;
+    bool radar_timeout;
+} RadarDebug_t;
+
+/* "1.23 m" from millimetres. */
+static void Print_Metres(uint32_t mm)
+{
+    printf("%u.%02u m", (unsigned)(mm / 1000U), (unsigned)((mm % 1000U) / 10U));
+}
+
+/* One radar slot in words: where the target is, how it moves, and what the
+ * decision made of it. */
+static void RadarDebug_PrintSlot(const RadarDebug_t * const p_dbg,
+                                 uint8_t slot)
+{
+    static const char * const status_text[6] = {
+        "empty", "-> centre lane", "-> left lane", "-> right lane",
+        "ignored: outside the 1.5 m corridor",
+        "ignored: only crossing the path"
+    };
+    const Radar_Target_t * const p_t = &p_dbg->targets[slot];
+    printf("  slot %u  : ", (unsigned)slot);
+    if (!p_t->is_valid)
+    {
+        printf("%s\n", (((p_dbg->implausible >> slot) & 1U) != 0U)
+                            ? "rejected: impossible value from the radar"
+                            : "empty");
+        return;
+    }
+
+    const int16_t lat = ThreatAssessment_UserLateralMm(p_t->x_mm);
+    const uint32_t abs_lat = (lat < 0) ? (uint32_t)(-(int32_t)lat)
+                                       : (uint32_t)lat;
+    const int16_t closing = ThreatAssessment_ClosingCms(p_t->speed_cms);
+    uint8_t status = ThreatAssessment_GetSlotStatus(slot);
+    if (status > 5U)
+    {
+        status = 0U;
+    }
+
+    Print_Metres(ThreatAssessment_ForwardMm(p_t->distance_mm, lat));
+    printf(" ahead, ");
+    if (abs_lat < 50U)
+    {
+        printf("in line with you");
+    }
+    else
+    {
+        Print_Metres(abs_lat);
+        printf(" %s", (lat < 0) ? "left" : "right");
+    }
+    if ((closing > -8) && (closing < 8))
+    {
+        printf(", standing still");
+    }
+    else if (closing > 0)
+    {
+        printf(", coming closer at %d cm/s", (int)closing);
+    }
+    else
+    {
+        printf(", moving away at %d cm/s", (int)(-closing));
+    }
+    printf("  %s\n", status_text[status]);
+}
+
+/* Readable radar debug: decision, lanes, nearest obstacle, each radar slot,
+ * and which filters acted. */
+static void RadarDebug_Print(const RadarDebug_t * const p_dbg)
+{
+    static const char * const flt_text[6] = {
+        "outside corridor", "crossing", "impossible value",
+        "radar re-ordered its slots", "moving away (quiet)",
+        "still-person hold"
+    };
+    static const char * const grip_text[3] = { "released", "held",
+                                               "unknown" };
+    const uint8_t mask = p_dbg->blocked_mask;
+    const char *decision = "ALL CLEAR";
+    const char *buzzer = "SILENT";
+    RadarView_Words(mask, (uint8_t)p_dbg->threat.open_direction_cue,
+                    &decision, &buzzer);
+
+    printf("\n[RADAR %u.%u s] %s | buzzer: ",
+           (unsigned)(p_dbg->now_ms / 1000U),
+           (unsigned)((p_dbg->now_ms % 1000U) / 100U), decision);
+    if ((p_dbg->quiet != 0U) && (p_dbg->quiet <= 4U) && (mask != 0U))
+    {
+        printf("SILENT (%s)\n", s_quiet_text[p_dbg->quiet]);
+    }
+    else
+    {
+        printf("%s\n", buzzer);
+    }
+
+    printf("  lanes   : left %s | centre %s | right %s\n",
+           (((mask >> (uint8_t)THREAT_LANE_LEFT) & 1U) != 0U) ? "BLOCKED"
+                                                               : "clear",
+           (((mask >> (uint8_t)THREAT_LANE_CENTER) & 1U) != 0U) ? "BLOCKED"
+                                                                 : "clear",
+           (((mask >> (uint8_t)THREAT_LANE_RIGHT) & 1U) != 0U) ? "BLOCKED"
+                                                                : "clear");
+    if (mask != 0U)
+    {
+        printf("  nearest : ");
+        Print_Metres(p_dbg->threat.nearest_distance_mm);
+        printf(", closing %d cm/s, ", (int)p_dbg->threat.closing_speed_cms);
+        if (p_dbg->threat.ttc_20ms >= BLE_TTC_NO_THREAT)
+        {
+            printf("no collision course\n");
+        }
+        else
+        {
+            const uint32_t ttc_ms = (uint32_t)p_dbg->threat.ttc_20ms * 20U;
+            printf("collision in %u.%u s\n", (unsigned)(ttc_ms / 1000U),
+                   (unsigned)((ttc_ms % 1000U) / 100U));
+        }
+    }
+    for (uint8_t slot = 0U; slot < 3U; slot++)
+    {
+        RadarDebug_PrintSlot(p_dbg, slot);
+    }
+
+    printf("  filters : ");
+    if (p_dbg->filters == 0U)
+    {
+        printf("none");
+    }
+    else
+    {
+        bool first = true;
+        for (uint8_t b = 0U; b < 6U; b++)
+        {
+            if (((p_dbg->filters >> b) & 1U) != 0U)
+            {
+                printf("%s%s", first ? "" : ", ", flt_text[b]);
+                first = false;
+            }
+        }
+    }
+    printf(" | cane: %s | radar: %s\n",
+           ((uint8_t)p_dbg->grip <= 2U) ? grip_text[p_dbg->grip] : "?",
+           p_dbg->radar_timeout ? "TIMED OUT" : "ok");
 }
 
 static void vTask_GlassesPerception(void *pvParameters)
@@ -220,15 +389,21 @@ static void vTask_GlassesPerception(void *pvParameters)
     }
     bool previous_delivery_fallback = false;
     Threat_Result_t current_threat = {0};
-    bool radar_debug = false;          /* toggled by 'd' on the USB serial console */
+    /* 'r': raw one-line radar debug, 10 Hz (for logs) */
+    bool radar_raw = false;
+    uint32_t radar_raw_last_ms = 0U;
+    /* 'd': readable radar debug, 2 Hz */
+    bool radar_debug = false;
     uint32_t radar_debug_last_ms = 0U;
+    RadarDebug_t radar_dbg = { 0 };
     /* toggled by 'v': plain-language lanes, decision and buzzer */
     bool radar_view = false;
     uint32_t radar_view_last_ms = 0U;
     uint32_t radar_view_sig = UINT32_MAX;
     int16_t radar_dbg_x[3] = { 0, 0, 0 };   /* last frame, for the d debug line */
     uint8_t radar_dbg_valid = 0U;
-    /* THREAT_FLT_* bits of every frame since the last d debug line */
+    /* THREAT_FLT_* bits of every frame since the last raw / readable print */
+    uint8_t radar_raw_flt = 0U;
     uint8_t radar_dbg_flt = 0U;
     uint32_t last_valid_radar_frame_ms = 0U;
 
@@ -402,11 +577,18 @@ static void vTask_GlassesPerception(void *pvParameters)
                     }
                 }
                 ThreatAssessment_ProcessTargetsAt(targets, target_count, cane_grip_telemetry, now_ms, &current_threat);
-                radar_dbg_flt |= ThreatAssessment_GetFilterFlags();
+                uint8_t flt = ThreatAssessment_GetFilterFlags();
                 if (Ld2450_GetImplausibleMask() != 0U)
                 {
-                    radar_dbg_flt |= THREAT_FLT_IMPLAUSIBLE;
+                    flt |= THREAT_FLT_IMPLAUSIBLE;
                 }
+                radar_raw_flt |= flt;
+                radar_dbg_flt |= flt;
+                for (uint8_t k = 0U; k < 3U; k++)
+                {
+                    radar_dbg.targets[k] = targets[k];
+                }
+                radar_dbg.implausible = Ld2450_GetImplausibleMask();
             }
             if (Ld2450_HasRxFault() && ((uint32_t)(now_ms - last_radar_retry_ms) >= 1000U))
             {
@@ -453,7 +635,15 @@ static void vTask_GlassesPerception(void *pvParameters)
             else if ((ch == (int)'d') || (ch == (int)'D'))
             {
                 radar_debug = !radar_debug;
-                printf("[RADAR DEBUG] %s\n", radar_debug ? "ON (10 Hz)" : "OFF");
+                radar_dbg_flt = 0U;
+                printf("[RADAR DEBUG] %s\n",
+                       radar_debug ? "ON (readable, twice a second)" : "OFF");
+            }
+            else if ((ch == (int)'r') || (ch == (int)'R'))
+            {
+                radar_raw = !radar_raw;
+                printf("[RADAR RAW] %s\n",
+                       radar_raw ? "ON (one line, 10 Hz)" : "OFF");
             }
             else if ((ch == (int)'v') || (ch == (int)'V'))
             {
@@ -476,9 +666,9 @@ static void vTask_GlassesPerception(void *pvParameters)
         }
 
         bool radar_timeout = ((now_ms - last_valid_radar_frame_ms) >= 500U) || Ld2450_HasRxFault();
-        if (radar_debug && ((now_ms - radar_debug_last_ms) >= 100U))
+        if (radar_raw && ((now_ms - radar_raw_last_ms) >= 100U))
         {
-            radar_debug_last_ms = now_ms;
+            radar_raw_last_ms = now_ms;
             /* ttc is in 20 ms ticks; 4095 = none. cue: bit0 STOP, bits1-2 side (0 centre, 1 left, 2 right). */
             /* ln: blocked lanes (bit0 centre, bit1 left, bit2 right); v: valid target slots; x: raw radar x per slot (mm). */
             printf("[RADAR] t=%u dist=%u spd=%d ttc=%u thr=%u cue=%u to=%u "
@@ -492,8 +682,8 @@ static void vTask_GlassesPerception(void *pvParameters)
             /* flt: THREAT_FLT_* bits since the last line (bit0 outside
              * corridor, bit1 crossing, bit2 implausible value, bit3 slot
              * re-ordered, bit4 moving away, bit5 still-person hold). */
-            printf(" flt=0x%02X\n", (unsigned)radar_dbg_flt);
-            radar_dbg_flt = 0U;
+            printf(" flt=0x%02X\n", (unsigned)radar_raw_flt);
+            radar_raw_flt = 0U;
         }
         bool standby = (imu.state == IMU_SUPERVISOR_ASLEEP) && sleep_requested;
         bool obstacle = !standby && (cane_grip_telemetry != GRIP_STATE_RELEASED) &&
@@ -501,31 +691,44 @@ static void vTask_GlassesPerception(void *pvParameters)
         /* Buzzer only: stay quiet while every blocked lane's obstacle is moving
          * away. */
         bool obstacle_audible = obstacle && !ThreatAssessment_IsReceding();
+        /* Why the buzzer is quiet, checked in the same order as the gates
+         * above (for the v and d views). */
+        uint8_t quiet = 0U;
+        if (current_threat.is_threat_active && !obstacle_audible)
+        {
+            if (standby)
+            {
+                quiet = 1U;
+            }
+            else if (radar_timeout)
+            {
+                quiet = 3U;
+            }
+            else if (!obstacle)
+            {
+                /* the only remaining gate on obstacle: cane released */
+                quiet = 2U;
+            }
+            else
+            {
+                quiet = 4U; /* obstacle moving away */
+            }
+        }
+        if (radar_debug && ((uint32_t)(now_ms - radar_debug_last_ms) >= 500U))
+        {
+            radar_debug_last_ms = now_ms;
+            radar_dbg.threat = current_threat;
+            radar_dbg.now_ms = now_ms;
+            radar_dbg.blocked_mask = ThreatAssessment_GetBlockedMask();
+            radar_dbg.quiet = quiet;
+            radar_dbg.filters = radar_dbg_flt;
+            radar_dbg.grip = cane_grip_telemetry;
+            radar_dbg.radar_timeout = radar_timeout;
+            RadarDebug_Print(&radar_dbg);
+            radar_dbg_flt = 0U;
+        }
         if (radar_view)
         {
-            /* Why the buzzer is quiet, checked in the same order as the gates
-             * above. */
-            uint8_t quiet = 0U;
-            if (current_threat.is_threat_active && !obstacle_audible)
-            {
-                if (standby)
-                {
-                    quiet = 1U;
-                }
-                else if (radar_timeout)
-                {
-                    quiet = 3U;
-                }
-                else if (!obstacle)
-                {
-                    /* the only remaining gate on obstacle: cane released */
-                    quiet = 2U;
-                }
-                else
-                {
-                    quiet = 4U; /* obstacle moving away */
-                }
-            }
             const uint8_t view_mask = ThreatAssessment_GetBlockedMask();
             const uint32_t sig =
                 (uint32_t)view_mask |

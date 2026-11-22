@@ -90,6 +90,42 @@ _Static_assert((THREAT_STOP_MAX_DIST_MM + THREAT_STOP_HYST_MM) <= 4095U,
 _Static_assert(THREAT_STOP_MAX_DIST_MM < THREAT_ALERT_ENTER_DIST_MM,
                "STOP must fire inside the alert zone");
 
+/* What happened to each radar slot in the last frame (THREAT_SLOT_*), for the
+ * debug view: 3 bits per slot. Radar task only, like s_ta. */
+typedef struct
+{
+    uint16_t slot_0 : 3;
+    uint16_t slot_1 : 3;
+    uint16_t slot_2 : 3;
+    uint16_t reserved : 7;
+} Threat_SlotView_t;
+
+_Static_assert(sizeof(Threat_SlotView_t) == 2U,
+               "slot view must pack into 16 bits");
+_Static_assert(THREAT_SLOT_CROSSING <= 7U, "a slot status must fit 3 bits");
+
+static Threat_SlotView_t s_slots = { 0U, 0U, 0U, 0U };
+
+static void Slot_Set(uint8_t slot, uint8_t status)
+{
+    if (slot == 1U)
+    {
+        s_slots.slot_1 = status & 0x07U;
+    }
+    else if (slot == 2U)
+    {
+        s_slots.slot_2 = status & 0x07U;
+    }
+    else if (slot == 0U)
+    {
+        s_slots.slot_0 = status & 0x07U;
+    }
+    else
+    {
+        /* the radar has three slots */
+    }
+}
+
 static uint8_t Recede_Get(uint8_t lane)
 {
     uint8_t v = (uint8_t)s_ta.recede_c;
@@ -595,6 +631,43 @@ uint8_t ThreatAssessment_GetBlockedMask(void)
     return mask;
 }
 
+uint8_t ThreatAssessment_GetSlotStatus(uint8_t slot)
+{
+    uint8_t status = (uint8_t)s_slots.slot_0;
+    if (slot == 1U)
+    {
+        status = (uint8_t)s_slots.slot_1;
+    }
+    else if (slot == 2U)
+    {
+        status = (uint8_t)s_slots.slot_2;
+    }
+    else if (slot != 0U)
+    {
+        status = THREAT_SLOT_EMPTY;
+    }
+    else
+    {
+        /* slot 0 */
+    }
+    return status;
+}
+
+int16_t ThreatAssessment_UserLateralMm(int16_t radar_x_mm)
+{
+    return Lateral_Mm(radar_x_mm);
+}
+
+uint16_t ThreatAssessment_ForwardMm(uint16_t distance_mm, int16_t x_mm)
+{
+    return Forward_Mm(distance_mm, x_mm);
+}
+
+int16_t ThreatAssessment_ClosingCms(int16_t radar_speed_cms)
+{
+    return Closing_Cms(radar_speed_cms);
+}
+
 uint8_t ThreatAssessment_GetFilterFlags(void)
 {
     uint8_t flags = 0U;
@@ -646,6 +719,7 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
      * still scanned while released so their occupancy stays current; only the
      * reported result is forced clear (see the end of this function).
      */
+    s_slots = (Threat_SlotView_t){ 0U, 0U, 0U, 0U }; /* THREAT_SLOT_EMPTY */
     s_ta.flt_outside = 0U;
     s_ta.flt_crossing = 0U;
     s_ta.flt_slot_jump = 0U;
@@ -698,12 +772,14 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
                 Side_Set(i, THREAT_LANE_CENTER);
             }
             s_ta.flt_outside = 1U;
+            Slot_Set(i, THREAT_SLOT_OUTSIDE);
             continue;
         }
 
         if (crossing)
         {
             s_ta.flt_crossing = 1U;
+            Slot_Set(i, THREAT_SLOT_CROSSING);
             /* Not counted, but it is moving: a person who stood in this lane
              * and then walks across must not get the still-person hold. */
             const Threat_Lane_t cross_side = Classify_Side(
@@ -720,6 +796,7 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
         {
             Side_Set(i, side);
         }
+        Slot_Set(i, (uint8_t)((uint8_t)side + THREAT_SLOT_CENTER));
 
         if (!lane_present[side] || (p_t->distance_mm < lane_nearest_mm[side]))
         {

@@ -90,7 +90,14 @@ bool Ld2450_ParseFrame(const uint8_t * const p_frame, uint32_t len, Radar_Target
 
         (void)dist_res;
 
-        if (y > 0)
+        /* An empty slot is all zeros (y == 0). The limits reject values the radar cannot
+         * physically report, so one corrupt value cannot become, for example, a 15 m/s
+         * closing speed. */
+        const bool plausible = (y > 0) && (y <= LD2450_CFG_MAX_Y_MM) &&
+                               (x >= -LD2450_CFG_MAX_ABS_X_MM) && (x <= LD2450_CFG_MAX_ABS_X_MM) &&
+                               (speed >= -LD2450_CFG_MAX_ABS_SPEED_CMS) && (speed <= LD2450_CFG_MAX_ABS_SPEED_CMS);
+
+        if (plausible)
         {
             uint32_t x_sq = (uint32_t)((int32_t)x * (int32_t)x);
             uint32_t y_sq = (uint32_t)((int32_t)y * (int32_t)y);

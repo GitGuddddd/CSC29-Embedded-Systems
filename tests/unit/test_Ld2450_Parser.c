@@ -291,6 +291,41 @@ void test_Ld2450_EmptySlotKeepsLaterTargetsInTheirOwnSlot(void)
     TEST_ASSERT_FALSE(targets[2].is_valid);
 }
 
+static void SetSlot(uint8_t * const p_frame, uint8_t slot, int16_t x, int16_t y, int16_t speed)
+{
+    uint8_t * const p = &p_frame[4U + ((uint32_t)slot * 8U)];
+    const int16_t val[3] = { x, y, speed };
+    for (uint8_t i = 0U; i < 3U; i++)
+    {
+        const uint16_t raw = (val[i] >= 0) ? (uint16_t)(0x8000U | (uint16_t)val[i]) : (uint16_t)(-val[i]);
+        p[2U * i] = (uint8_t)(raw & 0xFFU);
+        p[(2U * i) + 1U] = (uint8_t)(raw >> 8);
+    }
+}
+
+void test_Ld2450_ImplausibleValuesAreNotValidTargets(void)
+{
+    uint8_t frame[30] = { 0xAAU, 0xFFU, 0x03U, 0x00U };
+    frame[28] = 0x55U;
+    frame[29] = 0xCCU;
+    SetSlot(frame, 0U, 7000, 1000, 0);   /* sideways beyond the radar's reach */
+    SetSlot(frame, 1U, 0, 1000, 1500);   /* 15 m/s: not a walking speed, would give a tiny TTC */
+    SetSlot(frame, 2U, 0, 9000, 0);      /* beyond the radar's range */
+
+    Radar_Target_t targets[3];
+    uint8_t count = 0U;
+    TEST_ASSERT_TRUE(Ld2450_ParseFrame(frame, sizeof(frame), targets, &count));
+    TEST_ASSERT_FALSE(targets[0].is_valid);
+    TEST_ASSERT_FALSE(targets[1].is_valid);
+    TEST_ASSERT_FALSE(targets[2].is_valid);
+
+    /* Values at the limits are still accepted. */
+    SetSlot(frame, 0U, -6500, 8500, -1000);
+    TEST_ASSERT_TRUE(Ld2450_ParseFrame(frame, sizeof(frame), targets, &count));
+    TEST_ASSERT_TRUE(targets[0].is_valid);
+    TEST_ASSERT_EQUAL_INT16(-1000, targets[0].speed_cms);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -306,5 +341,6 @@ int main(void)
     RUN_TEST(test_PartialHeadersAndBadFooterCannotPublishAnUninitializedBody);
     RUN_TEST(test_Ld2450_DecodesLateralXAndEuclideanDistance);
     RUN_TEST(test_Ld2450_EmptySlotKeepsLaterTargetsInTheirOwnSlot);
+    RUN_TEST(test_Ld2450_ImplausibleValuesAreNotValidTargets);
     return UNITY_END();
 }

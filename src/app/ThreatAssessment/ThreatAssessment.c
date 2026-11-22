@@ -25,7 +25,8 @@ typedef struct
     uint16_t blocked : 1;
     uint16_t ever_blocked : 1;
     uint16_t recede_from_mm : 12; /* closest distance since this lane began moving away */
-    uint16_t reserved : 2;
+    uint16_t still : 1;           /* its nearest obstacle was standing still when last seen */
+    uint16_t reserved : 1;
 } Threat_LaneState_t;
 
 static Threat_LaneState_t s_lanes[THREAT_LANE_COUNT];
@@ -127,6 +128,7 @@ static void Reset_Lane(Threat_LaneState_t * const p_lane)
     p_lane->speed_hold_pending_ms = UINT32_MAX;
     p_lane->ever_blocked = 0U;
     p_lane->recede_from_mm = 0U;
+    p_lane->still = 0U;
     p_lane->cleared_at_ms = 0U;
 }
 
@@ -335,7 +337,10 @@ static void Update_LaneOccupancy(Threat_LaneState_t * const p_lane,
             p_lane->hold_pending_ms = now_ms;
         }
 
-        if ((uint32_t)(now_ms - p_lane->hold_pending_ms) >= THREAT_LANE_HOLD_MS)
+        /* A still person is not seen leaving (they would have to move first), so when
+         * one vanishes it is the radar dropping them: hold the lane longer. */
+        const uint32_t hold_ms = (p_lane->still != 0U) ? THREAT_STILL_LANE_HOLD_MS : THREAT_LANE_HOLD_MS;
+        if ((uint32_t)(now_ms - p_lane->hold_pending_ms) >= hold_ms)
         {
             p_lane->blocked = 0U;
             p_lane->hold_pending_ms = UINT32_MAX;
@@ -552,6 +557,8 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
     bool lane_present[THREAT_LANE_COUNT] = { false, false, false };
     uint16_t lane_nearest_mm[THREAT_LANE_COUNT] = { UINT16_MAX, UINT16_MAX, UINT16_MAX };
     int16_t lane_live_speed[THREAT_LANE_COUNT] = { 0, 0, 0 };
+    bool lane_still[THREAT_LANE_COUNT] = { false, false, false };
+    bool lane_crossed[THREAT_LANE_COUNT] = { false, false, false }; /* a crosser was seen in it */
 
     uint16_t min_valid_dist = UINT16_MAX;
     int16_t min_valid_speed = 0;
@@ -595,6 +602,11 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
 
         if (crossing)
         {
+            /* Not counted, but it is moving: a person who stood in this lane and then
+             * walks across must not get the still-person hold. */
+            const Threat_Lane_t cross_side =
+                Classify_Side(x_mm, (i < 3U) ? s_target_last_side[i] : THREAT_LANE_CENTER);
+            lane_crossed[cross_side] = true;
             continue; /* only crossing the path beyond the STOP zone */
         }
 
@@ -612,6 +624,10 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
             lane_present[side] = true;
             lane_nearest_mm[side] = p_t->distance_mm;
             lane_live_speed[side] = closing_cms;
+            const int32_t vx = (i < 3U) ? (int32_t)s_tracks[i].vx_mmps : 0;
+            const int32_t abs_vx = (vx < 0) ? -vx : vx;
+            const int32_t abs_v = (closing_cms < 0) ? -(int32_t)closing_cms : (int32_t)closing_cms;
+            lane_still[side] = (abs_v <= THREAT_STILL_MAX_CMS) && (abs_vx <= THREAT_STILL_MAX_LATERAL_MMPS);
         }
 
         if (!found_valid || (p_t->distance_mm < min_valid_dist))
@@ -632,6 +648,18 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
 
     for (uint8_t lane = 0U; lane < (uint8_t)THREAT_LANE_COUNT; lane++)
     {
+        if (lane_present[lane])
+        {
+            s_lanes[lane].still = lane_still[lane] ? 1U : 0U; /* a lane with no target keeps it */
+        }
+        else if (lane_crossed[lane])
+        {
+            s_lanes[lane].still = 0U;
+        }
+        else
+        {
+            /* no target this frame: keep how it was last seen */
+        }
         Update_LaneOccupancy(&s_lanes[lane], lane_present[lane], lane_nearest_mm[lane], now_ms);
         lane_eff_speed[lane] = Update_LaneSpeed(&s_lanes[lane], lane_present[lane], lane_live_speed[lane], now_ms);
         if (s_lanes[lane].blocked)
@@ -795,7 +823,7 @@ void ThreatAssessment_ProcessTargets(const Radar_Target_t * const p_targets,
         }
     }
 
-    s_synthetic_ms += THREAT_LANE_HOLD_MS + 1U;
+    s_synthetic_ms += THREAT_STILL_LANE_HOLD_MS + 1U; /* past either lane hold */
     ThreatAssessment_ProcessTargetsAt(p_targets, target_count, cane_grip_telemetry,
                                       s_synthetic_ms, p_out_result);
 }

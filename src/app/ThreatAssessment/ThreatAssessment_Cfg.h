@@ -114,6 +114,17 @@
  * toggling the cue. Bench log, 2-2.5 m, slow/still: 77 cue changes in 250 s. */
 #define THREAT_SIDE_HYSTERESIS_MM    (150)
 #define THREAT_LANE_HOLD_MS          (600U)
+/* The LD2450 also loses people who stand still for longer than that, and more often
+ * with several in view (bench log, three people standing 1.5-3 m ahead: never more than
+ * two lanes seen at once, guidance switching left/right every second or so). A lane
+ * whose nearest obstacle was standing still when last seen (closing speed within
+ * THREAT_STILL_MAX_CMS, one LD2450 speed step either side of 0 plus jitter, and
+ * sideways speed within THREAT_STILL_MAX_LATERAL_MMPS) is held this long instead.
+ * Someone who leaves a lane moves first, so they still clear after the normal hold;
+ * so does a person swept out of view by the wearer turning their head. */
+#define THREAT_STILL_LANE_HOLD_MS    (1500U)
+#define THREAT_STILL_MAX_CMS         (16)
+#define THREAT_STILL_MAX_LATERAL_MMPS (300)
 /* Held closing speed (TTC) across a dropout; unrelated to the lane hold above. */
 #define THREAT_SPEED_HOLD_MS         (200U)
 

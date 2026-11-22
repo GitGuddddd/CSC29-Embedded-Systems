@@ -217,7 +217,8 @@ void test_ThreatAssessment_ThreeLaneOccupancy_CorridorAndSideHysteresis(void)
      */
     targets[0].x_mm = USER_X(-(THREAT_SIDE_DEADZONE_MM - THREAT_SIDE_HYSTERESIS_MM - 1));
     ThreatAssessment_ProcessTargetsAt(targets, 2U, GRIP_STATE_HELD, 60U, &res);
-    const uint32_t left_cleared_ms = 60U + THREAT_LANE_HOLD_MS;
+    /* The target was standing still in LEFT, so LEFT gets the still-person hold. */
+    const uint32_t left_cleared_ms = 60U + THREAT_STILL_LANE_HOLD_MS;
     ThreatAssessment_ProcessTargetsAt(targets, 2U, GRIP_STATE_HELD, left_cleared_ms, &res);
     TEST_ASSERT_TRUE(res.is_threat_active);
     TEST_ASSERT_EQUAL_UINT8((uint8_t)(THREAT_LANE_RIGHT << THREAT_CUE_SIDE_SHIFT),
@@ -427,10 +428,11 @@ void test_ThreatAssessment_JustClearedLaneIsNotOfferedAsFree(void)
     const uint8_t left_free = (uint8_t)(THREAT_LANE_LEFT << THREAT_CUE_SIDE_SHIFT);
 
     TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, 0U));
-    /* The left target leaves; the lane hold then keeps it blocked for a moment. */
+    /* The left target (standing still) is lost; the still-person hold then keeps the
+     * lane blocked for a while. */
     t[0].is_valid = false;
     (void)Run_Cue(t, 3U, 100U);
-    const uint32_t cleared_ms = 100U + THREAT_LANE_HOLD_MS;
+    const uint32_t cleared_ms = 100U + THREAT_STILL_LANE_HOLD_MS;
     TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, cleared_ms - 1U));
     TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, cleared_ms));   /* just cleared: not trusted */
     TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, cleared_ms + THREAT_FREE_LANE_CLEAR_MS - 1U));
@@ -767,6 +769,75 @@ void test_ThreatAssessment_ApproachingObstacleIsNotReceding(void)
     }
 }
 
+/* Bench log, three people standing 1.5-3 m ahead: the radar kept losing one of them
+ * for more than the normal lane hold, so the guidance switched left/right. A lane whose
+ * person was standing still is held for THREAT_STILL_LANE_HOLD_MS. */
+void test_ThreatAssessment_StillPersonDropoutKeepsLaneBlocked(void)
+{
+    ThreatAssessment_Init();
+    Radar_Target_t t[3] = {
+        { .distance_mm = 2200U, .speed_cms = 0, .x_mm = USER_X(-900), .is_valid = true },
+        { .distance_mm = 2300U, .speed_cms = 0, .x_mm = 0, .is_valid = true },
+        { .distance_mm = 2200U, .speed_cms = 0, .x_mm = USER_X(900), .is_valid = true }
+    };
+    const uint8_t no_free = (uint8_t)(THREAT_CUE_SIDE_ALL_BLOCKED << THREAT_CUE_SIDE_SHIFT);
+    for (uint32_t now = 0U; now < 1000U; now += 100U)
+    {
+        (void)Run_Cue(t, 3U, now);
+    }
+    t[0].is_valid = false; /* the left person is lost for 1.2 s */
+    for (uint32_t now = 1000U; now < 2200U; now += 100U)
+    {
+        TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, now));
+    }
+    t[0].is_valid = true;
+    TEST_ASSERT_EQUAL_UINT8(no_free, Run_Cue(t, 3U, 2200U));
+}
+
+/* Someone who walks out of a lane is moving when last seen, so the lane clears after the
+ * normal hold, not the still-person one. */
+void test_ThreatAssessment_PersonWalkingOutOfLaneClearsAfterNormalHold(void)
+{
+    /* sideways out of the corridor at 1 m/s */
+    ThreatAssessment_Init();
+    Threat_Result_t res;
+    Radar_Target_t t = { .distance_mm = 2000U, .speed_cms = 0, .x_mm = USER_X(800), .is_valid = true };
+    uint32_t now = 0U;
+    for (; now < 1000U; now += 100U)
+    {
+        ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
+    }
+    for (int16_t x = 900; x <= THREAT_CORRIDOR_HALF_MM; x = (int16_t)(x + 100))
+    {
+        t.x_mm = USER_X(x);
+        ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
+        now += 100U;
+    }
+    const uint32_t left_at = now;
+    t.is_valid = false;
+    for (; now < (left_at + THREAT_LANE_HOLD_MS + 100U); now += 100U)
+    {
+        ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
+    }
+    TEST_ASSERT_EQUAL_UINT8(0U, ThreatAssessment_GetBlockedMask() & 0x04U);
+
+    /* approaching, then gone */
+    ThreatAssessment_Init();
+    Radar_Target_t a = { .distance_mm = 2500U, .speed_cms = APPROACHING(40), .x_mm = USER_X(-800), .is_valid = true };
+    for (now = 0U; now < 500U; now += 100U)
+    {
+        ThreatAssessment_ProcessTargetsAt(&a, 1U, GRIP_STATE_HELD, now, &res);
+        a.distance_mm = (uint16_t)(a.distance_mm - 40U);
+    }
+    a.is_valid = false;
+    const uint32_t gone_at = now;
+    for (; now <= (gone_at + THREAT_LANE_HOLD_MS); now += 100U)
+    {
+        ThreatAssessment_ProcessTargetsAt(&a, 1U, GRIP_STATE_HELD, now, &res);
+    }
+    TEST_ASSERT_EQUAL_UINT8(0U, ThreatAssessment_GetBlockedMask());
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -803,5 +874,7 @@ int main(void)
     RUN_TEST(test_ThreatAssessment_DepartingObstacleIsReceding);
     RUN_TEST(test_ThreatAssessment_ApproachingObstacleIsNotReceding);
     RUN_TEST(test_ThreatAssessment_SpeedJitterOnStillPersonIsNotReceding);
+    RUN_TEST(test_ThreatAssessment_StillPersonDropoutKeepsLaneBlocked);
+    RUN_TEST(test_ThreatAssessment_PersonWalkingOutOfLaneClearsAfterNormalHold);
     return UNITY_END();
 }

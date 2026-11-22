@@ -70,7 +70,7 @@ See [cane mode manager behaviour and verification](src/app/CaneMode/README.md) f
 - **Freshness Filtering**: Rejects identical repeated snapshots and stale application-queue entries; short heartbeat sequences rebase after a reception gap. The audit documents the ordering limits.
 
 ### 5. Link-Loss Deadman Watchdog
-- **Safety Degradation**: If the Cane scanner misses periodic broadcast packets from the Glasses for $> 500\,\text{ms}$, a software watchdog triggers a localized 2 long-pulse haptic warning (`500ms ON / 200ms OFF`), informing the user that head-level obstacle tracking is offline while keeping local ground sensing active.
+- **Safety Degradation**: If the Cane scanner misses periodic broadcast packets from the Glasses for $> 1000\,\text{ms}$ (`WATCHDOG_CFG_DEADMAN_TIMEOUT_MS`), a software deadman watchdog triggers link-loss handling: it shifts BLE radio operation to the high-duty `BLECOMM_PROFILE_FAST` profile to accelerate link recovery, clears stale peer obstacle/fault states, and reports link status via serial and BLE status flags. Grip motor link vibration is intentionally suppressed (`Haptic_Request(HAPTIC_SRC_LINK, ALERT_NONE)`) so it does not mask critical ground drop and cliff edge haptic warnings.
 
 ### 6. mmWave Radar Head-Level Threat Assessment
 - **Header-First Parsing**: The task peeks four header bytes before copying a full 30-byte radar candidate. Noise rejection retains the same DMA overwrite checks, ring size, parser budget and frame validation. Native benchmark improvements are not a hardware latency or power claim.
@@ -129,10 +129,11 @@ polling/DMA/IRQ rationale, ISR and IVT ownership, BARR-C checks and measurement 
 │   │   ├── Cane_Main.c             # Smart Cane main loop & task scheduler
 │   │   ├── Glasses_Main.c          # Smart Glasses main loop & task scheduler
 │   │   ├── AlertManager/           # Centralized alarm arbitration & pitch mapping
-│   │   ├── FallDetection/          # Free-fall & impact detection state machine
-│   │   ├── GroundProjection/       # IMU-compensated ground plane projection
+│   │   ├── CaneMode/               # Hierarchical system mode management, parking & sleep state machine
+│   │   ├── FallDetection/          # Free-fall & impact state machine + CaneMotion lateral slip detection
+│   │   ├── GroundProjection/       # IMU-compensated ground plane projection & GroundBeam 3D vectoring
 │   │   ├── radar_monitor/          # mmWave radar monitor & supervision state machine
-│   │   └── threat_assessment/      # mmWave radar threat classification, corridor gate & TTC
+│   │   └── ThreatAssessment/       # 3-lane spatial corridor, speed-scaled STOP & recede filters
 │   ├── drivers/                    # Hardware Peripheral Drivers
 │   │   ├── Buzzer/                 # Piezo buzzer PWM frequency driver
 │   │   ├── CalButton/              # Cane calibration button (GP20) debounce & 2 s hold
@@ -145,8 +146,12 @@ polling/DMA/IRQ rationale, ISR and IVT ownership, BARR-C checks and measurement 
 │   ├── hal/                        # Hardware Abstraction Layer (I2C, UART, GPIO, PWM, Timer)
 │   ├── rte/                        # Runtime Environment (Rte.c & Rte_Type.h)
 │   └── services/                   # System Services
-│       ├── BleComm/                # BLE packet formatting & sequence tracking
-│       └── Watchdog/               # 500ms link-loss deadman watchdog
+│       ├── BleComm/                # BLE packet formatting, dual-core SPSC queues & radio policy
+│       ├── Diagnostics/            # System health monitoring & serial telemetry
+│       ├── ImuSupervisor/          # Fault-tolerant IMU bring-up, bus recovery & sleep management
+│       ├── IncidentRetention/      # Watchdog scratch register incident persistence across resets
+│       ├── SafetyDelivery/         # Sender-side critical event delivery supervision & peer receipts
+│       └── Watchdog/               # 1000ms link-loss deadman watchdog & RP2040 hardware watchdog
 ├── tests/                          # Unit, Integration, Fuzz & Harness Tests
 │   ├── harness/                    # Test mocks & frame builders
 │   ├── integration/                # Pipeline & failure scenario integration tests

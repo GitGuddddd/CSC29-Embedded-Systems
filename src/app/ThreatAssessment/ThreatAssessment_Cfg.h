@@ -42,13 +42,21 @@
 
 /*
  * Departing obstacles: when every blocked lane's obstacle has been moving away at
- * THREAT_RECEDE_MIN_CMS or more for THREAT_RECEDE_FRAMES radar frames in a row (and
- * STOP is not active), ThreatAssessment_IsReceding() is true and the glasses keep the
+ * THREAT_RECEDE_MIN_CMS or more for THREAT_RECEDE_FRAMES radar frames in a row,
+ * ThreatAssessment_IsReceding() is true and the glasses keep the
  * buzzer quiet. 16 cm/s is two LD2450 speed steps, above its jitter; 3 frames = 300 ms.
  * The lanes, STOP and BLE are unchanged; an obstacle that stops or turns back beeps again.
  */
 #define THREAT_RECEDE_MIN_CMS        (16)
 #define THREAT_RECEDE_FRAMES         (3U)
+
+/*
+ * A STOP is made quiet the same way when its obstacle is moving away (the radar
+ * measures relative speed, so a growing gap means the wearer is not closing on it),
+ * but never while the obstacle is within this distance. Bench log: a person walking
+ * off from 0.35 m kept the STOP tone on for ~1.5 s until they passed 1.6 m.
+ */
+#define THREAT_STOP_RECEDE_MIN_MM    (500U)
 
 /*
  * A side lane is only offered as "free" (left/right cue) after it has been clear

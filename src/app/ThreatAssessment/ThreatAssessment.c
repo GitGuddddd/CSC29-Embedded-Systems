@@ -698,8 +698,10 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
         }
         p_out_result->open_direction_cue = (uint16_t)(cue & 0x07U);
 
-        /* Receding: every blocked lane's obstacle is moving away and STOP is not active. */
-        bool all_receding = ((cue & (uint8_t)THREAT_CUE_STOP) == 0U);
+        /* Receding: every blocked lane's obstacle is moving away (the gap is growing).
+         * During STOP this also applies, except within THREAT_STOP_RECEDE_MIN_MM. */
+        bool all_receding = ((cue & (uint8_t)THREAT_CUE_STOP) == 0U) ||
+                            (s_lanes[THREAT_LANE_CENTER].last_dist_mm > THREAT_STOP_RECEDE_MIN_MM);
         for (uint8_t lane = 0U; lane < (uint8_t)THREAT_LANE_COUNT; lane++)
         {
             if (s_lanes[lane].blocked && (Recede_Get(lane) < THREAT_RECEDE_FRAMES))

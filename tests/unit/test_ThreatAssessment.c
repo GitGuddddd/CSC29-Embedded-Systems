@@ -657,13 +657,31 @@ void test_ThreatAssessment_DepartingObstacleIsReceding(void)
     ThreatAssessment_ProcessTargetsAt(&t, 1U, GRIP_STATE_HELD, now, &res);
     TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
 
-    /* Centre lane inside STOP range: never quiet, even when moving away. */
+    /* STOP with the obstacle moving away beyond THREAT_STOP_RECEDE_MIN_MM: the STOP cue
+     * stays set (lanes, BLE) but it reports receding, so the tone can end early. */
     ThreatAssessment_Init();
     Radar_Target_t c = { .distance_mm = 1000U, .speed_cms = APPROACHING(-40), .x_mm = 0, .is_valid = true };
     for (uint32_t k = 0U; k < 6U; k++)
     {
         ThreatAssessment_ProcessTargetsAt(&c, 1U, GRIP_STATE_HELD, k * 100U, &res);
         c.distance_mm = (uint16_t)(c.distance_mm + 40U);
+    }
+    TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, res.open_direction_cue & THREAT_CUE_STOP);
+    TEST_ASSERT_TRUE(ThreatAssessment_IsReceding());
+
+    /* ... it turns back: the next frame is no longer receding, so STOP sounds again. */
+    c.speed_cms = APPROACHING(40);
+    ThreatAssessment_ProcessTargetsAt(&c, 1U, GRIP_STATE_HELD, 600U, &res);
+    TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());
+
+    /* Within THREAT_STOP_RECEDE_MIN_MM: never quiet, even when moving away. */
+    ThreatAssessment_Init();
+    Radar_Target_t n = { .distance_mm = (uint16_t)(THREAT_STOP_RECEDE_MIN_MM - 200U), .speed_cms = APPROACHING(-40),
+                         .x_mm = 0, .is_valid = true };
+    for (uint32_t k = 0U; k < 5U; k++)
+    {
+        ThreatAssessment_ProcessTargetsAt(&n, 1U, GRIP_STATE_HELD, k * 100U, &res);
+        n.distance_mm = (uint16_t)(n.distance_mm + 20U);
     }
     TEST_ASSERT_EQUAL_UINT8(THREAT_CUE_STOP, res.open_direction_cue & THREAT_CUE_STOP);
     TEST_ASSERT_FALSE(ThreatAssessment_IsReceding());

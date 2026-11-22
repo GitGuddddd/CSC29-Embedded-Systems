@@ -32,8 +32,9 @@ typedef struct
 } Threat_Result_t;
 
 /* True while every blocked lane's obstacle has been moving away for
- * THREAT_RECEDE_FRAMES frames and STOP is not active. Used to keep the buzzer quiet
- * for departing obstacles; the threat result, lanes and STOP are unaffected. */
+ * THREAT_RECEDE_FRAMES frames (during STOP only beyond THREAT_STOP_RECEDE_MIN_MM).
+ * Used to keep the buzzer quiet for departing obstacles; the threat result, lanes
+ * and the STOP cue bit are unaffected. */
 bool ThreatAssessment_IsReceding(void);
 
 /* Debug: bit n set = lane n (THREAT_LANE_CENTER/LEFT/RIGHT) is currently blocked. */

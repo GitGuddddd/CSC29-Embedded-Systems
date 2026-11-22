@@ -43,10 +43,60 @@ _Static_assert(sizeof(Threat_Track_t) == 16U, "Crossing tracker must stay at 16 
 static Threat_Track_t s_tracks[3];
 static Threat_Lane_t s_target_last_side[3];
 static uint32_t s_synthetic_ms = 0U;
-static bool s_stop_latched = false;
-static uint8_t s_fast_frames = 0U; /* consecutive frames of a fast centre approach */
-static uint8_t s_recede_frames[THREAT_LANE_COUNT]; /* consecutive frames each lane's target moved away */
-static bool s_receding = false;
+/* Decision flags and short frame counters, packed to the bits their range needs
+ * (minimum-bit representation). Each counter saturates at its threshold, so 2 bits
+ * hold 0..3. Only the radar task calls ThreatAssessment_* (Glasses_Main perception
+ * task), so the read-modify-write of this shared word never races another context. */
+typedef struct
+{
+    uint16_t stop_latched : 1; /* STOP hysteresis state */
+    uint16_t receding : 1;     /* every blocked lane's obstacle is moving away */
+    uint16_t fast_frames : 2;  /* frames of a fast centre approach, 0..THREAT_FAST_STOP_FRAMES */
+    uint16_t recede_c : 2;     /* per-lane frames moving away, 0..THREAT_RECEDE_FRAMES */
+    uint16_t recede_l : 2;
+    uint16_t recede_r : 2;
+    uint16_t reserved : 6;
+} Threat_Flags_t;
+
+static Threat_Flags_t s_ta = { 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+
+_Static_assert(sizeof(Threat_Flags_t) == 2U, "Threat flags must pack into 16 bits");
+_Static_assert(THREAT_FAST_STOP_FRAMES <= 3U, "fast_frames is a 2-bit counter");
+_Static_assert(THREAT_RECEDE_FRAMES <= 3U, "recede counters are 2-bit");
+
+static uint8_t Recede_Get(uint8_t lane)
+{
+    uint8_t v = (uint8_t)s_ta.recede_c;
+    if (lane == (uint8_t)THREAT_LANE_LEFT)
+    {
+        v = (uint8_t)s_ta.recede_l;
+    }
+    else if (lane == (uint8_t)THREAT_LANE_RIGHT)
+    {
+        v = (uint8_t)s_ta.recede_r;
+    }
+    else
+    {
+        /* centre */
+    }
+    return v;
+}
+
+static void Recede_Set(uint8_t lane, uint8_t frames)
+{
+    if (lane == (uint8_t)THREAT_LANE_LEFT)
+    {
+        s_ta.recede_l = frames & 0x03U;
+    }
+    else if (lane == (uint8_t)THREAT_LANE_RIGHT)
+    {
+        s_ta.recede_r = frames & 0x03U;
+    }
+    else
+    {
+        s_ta.recede_c = frames & 0x03U;
+    }
+}
 
 _Static_assert(sizeof(Threat_LaneState_t) == 20U, "Lane state must stay free of padding holes");
 _Static_assert(sizeof(Threat_Result_t) == 6U, "Compact threat result must remain six bytes");
@@ -84,13 +134,7 @@ static void Reset_AllState(void)
         s_target_last_side[i] = THREAT_LANE_CENTER;
         s_tracks[i] = (Threat_Track_t){ 0U, 0, 0, 0, 0U, 0U };
     }
-    s_stop_latched = false;
-    s_fast_frames = 0U;
-    for (uint8_t lane = 0U; lane < (uint8_t)THREAT_LANE_COUNT; lane++)
-    {
-        s_recede_frames[lane] = 0U;
-    }
-    s_receding = false;
+    s_ta = (Threat_Flags_t){ 0U, 0U, 0U, 0U, 0U, 0U, 0U };
 }
 
 /* Lateral position in the user's frame: negative is left (mirrored if the radar is fitted the other way). */
@@ -407,26 +451,26 @@ static bool Compute_Stop(bool center_blocked, uint16_t center_dist_mm, bool fast
 {
     if (!center_blocked)
     {
-        s_stop_latched = false;
+        s_ta.stop_latched = 0U;
     }
     else if ((center_dist_mm <= THREAT_STOP_ENTER_DIST_MM) || fast_approach)
     {
-        s_stop_latched = true;
+        s_ta.stop_latched = 1U;
     }
     else if ((center_dist_mm > THREAT_STOP_CLEAR_DIST_MM) && !fast_approach)
     {
-        s_stop_latched = false;
+        s_ta.stop_latched = 0U;
     }
     else
     {
         /* between enter and clear: keep the previous state */
     }
-    return s_stop_latched;
+    return (s_ta.stop_latched != 0U);
 }
 
 bool ThreatAssessment_IsReceding(void)
 {
-    return s_receding;
+    return (s_ta.receding != 0U);
 }
 
 uint8_t ThreatAssessment_GetBlockedMask(void)
@@ -568,18 +612,18 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
             (Compute_Ttc20ms(p_c->last_dist_mm, c_speed) <= THREAT_FAST_STOP_TTC_20MS);
         if (!fast_now)
         {
-            s_fast_frames = 0U;
+            s_ta.fast_frames = 0U;
         }
-        else if (s_fast_frames < UINT8_MAX)
+        else if (s_ta.fast_frames < THREAT_FAST_STOP_FRAMES)
         {
-            s_fast_frames++;
+            s_ta.fast_frames++;
         }
         else
         {
-            /* saturated */
+            /* saturated at the threshold */
         }
     }
-    const bool fast_approach = (s_fast_frames >= THREAT_FAST_STOP_FRAMES);
+    const bool fast_approach = (s_ta.fast_frames >= THREAT_FAST_STOP_FRAMES);
 
     /* Per lane: how long its nearest target has been clearly moving away. A lane with
      * no target this frame (held blocked) keeps its count; a cleared lane restarts. */
@@ -587,20 +631,21 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
     {
         if (!s_lanes[lane].blocked)
         {
-            s_recede_frames[lane] = 0U;
+            Recede_Set(lane, 0U);
         }
         else if (lane_present[lane])
         {
             if (lane_live_speed[lane] <= -THREAT_RECEDE_MIN_CMS)
             {
-                if (s_recede_frames[lane] < UINT8_MAX)
+                const uint8_t frames = Recede_Get(lane);
+                if (frames < THREAT_RECEDE_FRAMES)
                 {
-                    s_recede_frames[lane]++;
+                    Recede_Set(lane, (uint8_t)(frames + 1U)); /* saturates at the threshold */
                 }
             }
             else
             {
-                s_recede_frames[lane] = 0U;
+                Recede_Set(lane, 0U);
             }
         }
         else
@@ -657,12 +702,12 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
         bool all_receding = ((cue & (uint8_t)THREAT_CUE_STOP) == 0U);
         for (uint8_t lane = 0U; lane < (uint8_t)THREAT_LANE_COUNT; lane++)
         {
-            if (s_lanes[lane].blocked && (s_recede_frames[lane] < THREAT_RECEDE_FRAMES))
+            if (s_lanes[lane].blocked && (Recede_Get(lane) < THREAT_RECEDE_FRAMES))
             {
                 all_receding = false;
             }
         }
-        s_receding = all_receding;
+        s_ta.receding = all_receding ? 1U : 0U;
 
         if (best_ttc < BLE_TTC_NO_THREAT)
         {
@@ -684,8 +729,8 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
     }
     else if (found_valid)
     {
-        s_receding = false;
-        s_stop_latched = false;
+        s_ta.receding = 0U;
+        s_ta.stop_latched = 0U;
         p_out_result->is_threat_active = 0U;
         p_out_result->nearest_distance_mm = min_valid_dist;
         p_out_result->closing_speed_cms = min_valid_speed;
@@ -694,8 +739,8 @@ void ThreatAssessment_ProcessTargetsAt(const Radar_Target_t * const p_targets,
     }
     else
     {
-        s_receding = false;
-        s_stop_latched = false;
+        s_ta.receding = 0U;
+        s_ta.stop_latched = 0U;
         Clear_Result(p_out_result);
     }
 

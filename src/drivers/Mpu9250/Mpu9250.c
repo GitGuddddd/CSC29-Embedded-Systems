@@ -304,3 +304,148 @@ void Mpu9250_CalibrateGyro(const Mpu9250_Config_t * const p_cfg, uint32_t n_samp
         s_cal_gz = mean_z;
     }
 }
+
+_Static_assert(MPU9250_CFG_GYRO_CAL_SAMPLES <= 127U,
+               "Calibration window must fit the 7-bit sample count");
+
+static float Min_F(float a, float b)
+{
+    return (a < b) ? a : b;
+}
+
+static float Max_F(float a, float b)
+{
+    return (a > b) ? a : b;
+}
+
+static void GyroCal_StartWindow(Mpu9250_GyroCal_t * const p_cal)
+{
+    p_cal->sum_gx = 0.0f;
+    p_cal->sum_gy = 0.0f;
+    p_cal->sum_gz = 0.0f;
+    p_cal->count = 0U;
+}
+
+void Mpu9250_GyroCalInit(Mpu9250_GyroCal_t * const p_cal)
+{
+    if (p_cal == NULL)
+    {
+        return;
+    }
+    GyroCal_StartWindow(p_cal);
+    p_cal->done = 0U;
+    s_cal_gx = 0.0f;
+    s_cal_gy = 0.0f;
+    s_cal_gz = 0.0f;
+}
+
+static bool GyroCal_AccMoved(const Mpu9250_GyroCal_t * const p_cal,
+                             const Imu_Sample_t * const p_sample)
+{
+    return (fabsf(p_sample->ax - p_cal->first_ax) >
+            MPU9250_CFG_GYRO_CAL_ACC_TOL_G) ||
+           (fabsf(p_sample->ay - p_cal->first_ay) >
+            MPU9250_CFG_GYRO_CAL_ACC_TOL_G) ||
+           (fabsf(p_sample->az - p_cal->first_az) >
+            MPU9250_CFG_GYRO_CAL_ACC_TOL_G);
+}
+
+static bool GyroCal_WindowStill(const Mpu9250_GyroCal_t * const p_cal,
+                                float mean_x, float mean_y, float mean_z)
+{
+    return ((p_cal->max_gx - p_cal->min_gx) <=
+            MPU9250_CFG_GYRO_CAL_SPREAD_DPS) &&
+           ((p_cal->max_gy - p_cal->min_gy) <=
+            MPU9250_CFG_GYRO_CAL_SPREAD_DPS) &&
+           ((p_cal->max_gz - p_cal->min_gz) <=
+            MPU9250_CFG_GYRO_CAL_SPREAD_DPS) &&
+           (fabsf(mean_x) <= MPU9250_CFG_GYRO_CAL_BIAS_DPS) &&
+           (fabsf(mean_y) <= MPU9250_CFG_GYRO_CAL_BIAS_DPS) &&
+           (fabsf(mean_z) <= MPU9250_CFG_GYRO_CAL_BIAS_DPS);
+}
+
+Mpu9250_GyroCalStatus_t Mpu9250_GyroCalStep(
+    Mpu9250_GyroCal_t * const p_cal, const Imu_Sample_t * const p_sample)
+{
+    Mpu9250_GyroCalStatus_t status = MPU9250_GYRO_CAL_COLLECTING;
+
+    if ((p_cal == NULL) || (p_sample == NULL) || (p_cal->done != 0U))
+    {
+        return MPU9250_GYRO_CAL_DONE;
+    }
+
+    /* Add the current offset back, so the window measures the raw reading. */
+    float gx = p_sample->gx + s_cal_gx;
+    float gy = p_sample->gy + s_cal_gy;
+    float gz = p_sample->gz + s_cal_gz;
+
+    if (p_cal->count == 0U)
+    {
+        p_cal->first_ax = p_sample->ax;
+        p_cal->first_ay = p_sample->ay;
+        p_cal->first_az = p_sample->az;
+        p_cal->min_gx = gx;
+        p_cal->max_gx = gx;
+        p_cal->min_gy = gy;
+        p_cal->max_gy = gy;
+        p_cal->min_gz = gz;
+        p_cal->max_gz = gz;
+    }
+    else if (GyroCal_AccMoved(p_cal, p_sample))
+    {
+        /* Tilted or moved: this window cannot measure the offset. */
+        GyroCal_StartWindow(p_cal);
+        return MPU9250_GYRO_CAL_REJECTED;
+    }
+    else
+    {
+        p_cal->min_gx = Min_F(p_cal->min_gx, gx);
+        p_cal->max_gx = Max_F(p_cal->max_gx, gx);
+        p_cal->min_gy = Min_F(p_cal->min_gy, gy);
+        p_cal->max_gy = Max_F(p_cal->max_gy, gy);
+        p_cal->min_gz = Min_F(p_cal->min_gz, gz);
+        p_cal->max_gz = Max_F(p_cal->max_gz, gz);
+    }
+
+    p_cal->sum_gx += gx;
+    p_cal->sum_gy += gy;
+    p_cal->sum_gz += gz;
+    p_cal->count++;
+
+    if (p_cal->count >= MPU9250_CFG_GYRO_CAL_SAMPLES)
+    {
+        /* Cast: the count is a small integer, exact as a float. */
+        float n = (float)p_cal->count;
+        float mean_x = p_cal->sum_gx / n;
+        float mean_y = p_cal->sum_gy / n;
+        float mean_z = p_cal->sum_gz / n;
+
+        if (GyroCal_WindowStill(p_cal, mean_x, mean_y, mean_z))
+        {
+            s_cal_gx = mean_x;
+            s_cal_gy = mean_y;
+            s_cal_gz = mean_z;
+            p_cal->done = 1U;
+            status = MPU9250_GYRO_CAL_APPLIED;
+        }
+        else
+        {
+            status = MPU9250_GYRO_CAL_REJECTED;
+        }
+        GyroCal_StartWindow(p_cal);
+    }
+
+    return status;
+}
+
+void Mpu9250_GetGyroOffset(float * const p_gx, float * const p_gy,
+                           float * const p_gz)
+{
+    if ((p_gx == NULL) || (p_gy == NULL) || (p_gz == NULL))
+    {
+        return;
+    }
+    *p_gx = s_cal_gx;
+    *p_gy = s_cal_gy;
+    *p_gz = s_cal_gz;
+}

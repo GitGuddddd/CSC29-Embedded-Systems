@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "drivers/Mpu9250/Mpu9250.h"
+#include "drivers/Mpu9250/Mpu9250_Cfg.h"
 #include "hal/Hal_I2c.h"
 #include <string.h>
 
@@ -126,6 +127,127 @@ void test_TimedSleepRetainsVerifiedHardwareBehavior(void)
     TEST_ASSERT_EQUAL_UINT32(234U, completed);
 }
 
+/* Feeds n identical samples; returns the status of the last call. */
+static Mpu9250_GyroCalStatus_t Feed_Cal(Mpu9250_GyroCal_t * const p_cal,
+                                        float gx, float gy, float gz,
+                                        float az, uint32_t n)
+{
+    Imu_Sample_t s = { 0 };
+    Mpu9250_GyroCalStatus_t status = MPU9250_GYRO_CAL_COLLECTING;
+
+    s.az = az;
+    for (uint32_t i = 0U; i < n; i++)
+    {
+        /* Small alternating noise, well inside the 4 dps spread limit. */
+        float noise = ((i % 2U) == 0U) ? 0.4f : -0.4f;
+        s.gx = gx + noise;
+        s.gy = gy - noise;
+        s.gz = gz + noise;
+        status = Mpu9250_GyroCalStep(p_cal, &s);
+    }
+    return status;
+}
+
+void test_GyroCal_StillWindow_AppliesOffset(void)
+{
+    Mpu9250_GyroCal_t cal;
+    float ox = 0.0f;
+    float oy = 0.0f;
+    float oz = 0.0f;
+
+    Mpu9250_GyroCalInit(&cal);
+    TEST_ASSERT_EQUAL(MPU9250_GYRO_CAL_COLLECTING,
+                      Feed_Cal(&cal, 3.0f, -1.5f, 0.8f, 1.0f,
+                               MPU9250_CFG_GYRO_CAL_SAMPLES - 1U));
+    TEST_ASSERT_EQUAL(MPU9250_GYRO_CAL_APPLIED,
+                      Feed_Cal(&cal, 3.0f, -1.5f, 0.8f, 1.0f, 1U));
+    Mpu9250_GetGyroOffset(&ox, &oy, &oz);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 3.0f, ox);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, -1.5f, oy);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.8f, oz);
+
+    /* Calibrated once: later samples change nothing. */
+    TEST_ASSERT_EQUAL(MPU9250_GYRO_CAL_DONE,
+                      Feed_Cal(&cal, 9.0f, 9.0f, 9.0f, 1.0f, 5U));
+    Mpu9250_GetGyroOffset(&ox, &oy, &oz);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 3.0f, ox);
+}
+
+void test_GyroCal_OffsetIsSubtractedFromReadSample(void)
+{
+    Mpu9250_GyroCal_t cal;
+    Imu_Sample_t s = { 0 };
+
+    Mpu9250_GyroCalInit(&cal);
+    (void)Feed_Cal(&cal, 3.0f, 0.0f, 0.0f, 1.0f,
+                   MPU9250_CFG_GYRO_CAL_SAMPLES);
+
+    /* Raw gyro X = 98 counts = about 2.99 dps at +-1000 dps. */
+    s_registers[0x43U] = 0x00U;
+    s_registers[0x44U] = 98U;
+    TEST_ASSERT_TRUE(Mpu9250_ReadSample(&s_cfg, &s));
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.0f, s.gx);
+}
+
+void test_GyroCal_RotatingWindow_IsRejected(void)
+{
+    Mpu9250_GyroCal_t cal;
+    Imu_Sample_t s = { 0 };
+    Mpu9250_GyroCalStatus_t status = MPU9250_GYRO_CAL_COLLECTING;
+    float ox = 1.0f;
+    float oy = 1.0f;
+    float oz = 1.0f;
+
+    Mpu9250_GyroCalInit(&cal);
+    s.az = 1.0f;
+    for (uint32_t i = 0U; i < MPU9250_CFG_GYRO_CAL_SAMPLES; i++)
+    {
+        /* Cast: small loop index, exact as a float. Spread of 9.9 dps. */
+        s.gx = (float)i * 0.1f;
+        status = Mpu9250_GyroCalStep(&cal, &s);
+    }
+    TEST_ASSERT_EQUAL(MPU9250_GYRO_CAL_REJECTED, status);
+    Mpu9250_GetGyroOffset(&ox, &oy, &oz);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, ox);
+}
+
+void test_GyroCal_SteadyFastTurn_IsRejected(void)
+{
+    Mpu9250_GyroCal_t cal;
+    float ox = 1.0f;
+    float oy = 1.0f;
+    float oz = 1.0f;
+
+    /* A steady 15 dps turn: small spread, but not a believable offset. */
+    Mpu9250_GyroCalInit(&cal);
+    TEST_ASSERT_EQUAL(MPU9250_GYRO_CAL_REJECTED,
+                      Feed_Cal(&cal, 15.0f, 0.0f, 0.0f, 1.0f,
+                               MPU9250_CFG_GYRO_CAL_SAMPLES));
+    Mpu9250_GetGyroOffset(&ox, &oy, &oz);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, ox);
+}
+
+void test_GyroCal_TiltDuringWindow_IsRejectedAndRetries(void)
+{
+    Mpu9250_GyroCal_t cal;
+    float ox = 0.0f;
+    float oy = 0.0f;
+    float oz = 0.0f;
+
+    Mpu9250_GyroCalInit(&cal);
+    (void)Feed_Cal(&cal, 2.0f, 0.0f, 0.0f, 1.0f, 10U);
+    /* Gravity shifts by 0.1 g: the glasses were tilted. */
+    TEST_ASSERT_EQUAL(MPU9250_GYRO_CAL_REJECTED,
+                      Feed_Cal(&cal, 2.0f, 0.0f, 0.0f, 0.9f, 1U));
+
+    /* Still again: a fresh window succeeds. */
+    TEST_ASSERT_EQUAL(MPU9250_GYRO_CAL_APPLIED,
+                      Feed_Cal(&cal, 2.0f, 0.0f, 0.0f, 0.9f,
+                               MPU9250_CFG_GYRO_CAL_SAMPLES));
+    Mpu9250_GetGyroOffset(&ox, &oy, &oz);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 2.0f, ox);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -136,5 +258,10 @@ int main(void)
     RUN_TEST(test_InitializationStepsPerformOneRegisterActionWithUnchangedValues);
     RUN_TEST(test_BadIdentityOrInitializationStepDoesNotProceed);
     RUN_TEST(test_TimedSleepRetainsVerifiedHardwareBehavior);
+    RUN_TEST(test_GyroCal_StillWindow_AppliesOffset);
+    RUN_TEST(test_GyroCal_OffsetIsSubtractedFromReadSample);
+    RUN_TEST(test_GyroCal_RotatingWindow_IsRejected);
+    RUN_TEST(test_GyroCal_SteadyFastTurn_IsRejected);
+    RUN_TEST(test_GyroCal_TiltDuringWindow_IsRejectedAndRetries);
     return UNITY_END();
 }

@@ -53,4 +53,42 @@ uint8_t Mpu9250_ReadWhoAmI(const Mpu9250_Config_t * const p_cfg);
 bool Mpu9250_ReadSample(const Mpu9250_Config_t * const p_cfg, Imu_Sample_t * const p_sample);
 void Mpu9250_CalibrateGyro(const Mpu9250_Config_t * const p_cfg, uint32_t n_samples);
 
+/* Non-blocking gyro offset calibration. Feed every new sample (one call per
+ * 10 ms cycle). After MPU9250_CFG_GYRO_CAL_SAMPLES samples with the device
+ * still, the mean gyro reading becomes the offset subtracted by
+ * Mpu9250_ReadSample. A window with movement is discarded and a new one starts.
+ */
+typedef enum
+{
+    MPU9250_GYRO_CAL_COLLECTING = 0U, /* window still filling */
+    MPU9250_GYRO_CAL_APPLIED,         /* window was still: offset set now */
+    MPU9250_GYRO_CAL_REJECTED,        /* device moved: offset unchanged */
+    MPU9250_GYRO_CAL_DONE             /* already calibrated: nothing to do */
+} Mpu9250_GyroCalStatus_t;
+
+typedef struct
+{
+    float sum_gx;
+    float sum_gy;
+    float sum_gz;
+    float min_gx;
+    float max_gx;
+    float min_gy;
+    float max_gy;
+    float min_gz;
+    float max_gz;
+    float first_ax;
+    float first_ay;
+    float first_az;
+    uint8_t count : 7;    /* samples in the current window, 0..127 */
+    uint8_t done : 1;     /* offset applied */
+} Mpu9250_GyroCal_t;
+
+/* Starts a fresh calibration and clears the applied gyro offset to 0. */
+void Mpu9250_GyroCalInit(Mpu9250_GyroCal_t * const p_cal);
+Mpu9250_GyroCalStatus_t Mpu9250_GyroCalStep(
+    Mpu9250_GyroCal_t * const p_cal, const Imu_Sample_t * const p_sample);
+void Mpu9250_GetGyroOffset(float * const p_gx, float * const p_gy,
+                           float * const p_gz);
+
 #endif /* MPU9250_H */

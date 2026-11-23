@@ -358,6 +358,10 @@ static void vTask_GlassesPerception(void *pvParameters)
     ImuSupervisor_t imu;
     ImuSupervisor_Init(&imu, &Mpu9250_Config_Glasses,
                         GLASSES_PIN_I2C1_SDA, GLASSES_PIN_I2C1_SCL, start_ms);
+    /* Gyro offset calibration: uses the normal 10 ms samples, never blocks. */
+    Mpu9250_GyroCal_t gyro_cal;
+    Mpu9250_GyroCalInit(&gyro_cal);
+    bool gyro_cal_wait_logged = false;
     bool sleep_requested = false;
     uint32_t last_movement_ms = start_ms;
     uint32_t last_imu_sample_ms = last_movement_ms;
@@ -520,6 +524,29 @@ static void vTask_GlassesPerception(void *pvParameters)
         bool new_head_fall = false;
         if (imu.sample_valid)
         {
+            Mpu9250_GyroCalStatus_t gyro_cal_status =
+                Mpu9250_GyroCalStep(&gyro_cal, &imu.sample);
+            if (gyro_cal_status == MPU9250_GYRO_CAL_APPLIED)
+            {
+                float off_x = 0.0f;
+                float off_y = 0.0f;
+                float off_z = 0.0f;
+                Mpu9250_GetGyroOffset(&off_x, &off_y, &off_z);
+                printf("[IMU] Gyro offset set: x=%.2f y=%.2f z=%.2f dps\n",
+                       (double)off_x, (double)off_y, (double)off_z);
+            }
+            else if ((gyro_cal_status == MPU9250_GYRO_CAL_REJECTED) &&
+                     !gyro_cal_wait_logged)
+            {
+                printf("[IMU] Gyro calibration waiting: keep the glasses "
+                       "still for 1 s\n");
+                gyro_cal_wait_logged = true;
+            }
+            else
+            {
+                /* Collecting or already calibrated: nothing to report. */
+            }
+
             if ((uint32_t)(now_ms - last_imu_sample_ms) > 50U)
             {
                 last_movement_ms = now_ms;

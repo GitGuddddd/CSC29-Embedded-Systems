@@ -25,13 +25,29 @@ static const char * s_state_names[] = {
     "ALERT_PENDING"
 };
 
-static Fall_MachineState_t s_state = FALL_STATE_IDLE;
+/* Fall state and the ALERT_PENDING "moved" flag packed into one byte, each
+ * using only the bits its range needs (change requirement: minimum bits).
+ * state: Fall_MachineState_t, 6 values (0..5), so 3 bits.
+ * pending_moved: true/false, so 1 bit.
+ */
+typedef struct
+{
+    uint8_t state : 3;
+    uint8_t pending_moved : 1;
+    uint8_t reserved : 4;
+} Fall_Flags_t;
+
+_Static_assert(sizeof(Fall_Flags_t) == 1U,
+               "Fall flags must pack into one byte");
+_Static_assert((uint32_t)FALL_STATE_ALERT_PENDING <= 7U,
+               "Every fall state must fit in 3 bits");
+
+static Fall_Flags_t s_flags = { 0U, 0U, 0U };
 static Fall_Config_t s_active_cfg;
 static uint32_t s_t0_ms = 0U;
 static uint32_t s_still_start_ms = 0U;
 static uint32_t s_still_samples = 0U;
 static uint32_t s_recover_t0_ms = 0U;
-static bool s_pending_moved = false;
 
 static float s_ref_x = 0.0f;
 static float s_ref_y = 0.0f;
@@ -40,6 +56,18 @@ static float s_ref_z = 1.0f;
 static float s_cur_x = 0.0f;
 static float s_cur_y = 0.0f;
 static float s_cur_z = 0.0f;
+
+static Fall_MachineState_t Get_State(void)
+{
+    /* Cast: the 3-bit field only ever holds a Fall_MachineState_t value. */
+    return (Fall_MachineState_t)s_flags.state;
+}
+
+static void Set_State(Fall_MachineState_t state)
+{
+    /* Cast: every state fits in 3 bits (checked by _Static_assert above). */
+    s_flags.state = (uint8_t)state;
+}
 
 static bool Is_Still(float a_sq, float g_sq)
 {
@@ -70,7 +98,7 @@ static float Vector_CosineSimilarity(float ax, float ay, float az,
 
 void FallDetection_Init(const Fall_Config_t * const p_cfg)
 {
-    s_state = FALL_STATE_IDLE;
+    Set_State(FALL_STATE_IDLE);
     s_t0_ms = 0U;
     s_still_samples = 0U;
     s_ref_x = 0.0f;
@@ -89,19 +117,19 @@ void FallDetection_Init(const Fall_Config_t * const p_cfg)
 
 void FallDetection_Reset(void)
 {
-    s_state = FALL_STATE_IDLE;
+    Set_State(FALL_STATE_IDLE);
     s_t0_ms = 0U;
     s_still_samples = 0U;   /* Re-arm fast reference learning. */
 }
 
 Fall_MachineState_t FallDetection_GetState(void)
 {
-    return s_state;
+    return Get_State();
 }
 
 const char * FallDetection_GetStateName(void)
 {
-    return s_state_names[s_state];
+    return s_state_names[s_flags.state];
 }
 
 bool __not_in_flash_func(FallDetection_Step)(
@@ -116,7 +144,7 @@ bool __not_in_flash_func(FallDetection_Step)(
     float g_sq = Vector_MagSq(p_sample->gx, p_sample->gy, p_sample->gz);
     bool fall_confirmed = false;
 
-    switch (s_state)
+    switch (Get_State())
     {
         case FALL_STATE_IDLE:
         {
@@ -141,13 +169,13 @@ bool __not_in_flash_func(FallDetection_Step)(
 
             if (a_sq < s_active_cfg.freefall_thresh_sq)
             {
-                s_state = FALL_STATE_FREEFALL;
+                Set_State(FALL_STATE_FREEFALL);
                 s_t0_ms = now_ms;
             }
             else if (s_active_cfg.allow_direct_impact &&
                      (a_sq > s_active_cfg.impact_thresh_sq))
             {
-                s_state = FALL_STATE_SETTLING;
+                Set_State(FALL_STATE_SETTLING);
                 s_t0_ms = now_ms;
             }
             else
@@ -163,16 +191,16 @@ bool __not_in_flash_func(FallDetection_Step)(
             {
                 if ((now_ms - s_t0_ms) < s_active_cfg.freefall_min_ms)
                 {
-                    s_state = FALL_STATE_IDLE;
+                    Set_State(FALL_STATE_IDLE);
                 }
                 else if (a_sq > s_active_cfg.impact_thresh_sq)
                 {
-                    s_state = FALL_STATE_SETTLING;
+                    Set_State(FALL_STATE_SETTLING);
                     s_t0_ms = now_ms;
                 }
                 else
                 {
-                    s_state = FALL_STATE_WAIT_IMPACT;
+                    Set_State(FALL_STATE_WAIT_IMPACT);
                     s_t0_ms = now_ms;
                 }
             }
@@ -183,12 +211,12 @@ bool __not_in_flash_func(FallDetection_Step)(
         {
             if (a_sq > s_active_cfg.impact_thresh_sq)
             {
-                s_state = FALL_STATE_SETTLING;
+                Set_State(FALL_STATE_SETTLING);
                 s_t0_ms = now_ms;
             }
             else if ((now_ms - s_t0_ms) > s_active_cfg.impact_window_ms)
             {
-                s_state = FALL_STATE_IDLE;
+                Set_State(FALL_STATE_IDLE);
             }
             else
             {
@@ -201,7 +229,7 @@ bool __not_in_flash_func(FallDetection_Step)(
         {
             if ((now_ms - s_t0_ms) >= s_active_cfg.settle_ms)
             {
-                s_state = FALL_STATE_CHECK_STILL;
+                Set_State(FALL_STATE_CHECK_STILL);
                 s_t0_ms = now_ms;
                 s_still_start_ms = now_ms;
                 s_cur_x = p_sample->ax;
@@ -224,7 +252,7 @@ bool __not_in_flash_func(FallDetection_Step)(
                     /* Never came to rest (e.g. picked up and carried):
                      * not a fall.
                      */
-                    s_state = FALL_STATE_IDLE;
+                    Set_State(FALL_STATE_IDLE);
                 }
                 else
                 {
@@ -239,7 +267,7 @@ bool __not_in_flash_func(FallDetection_Step)(
             }
             else if ((now_ms - s_t0_ms) >= s_active_cfg.still_ms)
             {
-                s_state = FALL_STATE_IDLE;
+                Set_State(FALL_STATE_IDLE);
                 float cos_sim =
                     Vector_CosineSimilarity(s_ref_x, s_ref_y, s_ref_z,
                                             s_cur_x, s_cur_y, s_cur_z);
@@ -248,10 +276,10 @@ bool __not_in_flash_func(FallDetection_Step)(
                     if (s_active_cfg.pending_ms > 0U)
                     {
                         /* Give the user a chance to recover first. */
-                        s_state = FALL_STATE_ALERT_PENDING;
+                        Set_State(FALL_STATE_ALERT_PENDING);
                         s_t0_ms = now_ms;
                         s_recover_t0_ms = now_ms;
-                        s_pending_moved = false;
+                        s_flags.pending_moved = 0U;
                     }
                     else
                     {
@@ -274,7 +302,7 @@ bool __not_in_flash_func(FallDetection_Step)(
 
             if (!Is_Still(a_sq, g_sq))
             {
-                s_pending_moved = true;
+                s_flags.pending_moved = 1U;
             }
 
             float cos_sim =
@@ -286,18 +314,18 @@ bool __not_in_flash_func(FallDetection_Step)(
                 s_recover_t0_ms = now_ms;
             }
 
-            if (s_pending_moved &&
+            if ((s_flags.pending_moved != 0U) &&
                 ((now_ms - s_recover_t0_ms) >= FALL_RECOVER_MS))
             {
                 /* Moved and back near the normal pose: the user got up,
                  * so the fall is cancelled and never reported.
                  */
-                s_state = FALL_STATE_IDLE;
+                Set_State(FALL_STATE_IDLE);
             }
             else if ((now_ms - s_t0_ms) >= s_active_cfg.pending_ms)
             {
                 /* No recovery in time: report the fall. */
-                s_state = FALL_STATE_IDLE;
+                Set_State(FALL_STATE_IDLE);
                 fall_confirmed = true;
             }
             else
@@ -309,7 +337,7 @@ bool __not_in_flash_func(FallDetection_Step)(
 
         default:
         {
-            s_state = FALL_STATE_IDLE;
+            Set_State(FALL_STATE_IDLE);
             break;
         }
     }

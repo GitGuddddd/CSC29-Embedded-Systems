@@ -341,6 +341,70 @@ void test_Ld2450_ImplausibleValuesAreNotValidTargets(void)
     TEST_ASSERT_EQUAL_UINT8(0x00U, Ld2450_GetImplausibleMask());
 }
 
+/* A slot that repeats the same report for LD2450_CFG_FROZEN_FRAMES frames
+ * (about 1 s) is a frozen radar, not a person: it is returned as not valid,
+ * flagged in the frozen mask, and recovers as soon as the report changes. */
+static bool Parse(const uint8_t * const p_frame, Radar_Target_t * const p_t,
+                  uint8_t * const p_count)
+{
+    return Ld2450_ParseFrame(p_frame, 30U, p_t, p_count);
+}
+
+void test_Ld2450_FrozenSlotIsNotValidAfterOneSecond(void)
+{
+    uint8_t frame[30] = { 0xAAU, 0xFFU, 0x03U, 0x00U };
+    frame[28] = 0x55U;
+    frame[29] = 0xCCU;
+    Radar_Target_t targets[3];
+    uint8_t count = 0U;
+    Ld2450_ResetParser();
+    SetSlot(frame, 0U, 120, 1500, 0);
+    SetSlot(frame, 1U, -800, 2200, 16);
+    for (uint32_t k = 1U; k < LD2450_CFG_FROZEN_FRAMES; k++)
+    {
+        /* slot 1 jitters like a real person, slot 0 repeats exactly */
+        SetSlot(frame, 1U, (int16_t)(-800 + (int16_t)(k % 3U)), 2200, 16);
+        TEST_ASSERT_TRUE(Parse(frame, targets, &count));
+        TEST_ASSERT_TRUE(targets[0].is_valid);
+        TEST_ASSERT_EQUAL_UINT8(0U, Ld2450_GetFrozenMask());
+    }
+    SetSlot(frame, 1U, -805, 2200, 16);
+    TEST_ASSERT_TRUE(Parse(frame, targets, &count));
+    TEST_ASSERT_FALSE(targets[0].is_valid); /* 10th identical frame */
+    TEST_ASSERT_TRUE(targets[1].is_valid); /* other slots unaffected */
+    TEST_ASSERT_FALSE(targets[2].is_valid); /* empty slot */
+    TEST_ASSERT_EQUAL_UINT8(0x01U, Ld2450_GetFrozenMask());
+    TEST_ASSERT_EQUAL_UINT8(0x00U, Ld2450_GetImplausibleMask());
+
+    /* still frozen while it repeats, valid again on the first change */
+    TEST_ASSERT_TRUE(Parse(frame, targets, &count));
+    TEST_ASSERT_FALSE(targets[0].is_valid);
+    SetSlot(frame, 0U, 121, 1500, 0);
+    TEST_ASSERT_TRUE(Parse(frame, targets, &count));
+    TEST_ASSERT_TRUE(targets[0].is_valid);
+    TEST_ASSERT_EQUAL_UINT8(0x00U, Ld2450_GetFrozenMask());
+
+    /* empty slots are never frozen, however long they stay empty */
+    uint8_t empty[30] = { 0xAAU, 0xFFU, 0x03U, 0x00U };
+    empty[28] = 0x55U;
+    empty[29] = 0xCCU;
+    for (uint32_t k = 0U; k < 30U; k++)
+    {
+        TEST_ASSERT_TRUE(Parse(empty, targets, &count));
+    }
+    TEST_ASSERT_EQUAL_UINT8(0x00U, Ld2450_GetFrozenMask());
+
+    /* a reset forgets the history */
+    for (uint32_t k = 0U; k < LD2450_CFG_FROZEN_FRAMES; k++)
+    {
+        TEST_ASSERT_TRUE(Parse(frame, targets, &count));
+    }
+    TEST_ASSERT_EQUAL_UINT8(0x01U, Ld2450_GetFrozenMask() & 0x01U);
+    Ld2450_ResetParser();
+    TEST_ASSERT_TRUE(Parse(frame, targets, &count));
+    TEST_ASSERT_TRUE(targets[0].is_valid);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -357,5 +421,6 @@ int main(void)
     RUN_TEST(test_Ld2450_DecodesLateralXAndEuclideanDistance);
     RUN_TEST(test_Ld2450_EmptySlotKeepsLaterTargetsInTheirOwnSlot);
     RUN_TEST(test_Ld2450_ImplausibleValuesAreNotValidTargets);
+    RUN_TEST(test_Ld2450_FrozenSlotIsNotValidAfterOneSecond);
     return UNITY_END();
 }

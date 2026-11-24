@@ -29,5 +29,10 @@ uint32_t Ld2450_GetOverrunCount(void);
 /* Bit n set: slot n of the last parsed frame was not empty but held a value
  * outside the LD2450_CFG_* limits, so it was returned as not valid. */
 uint8_t Ld2450_GetImplausibleMask(void);
+/* Bit n set: slot n of the last parsed frame repeated the same report for
+ * LD2450_CFG_FROZEN_FRAMES frames, so it was returned as not valid. */
+uint8_t Ld2450_GetFrozenMask(void);
+/* Forget the frozen-reading history (called by Ld2450_Init). */
+void Ld2450_ResetParser(void);
 
 #endif /* LD2450_H */

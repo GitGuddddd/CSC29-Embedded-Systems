@@ -38,6 +38,7 @@ bool Ld2450_Init(const Ld2450_Config_t * const p_cfg)
     s_overruns = 0U;
     s_have_poll = false;
     s_rx_fault = true; /* Healthy only after a complete frame, not merely DMA setup. */
+    Ld2450_ResetParser();
     return s_initialized;
 }
 

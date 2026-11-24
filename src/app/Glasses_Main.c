@@ -197,6 +197,7 @@ typedef struct
     uint8_t quiet;             /* 0 audible, else s_quiet_text index */
     uint8_t filters;           /* THREAT_FLT_* since the last print */
     uint8_t implausible;       /* bit n = slot n rejected by the driver */
+    uint8_t frozen;            /* bit n = slot n repeated a stale report */
     Grip_State_t grip;
     bool radar_timeout;
 } RadarDebug_t;
@@ -221,9 +222,16 @@ static void RadarDebug_PrintSlot(const RadarDebug_t * const p_dbg,
     printf("  slot %u  : ", (unsigned)slot);
     if (!p_t->is_valid)
     {
-        printf("%s\n", (((p_dbg->implausible >> slot) & 1U) != 0U)
-                            ? "rejected: impossible value from the radar"
-                            : "empty");
+        if (((p_dbg->frozen >> slot) & 1U) != 0U)
+        {
+            printf("rejected: frozen (same report for 1 s)\n");
+        }
+        else
+        {
+            printf("%s\n", (((p_dbg->implausible >> slot) & 1U) != 0U)
+                                ? "rejected: impossible value from the radar"
+                                : "empty");
+        }
         return;
     }
 
@@ -267,10 +275,10 @@ static void RadarDebug_PrintSlot(const RadarDebug_t * const p_dbg,
  * and which filters acted. */
 static void RadarDebug_Print(const RadarDebug_t * const p_dbg)
 {
-    static const char * const flt_text[6] = {
+    static const char * const flt_text[7] = {
         "outside corridor", "crossing", "impossible value",
         "radar re-ordered its slots", "moving away (quiet)",
-        "still-person hold"
+        "still-person hold", "frozen radar report"
     };
     static const char * const grip_text[3] = { "released", "held",
                                                "unknown" };
@@ -328,7 +336,7 @@ static void RadarDebug_Print(const RadarDebug_t * const p_dbg)
     else
     {
         bool first = true;
-        for (uint8_t b = 0U; b < 6U; b++)
+        for (uint8_t b = 0U; b < 7U; b++)
         {
             if (((p_dbg->filters >> b) & 1U) != 0U)
             {
@@ -367,6 +375,14 @@ static void vTask_GlassesPerception(void *pvParameters)
     uint32_t last_imu_sample_ms = last_movement_ms;
     uint32_t last_radar_ms = 0U;
     uint32_t last_radar_retry_ms = 0U;
+    /* Radar recovery state, one bit (minimum-bit representation): set while
+     * the radar is timed out, so the first valid frame afterwards starts
+     * ThreatAssessment afresh instead of from pre-outage lane holds. */
+    struct
+    {
+        uint8_t was_down : 1;
+        uint8_t reserved : 7;
+    } radar_state = { 1U, 0U };
     uint32_t last_btn_ms = 0U;
     uint32_t last_telemetry_ms = 0U;
     uint8_t last_sent_flags = 0xFFU;
@@ -593,6 +609,14 @@ static void vTask_GlassesPerception(void *pvParameters)
             uint8_t target_count = 0U;
             if (Ld2450_ProcessStream(targets, &target_count, now_ms))
             {
+                if (radar_state.was_down != 0U)
+                {
+                    /* Back after an outage: the lane holds and STOP latch
+                     * describe the world before it, so start afresh (a gone
+                     * obstacle must not beep for another 0.6-1.5 s). */
+                    ThreatAssessment_Init();
+                    radar_state.was_down = 0U;
+                }
                 last_valid_radar_frame_ms = now_ms;
                 radar_dbg_valid = 0U;
                 for (uint8_t k = 0U; (k < 3U) && (k < target_count); k++)
@@ -609,6 +633,10 @@ static void vTask_GlassesPerception(void *pvParameters)
                 {
                     flt |= THREAT_FLT_IMPLAUSIBLE;
                 }
+                if (Ld2450_GetFrozenMask() != 0U)
+                {
+                    flt |= THREAT_FLT_FROZEN;
+                }
                 radar_raw_flt |= flt;
                 radar_dbg_flt |= flt;
                 for (uint8_t k = 0U; k < 3U; k++)
@@ -616,6 +644,7 @@ static void vTask_GlassesPerception(void *pvParameters)
                     radar_dbg.targets[k] = targets[k];
                 }
                 radar_dbg.implausible = Ld2450_GetImplausibleMask();
+                radar_dbg.frozen = Ld2450_GetFrozenMask();
             }
             if (Ld2450_HasRxFault() && ((uint32_t)(now_ms - last_radar_retry_ms) >= 1000U))
             {
@@ -693,6 +722,10 @@ static void vTask_GlassesPerception(void *pvParameters)
         }
 
         bool radar_timeout = ((now_ms - last_valid_radar_frame_ms) >= 500U) || Ld2450_HasRxFault();
+        if (radar_timeout)
+        {
+            radar_state.was_down = 1U;
+        }
         if (radar_raw && ((now_ms - radar_raw_last_ms) >= 100U))
         {
             radar_raw_last_ms = now_ms;

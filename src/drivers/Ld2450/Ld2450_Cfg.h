@@ -23,4 +23,12 @@
 #define LD2450_CFG_MAX_Y_MM           (8500)
 #define LD2450_CFG_MAX_ABS_SPEED_CMS  (1000)
 
+/* Frozen-reading check (change requirement: invalid data must get a defined
+ * response). A real target never reports byte-identical x, y and speed in
+ * consecutive frames (position is in mm, speed in ~7.8 cm/s steps), but the
+ * radar has been seen repeating a lost target's last report for seconds. A
+ * non-empty slot identical for this many consecutive frames (~10 per s, so
+ * about 1 s) is returned as not valid. Max 15 (4-bit counter). */
+#define LD2450_CFG_FROZEN_FRAMES      (10U)
+
 #endif /* LD2450_CFG_H */

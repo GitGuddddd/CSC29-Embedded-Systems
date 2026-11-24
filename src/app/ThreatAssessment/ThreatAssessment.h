@@ -48,6 +48,7 @@ bool ThreatAssessment_IsReceding(void);
 #define THREAT_FLT_SLOT_JUMP   (0x08U) /* radar handed a slot to a new target */
 #define THREAT_FLT_RECEDING    (0x10U) /* buzzer quiet: obstacle moving away */
 #define THREAT_FLT_STILL_HOLD  (0x20U) /* lane held by the still-person hold */
+#define THREAT_FLT_FROZEN      (0x40U) /* radar repeated a stale report ~1 s */
 
 /* THREAT_FLT_* bits for the last ThreatAssessment_ProcessTargetsAt() call. */
 uint8_t ThreatAssessment_GetFilterFlags(void);

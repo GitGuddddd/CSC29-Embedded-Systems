@@ -1,0 +1,353 @@
+#include "unity.h"
+#include "services/BleComm/BleComm.h"
+#include "services/BleComm/BleComm_Cfg.h"
+#include "services/Watchdog/Watchdog.h"
+#include "mock_BleRadio.h"
+#include <string.h>
+
+static Ble_AdvancedThreatPacket_t s_packet;
+
+void setUp(void)
+{
+    MockBleRadio_Reset();
+    BleComm_Init(&BleComm_Config_Cane);
+    Watchdog_Init(&Watchdog_Config_Default);
+    s_packet = (Ble_AdvancedThreatPacket_t){
+        .node_type = BLE_NODE_TYPE_CANE,
+        .pair_id = BLE_DEFAULT_PAIR_ID,
+        .nearest_dist_mm = 0xFFFFU,
+        .ttc_20ms = BLE_TTC_NO_THREAT
+    };
+}
+
+void tearDown(void)
+{
+    TEST_ASSERT_EQUAL_UINT32(0U, MockBleRadio_GetState()->wrong_context_count);
+}
+
+static void Service(uint32_t now_ms)
+{
+    MockBleRadio_SetTime(now_ms);
+    (void)BleComm_Core1_Task();
+}
+
+void test_AllSystemStates_HaveExplicitRadioPolicies(void)
+{
+    static const BleComm_ProfileId_t expected[] = {
+        BLECOMM_PROFILE_FAST,   /* INIT */
+        BLECOMM_PROFILE_QUIET,  /* IDLE */
+        BLECOMM_PROFILE_ACTIVE,
+        BLECOMM_PROFILE_FAST,   /* WATCH */
+        BLECOMM_PROFILE_FAST,   /* FALL_CONFIRMED */
+        BLECOMM_PROFILE_FAST,   /* FALL_MUTED */
+        BLECOMM_PROFILE_FAST,   /* HARD_FAULT */
+        BLECOMM_PROFILE_QUIET,  /* STANDBY */
+        BLECOMM_PROFILE_FAST,   /* UNGRIPPED_WATCH */
+        BLECOMM_PROFILE_FAST    /* FAULT_DEGRADED */
+    };
+    TEST_ASSERT_EQUAL_UINT32(SYS_STATE_COUNT, sizeof(expected) / sizeof(expected[0]));
+    for (uint32_t i = 0U; i < (uint32_t)SYS_STATE_COUNT; ++i)
+    {
+        TEST_ASSERT_EQUAL(expected[i], BleComm_SelectProfile((Sys_State_t)i, 0U, false));
+        TEST_ASSERT_EQUAL(BLECOMM_PROFILE_FAST, BleComm_SelectProfile((Sys_State_t)i, 0U, true));
+        TEST_ASSERT_EQUAL(BLECOMM_PROFILE_FAST,
+                          BleComm_SelectProfile((Sys_State_t)i, BLE_FLAG_FALL_ALERT, false));
+    }
+    TEST_ASSERT_EQUAL(BLECOMM_PROFILE_FAST, BleComm_SelectProfile((Sys_State_t)255U, 0U, false));
+    TEST_ASSERT_EQUAL(BLECOMM_PROFILE_FAST, BleComm_SelectProfile(SYS_STATE_STANDBY, BLE_FLAG_ALARM_PAUSED, false));
+    TEST_ASSERT_EQUAL(BLECOMM_PROFILE_FAST, BleComm_SelectProfile(SYS_STATE_STANDBY, BLE_FLAG_SENSOR_FAULT, false));
+}
+
+void test_PolicyEscalatesImmediately_AndDownshiftIsWrapSafe(void)
+{
+    BleComm_Policy_t policy;
+    BleComm_PolicyInit(&policy);
+    uint32_t now = UINT32_MAX - 100U;
+    TEST_ASSERT_EQUAL(BLECOMM_PROFILE_QUIET, BleComm_PolicyStep(&policy, BLECOMM_PROFILE_QUIET, now));
+    TEST_ASSERT_EQUAL(BLECOMM_PROFILE_FAST, BleComm_PolicyStep(&policy, BLECOMM_PROFILE_FAST, now + 10U));
+    TEST_ASSERT_EQUAL(BLECOMM_PROFILE_FAST, BleComm_PolicyStep(&policy, BLECOMM_PROFILE_QUIET, now + 1009U));
+    TEST_ASSERT_EQUAL(BLECOMM_PROFILE_QUIET, BleComm_PolicyStep(&policy, BLECOMM_PROFILE_QUIET, now + 1010U));
+    TEST_ASSERT_EQUAL(BLECOMM_PROFILE_ACTIVE, BleComm_PolicyStep(&policy, BLECOMM_PROFILE_ACTIVE, now + 1020U));
+}
+
+void test_ControllerStartupCachesLatestState_AndProgramsRealIntervalUnits(void)
+{
+    TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_STANDBY, false));
+    Service(0U);
+    TEST_ASSERT_EQUAL_UINT32(0U, MockBleRadio_GetState()->data_count);
+    MockBleRadio_SetReady(true);
+    TEST_ASSERT_EQUAL_HEX16(0x0140U, MockBleRadio_GetState()->settings.advertising_units);
+    TEST_ASSERT_EQUAL_HEX16((uint16_t)((BLECOMM_CFG_SCAN_NORMAL_MS * 8U) / 5U),
+                            MockBleRadio_GetState()->settings.scan_window_units);
+
+    s_packet.state_flags = BLE_FLAG_FALL_ALERT;
+    TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_FALL_CONFIRMED, false));
+    Service(10U);
+    TEST_ASSERT_EQUAL_HEX16(0x00A0U, MockBleRadio_GetState()->settings.advertising_units);
+    TEST_ASSERT_EQUAL_HEX16((uint16_t)((BLECOMM_CFG_SCAN_URGENT_MS * 8U) / 5U),
+                            MockBleRadio_GetState()->settings.scan_window_units);
+
+    s_packet.state_flags = 0U;
+    TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_ACTIVE, false));
+    Service(20U);
+    TEST_ASSERT_EQUAL_HEX16(0x00A0U, MockBleRadio_GetState()->settings.advertising_units);
+    Service(1010U);
+    TEST_ASSERT_EQUAL_HEX16(0x00F0U, MockBleRadio_GetState()->settings.advertising_units);
+}
+
+void test_PayloadUpdatesDoNotReconfigureRadio_AndRestartRestoresConfiguration(void)
+{
+    TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_ACTIVE, false));
+    Service(0U);
+    MockBleRadio_SetReady(true);
+    uint32_t configurations = MockBleRadio_GetState()->configure_count;
+    s_packet.heartbeat_seq = 1U;
+    TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_ACTIVE, false));
+    Service(50U);
+    TEST_ASSERT_EQUAL_UINT32(configurations, MockBleRadio_GetState()->configure_count);
+    MockBleRadio_SetReady(false);
+    MockBleRadio_SetReady(true);
+    TEST_ASSERT_EQUAL_UINT32(configurations + 1U, MockBleRadio_GetState()->configure_count);
+}
+
+void test_FullQueueReportsBackpressure_AndWorkerCoalescesCompleteSnapshots(void)
+{
+    for (uint8_t i = 0U; i < (BLECOMM_CFG_TX_QUEUE_SIZE - 1U); ++i)
+    {
+        s_packet.heartbeat_seq = i;
+        TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_STANDBY, false));
+    }
+    TEST_ASSERT_FALSE(BleComm_Publish(&s_packet, SYS_STATE_ACTIVE, false));
+    Service(0U);
+    MockBleRadio_SetReady(true);
+    const MockBleRadio_State_t * const p_radio = MockBleRadio_GetState();
+    TEST_ASSERT_EQUAL_UINT32(1U, p_radio->data_count);
+    TEST_ASSERT_EQUAL_UINT8(19U, p_radio->data_len); /* Do not fill the 31-byte ceiling. */
+    Ble_RawFrame_t raw;
+    memcpy(&raw, &p_radio->data[p_radio->data_len - sizeof(raw)], sizeof(raw));
+    Ble_AdvancedThreatPacket_t decoded;
+    TEST_ASSERT_TRUE(BleComm_DecodeFrame(&raw, BLE_DEFAULT_PAIR_ID, &decoded));
+    TEST_ASSERT_EQUAL_UINT8(BLECOMM_CFG_TX_QUEUE_SIZE - 2U, decoded.heartbeat_seq);
+    TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_ACTIVE, false));
+}
+
+void test_FrozenPeerAdvertisementsDoNotRefreshDeadman_AfterSequenceRebase(void)
+{
+    s_packet.seq_num = 1U;
+    TEST_ASSERT_TRUE(BleComm_ReceivePacketAt(&s_packet, 100U));
+    s_packet.seq_num = 7U; /* Delayed reception crosses the three-bit ordering window. */
+    TEST_ASSERT_FALSE(BleComm_ReceivePacketAt(&s_packet, 110U));
+    TEST_ASSERT_TRUE(BleComm_ReceivePacketAt(&s_packet, 400U));
+    TEST_ASSERT_FALSE(BleComm_ReceivePacketAt(&s_packet, 1000U));
+    TEST_ASSERT_FALSE(BleComm_ReceivePacketAt(&s_packet, 2000U));
+    Ble_AdvancedThreatPacket_t received;
+    uint32_t received_ms;
+    TEST_ASSERT_TRUE(BleComm_PopReceivedPacket(&received, &received_ms));
+    TEST_ASSERT_EQUAL_UINT32(100U, received_ms);
+    TEST_ASSERT_TRUE(BleComm_PopReceivedPacket(&received, &received_ms));
+    TEST_ASSERT_EQUAL_UINT32(400U, received_ms);
+    Watchdog_KickBleDeadman(received_ms);
+    TEST_ASSERT_FALSE(Watchdog_CheckBleLinkLoss(1399U));
+    TEST_ASSERT_TRUE(Watchdog_CheckBleLinkLoss(1400U));
+}
+
+void test_RxQueueFull_DoesNotConsumeSequenceBeforeDelivery(void)
+{
+    for (uint16_t i = 0U; i < (BLECOMM_CFG_RX_QUEUE_SIZE - 1U); ++i)
+    {
+        s_packet.seq_num = (uint16_t)(20U + i);
+        TEST_ASSERT_TRUE(BleComm_ReceivePacketAt(&s_packet, i * 100U));
+    }
+    s_packet.seq_num = 100U;
+    TEST_ASSERT_FALSE(BleComm_ReceivePacketAt(&s_packet, 1000U));
+    Ble_AdvancedThreatPacket_t received;
+    TEST_ASSERT_TRUE(BleComm_PopReceivedPacket(&received, NULL));
+    TEST_ASSERT_TRUE(BleComm_ReceivePacketAt(&s_packet, 1010U));
+}
+
+void test_WatchdogRequiresActualWorkerAndPerceptionProgress(void)
+{
+    Service(0U);
+    MockBleRadio_SetReady(true);
+    Watchdog_SetCore0Alive();
+    TEST_ASSERT_TRUE(BleComm_Core1_Task());
+    TEST_ASSERT_TRUE(Watchdog_FeedHardware());
+    TEST_ASSERT_FALSE(Watchdog_FeedHardware());
+    MockBleRadio_SetWorkerRunning(false);
+    Watchdog_SetCore0Alive();
+    TEST_ASSERT_FALSE(BleComm_Core1_Task());
+    MockBleRadio_SetWorkerRunning(true);
+    TEST_ASSERT_TRUE(BleComm_Core1_Task());
+    TEST_ASSERT_TRUE(Watchdog_FeedHardware());
+}
+
+void test_AdvertisingParserRejectsTruncationWrongPairAndOwnNode(void)
+{
+    Service(0U);
+    uint8_t ad[10] = {9U, 0xFFU, 0x29U, 0U};
+    Ble_RawPacket_t raw;
+    BleComm_Encode(&s_packet, &raw);
+    memcpy(&ad[4], &raw, sizeof(raw));
+    MockBleRadio_Receive(ad, sizeof(ad));
+    Ble_AdvancedThreatPacket_t received;
+    TEST_ASSERT_FALSE(BleComm_PopReceivedPacket(&received, NULL)); /* own node */
+    s_packet.node_type = BLE_NODE_TYPE_GLASSES;
+    s_packet.pair_id = 2U;
+    BleComm_Encode(&s_packet, &raw);
+    memcpy(&ad[4], &raw, sizeof(raw));
+    MockBleRadio_Receive(ad, sizeof(ad));
+    TEST_ASSERT_FALSE(BleComm_PopReceivedPacket(&received, NULL));
+    s_packet.pair_id = BLE_DEFAULT_PAIR_ID;
+    BleComm_Encode(&s_packet, &raw);
+    memcpy(&ad[4], &raw, sizeof(raw));
+    MockBleRadio_Receive(ad, 9U);
+    TEST_ASSERT_FALSE(BleComm_PopReceivedPacket(&received, NULL));
+    MockBleRadio_SetTime(1234U);
+    MockBleRadio_Receive(ad, sizeof(ad));
+    uint32_t time;
+    TEST_ASSERT_TRUE(BleComm_PopReceivedPacket(&received, &time));
+    TEST_ASSERT_EQUAL_UINT32(1234U, time);
+}
+
+void test_AdvertisingParserAcceptsOnlyCompleteVersionedFrame(void)
+{
+    Service(0U);
+    BleComm_Init(&BleComm_Config_Cane);
+    Ble_AdvancedThreatPacket_t peer = {
+        .node_type = BLE_NODE_TYPE_GLASSES,
+        .pair_id = BLE_DEFAULT_PAIR_ID,
+        .session_id = 0x1234U,
+        .rolling_fall_seq = 1U,
+        .nearest_dist_mm = 0xFFFFU,
+        .ttc_20ms = BLE_TTC_NO_THREAT
+    };
+    Ble_RawFrame_t frame;
+    BleComm_EncodeFrame(&peer, &frame);
+    uint8_t ad[16] = {15U, 0xFFU, 0x29U, 0x00U};
+    memcpy(&ad[4], &frame, sizeof(frame));
+    MockBleRadio_SetTime(50U);
+    MockBleRadio_Receive(ad, sizeof(ad));
+    Ble_AdvancedThreatPacket_t received;
+    TEST_ASSERT_TRUE(BleComm_PopReceivedPacket(&received, NULL));
+    TEST_ASSERT_EQUAL_UINT16(peer.session_id, received.session_id);
+    TEST_ASSERT_EQUAL_UINT8(peer.rolling_fall_seq, received.rolling_fall_seq);
+
+    /* A truncated extension must not silently downgrade to legacy status. */
+    for (uint8_t length = 7U; length < sizeof(frame); ++length)
+    {
+        ad[0] = (uint8_t)(3U + length);
+        MockBleRadio_Receive(ad, (uint8_t)(4U + length));
+        TEST_ASSERT_FALSE(BleComm_PopReceivedPacket(&received, NULL));
+    }
+}
+
+void test_CompactEpochOrderingRejectsRetiredAndBackwardEvents(void)
+{
+    s_packet.protocol_version = BLE_PROTOCOL_VERSION;
+    s_packet.session_id = 0x1001U;
+    s_packet.rolling_fall_seq = 14U;
+    s_packet.seq_num = 3U;
+    TEST_ASSERT_TRUE(BleComm_ReceivePacketAt(&s_packet, 100U));
+    s_packet.rolling_fall_seq = 13U;
+    s_packet.seq_num = 4U;
+    TEST_ASSERT_FALSE(BleComm_ReceivePacketAt(&s_packet, 200U));
+    s_packet.session_id = 0x1002U;
+    s_packet.rolling_fall_seq = 0U;
+    s_packet.seq_num = 0U; /* Reboot/rollover rebases heartbeat immediately. */
+    TEST_ASSERT_TRUE(BleComm_ReceivePacketAt(&s_packet, 210U));
+    s_packet.session_id = 0x1001U;
+    s_packet.rolling_fall_seq = 14U;
+    TEST_ASSERT_FALSE(BleComm_ReceivePacketAt(&s_packet, 1000U));
+}
+
+void test_CompactReceiptDecoderRejectsReservedAndUnscopedAcknowledgements(void)
+{
+    s_packet.session_id = 0x1234U;
+    Ble_RawFrame_t frame;
+    Ble_AdvancedThreatPacket_t decoded;
+    BleComm_EncodeFrame(&s_packet, &frame);
+    frame.safety.sequence_flags = 0x80U;
+    TEST_ASSERT_FALSE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &decoded));
+    frame.safety.sequence_flags = BLE_SAFETY_FLAG_PEER_ACK;
+    TEST_ASSERT_FALSE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &decoded));
+}
+
+void test_CaneGeometryUsesExistingSlotAndPreservesSafetyReceipt(void)
+{
+    TEST_ASSERT_EQUAL_HEX16(0x0800U, BleComm_PackCaneGeometry(0U, false));
+    TEST_ASSERT_EQUAL_HEX16(0x0F84U, BleComm_PackCaneGeometry(900U, true));
+    TEST_ASSERT_EQUAL_HEX16(BLE_TTC_NO_THREAT, BleComm_PackCaneGeometry(901U, true));
+    TEST_ASSERT_EQUAL_HEX16(BLE_TTC_NO_THREAT, BleComm_PackCaneGeometry(UINT16_MAX, false));
+
+    s_packet.heartbeat_seq = 3U;
+    s_packet.rolling_fall_seq = 6U;
+    s_packet.state_flags = BLE_FLAG_CANE_HELD | BLE_FLAG_FALL_ALERT;
+    s_packet.nearest_dist_mm = 1200U;
+    s_packet.ttc_20ms = BleComm_PackCaneGeometry(150U, true) & 0x0FFFU;
+    s_packet.session_id = 0x1234U;
+    s_packet.peer_ack_valid = true;
+    s_packet.peer_ack_session_id = 0x5678U;
+    s_packet.peer_ack_event_seq = 4U;
+    s_packet.session_rollover = true;
+
+    static const uint8_t expected[] = {
+        0xA1U, 0xB6U, 0x11U, 0x58U, 0x26U, 0xC9U,
+        0xE2U, 0x34U, 0x12U, 0x78U, 0x56U, 0x34U
+    };
+    Ble_RawFrame_t frame;
+    BleComm_EncodeFrame(&s_packet, &frame);
+    TEST_ASSERT_EQUAL_UINT32(sizeof(expected), sizeof(frame));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, &frame, sizeof(expected));
+
+    Ble_AdvancedThreatPacket_t decoded;
+    TEST_ASSERT_TRUE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &decoded));
+    TEST_ASSERT_EQUAL_UINT8(BLE_PROTOCOL_VERSION, decoded.protocol_version);
+    TEST_ASSERT_EQUAL_UINT16(1200U, decoded.nearest_dist_mm);
+    TEST_ASSERT_EQUAL_HEX16(0x0C96U, decoded.ttc_20ms);
+    TEST_ASSERT_EQUAL_UINT16(0x1234U, decoded.session_id);
+    TEST_ASSERT_EQUAL_UINT8(6U, decoded.rolling_fall_seq);
+    TEST_ASSERT_TRUE(decoded.peer_ack_valid);
+    TEST_ASSERT_EQUAL_UINT16(0x5678U, decoded.peer_ack_session_id);
+    TEST_ASSERT_EQUAL_UINT8(4U, decoded.peer_ack_event_seq);
+    TEST_ASSERT_TRUE(decoded.session_rollover);
+}
+
+void test_CoalescedWrapKeepsEpochSequenceAndRolloverInOneSnapshot(void)
+{
+    uint16_t previous_epoch = BleComm_GetSessionId();
+    TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_ACTIVE, false));
+    s_packet.rolling_fall_seq = BleComm_NextFallSequence(15U) & BLE_FALL_SEQ_MASK;
+    s_packet.state_flags = BLE_FLAG_FALL_ALERT;
+    TEST_ASSERT_TRUE(BleComm_Publish(&s_packet, SYS_STATE_FALL_CONFIRMED, false));
+    Service(0U);
+    MockBleRadio_SetReady(true);
+    const MockBleRadio_State_t * const p_radio = MockBleRadio_GetState();
+    Ble_RawFrame_t frame;
+    memcpy(&frame, &p_radio->data[7], sizeof(frame));
+    Ble_AdvancedThreatPacket_t decoded;
+    TEST_ASSERT_TRUE(BleComm_DecodeFrame(&frame, BLE_DEFAULT_PAIR_ID, &decoded));
+    TEST_ASSERT_NOT_EQUAL(previous_epoch, decoded.session_id);
+    TEST_ASSERT_EQUAL_UINT8(0U, decoded.rolling_fall_seq);
+    TEST_ASSERT_TRUE(decoded.session_rollover);
+    TEST_ASSERT_BITS_HIGH(BLE_FLAG_FALL_ALERT, decoded.state_flags);
+}
+
+int main(void)
+{
+    UNITY_BEGIN();
+    RUN_TEST(test_AllSystemStates_HaveExplicitRadioPolicies);
+    RUN_TEST(test_PolicyEscalatesImmediately_AndDownshiftIsWrapSafe);
+    RUN_TEST(test_ControllerStartupCachesLatestState_AndProgramsRealIntervalUnits);
+    RUN_TEST(test_PayloadUpdatesDoNotReconfigureRadio_AndRestartRestoresConfiguration);
+    RUN_TEST(test_FullQueueReportsBackpressure_AndWorkerCoalescesCompleteSnapshots);
+    RUN_TEST(test_FrozenPeerAdvertisementsDoNotRefreshDeadman_AfterSequenceRebase);
+    RUN_TEST(test_RxQueueFull_DoesNotConsumeSequenceBeforeDelivery);
+    RUN_TEST(test_WatchdogRequiresActualWorkerAndPerceptionProgress);
+    RUN_TEST(test_AdvertisingParserRejectsTruncationWrongPairAndOwnNode);
+    RUN_TEST(test_AdvertisingParserAcceptsOnlyCompleteVersionedFrame);
+    RUN_TEST(test_CompactEpochOrderingRejectsRetiredAndBackwardEvents);
+    RUN_TEST(test_CompactReceiptDecoderRejectsReservedAndUnscopedAcknowledgements);
+    RUN_TEST(test_CaneGeometryUsesExistingSlotAndPreservesSafetyReceipt);
+    RUN_TEST(test_CoalescedWrapKeepsEpochSequenceAndRolloverInOneSnapshot);
+    return UNITY_END();
+}

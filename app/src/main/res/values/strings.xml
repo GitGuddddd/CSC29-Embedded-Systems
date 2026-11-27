@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EchoGuard</string>
+    <string name="safety_channel_name">EchoGuard Safety Alerts</string>
+    <string name="safety_service_title">EchoGuard: Head-Zone Shield</string>
+    <string name="safety_service_desc">Monitoring for head-height hazards...</string>
+    <string name="shield_active">SHIELD ACTIVE</string>
+    <string name="shield_degraded">SHIELD DEGRADED</string>
+    <string name="safety_critical_link">Safety-Critical Link Status</string>
+</resources>

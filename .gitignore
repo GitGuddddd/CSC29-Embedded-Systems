@@ -1,58 +1,46 @@
-# Prerequisites
-*.d
+# macOS
+.DS_Store
 
-# Object files
-*.o
-*.ko
-*.obj
+# IDE / local tooling
+.idea/
+.vscode/
+.gradle/
+.asg/
+*.iml
+
+# Local machine configuration
+local.properties
+
+# Android / Gradle build output
+build/
+app/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# CMake / firmware build trees
+build_*/
+testing/build/
+
+# Firmware images and linker artifacts
+*.uf2
 *.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
+*.bin
 *.hex
+*.map
+*.dis
 
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
+# Python
+__pycache__/
+*.py[cod]
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+# Legacy / standalone prototype directories kept locally
+src/app/radar_monitor/
+src/app/threat_assessment/
+tests/unit/test_radar_monitor.c
+tests/unit/test_threat_assessment.c
+cane-fallDetection/
+glasses-fallDetection/
 
-# debug information files
-*.dwo
-
-# build folder
-build/*
+build-tests/
+build_firmware/
